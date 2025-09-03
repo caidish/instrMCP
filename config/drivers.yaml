@@ -1,0 +1,47 @@
+# QCoDeS Driver Registry
+# Maps short names to full driver paths for easier configuration
+
+drivers:
+  # Mock drivers
+  mock_dac: qcodes.instrument_drivers.mock.MockDAC
+  mock_gate: qcodes.instrument_drivers.mock.MockGate
+  mock_source: qcodes.instrument_drivers.mock.MockSource
+
+  # Keithley instruments
+  keithley_2400: qcodes.instrument_drivers.Keithley.keithley_2400.Keithley2400
+  keithley_2600: qcodes.instrument_drivers.Keithley.keithley_2600.Keithley2600
+  
+  # Rohde & Schwarz
+  sgs100a: qcodes.instrument_drivers.rohde_schwarz.SGS100A.RohdeSchwarz_SGS100A
+  
+  # Stanford Research Systems
+  sr830: qcodes.instrument_drivers.stanford_research.SR830.SR830
+  sr860: qcodes.instrument_drivers.stanford_research.SR860.SR860
+  
+  # Tektronix
+  awg5014: qcodes.instrument_drivers.tektronix.AWG5014.Tektronix_AWG5014
+  
+  # National Instruments
+  daq_mx: qcodes.instrument_drivers.ni.DAQmx.DAQmx
+
+# Driver categories for organization
+categories:
+  sources:
+    - keithley_2400
+    - keithley_2600
+    - sgs100a
+    
+  lockins:
+    - sr830
+    - sr860
+    
+  daq:
+    - daq_mx
+    
+  awg:
+    - awg5014
+    
+  mock:
+    - mock_dac
+    - mock_gate
+    - mock_source

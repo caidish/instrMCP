@@ -1,0 +1,14 @@
+{
+  "mock_dac1": {
+    "name": "mock_dac1",
+    "type": "qcodes.instrument_drivers.mock_instruments.MockDAC",
+    "address": null,
+    "loaded": true
+  },
+  "mock_dac2": {
+    "name": "mock_dac2",
+    "type": "qcodes.instrument_drivers.mock_instruments.MockDAC",
+    "address": null,
+    "loaded": true
+  }
+}

@@ -1,0 +1,61 @@
+# Standard QCoDeS Station Configuration
+# This file uses the official QCoDeS station YAML format
+
+instruments:
+  # Mock instruments for testing and development
+  mock_dac1:
+    type: qcodes.instrument_drivers.mock_instruments.MockDAC
+    init:
+      num_channels: 2
+    parameters:
+      ch01.voltage:
+        alias: gate1
+        label: Gate 1 Voltage
+        unit: V
+        limits: [-10.0, 10.0]
+        initial_value: 0.1
+        monitor: true
+      ch02.voltage:
+        alias: gate2
+        label: Gate 2 Voltage
+        unit: V
+        limits: [-10.0, 10.0]
+        initial_value: 0.2
+  mock_dac2:
+    type: qcodes.instrument_drivers.mock_instruments.MockDAC
+    init:
+      num_channels: 2
+    parameters:
+      ch01.voltage:
+        alias: gate1
+        label: Gate 1 Voltage
+        unit: V
+        limits: [-10.0, 10.0]
+        initial_value: 1.1
+        monitor: true
+      ch02.voltage:
+        alias: gate2
+        label: Gate 2 Voltage
+        unit: V
+        limits: [-10.0, 10.0]
+        initial_value: 1.2
+        
+  # Real instruments (commented out by default for safety)
+  # keithley_2400:
+  #   type: qcodes.instrument_drivers.Keithley.Keithley_2400.Keithley_2400
+  #   address: GPIB0::24::INSTR
+  #   parameters:
+  #     voltage:
+  #       limits: [-21.0, 21.0]
+  #       initial_value: 0.0
+  #     current:
+  #       limits: [-1.05, 1.05]
+  #       initial_value: 0.0
+  #       
+  # sgs100a:
+  #   type: qcodes.instrument_drivers.rohde_schwarz.SGS100A.RohdeSchwarz_SGS100A  
+  #   address: TCPIP0::192.168.1.100::inst0::INSTR
+  #   
+  # sr830:
+  #   type: qcodes.instrument_drivers.stanford_research.SR830.SR830
+  #   address: GPIB0::8::INSTR
