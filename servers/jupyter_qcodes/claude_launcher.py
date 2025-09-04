@@ -395,9 +395,15 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
-    async def get_notebook_cells() -> list[TextContent]:
-        """Get information about notebook cells."""
-        result = await proxy_tools._proxy_request("get_notebook_cells")
+    async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
+        """Get recent notebook cells with input and output.
+        
+        Args:
+            num_cells: Number of recent cells to retrieve (default: 2 for performance)
+            include_output: Include cell outputs (default: True)
+        """
+        result = await proxy_tools._proxy_request("get_notebook_cells", 
+                                                 num_cells=num_cells, include_output=include_output)
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
@@ -527,9 +533,18 @@ def create_standalone_server() -> FastMCP:
             return [TextContent(type="text", text=f"Error: {e}")]
     
     @mcp.tool()
-    async def get_notebook_cells() -> list[TextContent]:
-        """Get information about notebook cells - limited in standalone."""
+    async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
+        """Get recent notebook cells with input and output - limited in standalone.
+        
+        Args:
+            num_cells: Number of recent cells to retrieve (default: 2 for performance)
+            include_output: Include cell outputs (default: True)
+        """
         return [TextContent(type="text", text=str({
+            "cells": [],
+            "total_cells": 0,
+            "requested_cells": num_cells,
+            "include_output": include_output,
             "mode": "standalone",
             "message": "Notebook cells not available in standalone mode",
             "suggestion": "Use Jupyter mode for full notebook integration"

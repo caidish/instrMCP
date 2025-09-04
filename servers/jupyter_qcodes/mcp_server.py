@@ -146,37 +146,87 @@ class JupyterMCPServer:
         # Cell editing tools
         
         @self.mcp.tool()
-        async def get_notebook_cells() -> List[TextContent]:
-            """Get information about notebook cells."""
+        async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> List[TextContent]:
+            """Get recent notebook cells with input and output.
+            
+            Args:
+                num_cells: Number of recent cells to retrieve (default: 2 for performance)
+                include_output: Include cell outputs (default: True)
+            """
             try:
-                # Try to get cell information from IPython
-                cells_info = []
+                cells = []
                 
-                # Get execution count and history
-                if hasattr(self.ipython, 'execution_count'):
-                    cells_info.append({
-                        "type": "execution_info",
-                        "execution_count": self.ipython.execution_count,
-                        "kernel_info": {
-                            "implementation": getattr(self.ipython, 'kernel', {}).get('implementation', 'unknown'),
-                            "language_info": getattr(self.ipython, 'kernel', {}).get('language_info', {})
-                        }
-                    })
+                # Method 1: Use IPython's In/Out cache (fastest for recent cells)
+                if hasattr(self.ipython, 'user_ns'):
+                    In = self.ipython.user_ns.get('In', [])
+                    Out = self.ipython.user_ns.get('Out', {})
+                    
+                    # Get the last num_cells entries
+                    if len(In) > 1:  # In[0] is empty
+                        start_idx = max(1, len(In) - num_cells)
+                        for i in range(start_idx, len(In)):
+                            if i < len(In) and In[i]:  # Skip empty entries
+                                cell_info = {
+                                    "cell_number": i,
+                                    "execution_count": i,
+                                    "input": In[i]
+                                }
+                                if include_output and i in Out:
+                                    cell_info["output"] = str(Out[i])
+                                    cell_info["has_output"] = True
+                                else:
+                                    cell_info["has_output"] = False
+                                cells.append(cell_info)
                 
-                # Try to get history
-                try:
-                    history = list(self.ipython.history_manager.get_range(output=False))[-10:]  # Last 10 commands
-                    cells_info.append({
-                        "type": "recent_history",
-                        "history": [{"session": s, "line": l, "code": c} for s, l, c in history]
-                    })
-                except Exception as he:
-                    logger.debug(f"Could not get history: {he}")
+                # Method 2: Fallback to history_manager if In/Out not available
+                if not cells and hasattr(self.ipython, 'history_manager'):
+                    try:
+                        # Get range with output
+                        current_count = getattr(self.ipython, 'execution_count', 1)
+                        start_line = max(1, current_count - num_cells)
+                        
+                        history = list(self.ipython.history_manager.get_range(
+                            session=0,  # Current session
+                            start=start_line,
+                            stop=current_count + 1,
+                            raw=True,
+                            output=include_output
+                        ))
+                        
+                        for session, line_num, content in history:
+                            if include_output and isinstance(content, tuple):
+                                input_text, output_text = content
+                                cells.append({
+                                    "cell_number": line_num,
+                                    "execution_count": line_num,
+                                    "input": input_text,
+                                    "output": str(output_text) if output_text else None,
+                                    "has_output": output_text is not None
+                                })
+                            else:
+                                cells.append({
+                                    "cell_number": line_num,
+                                    "execution_count": line_num,
+                                    "input": content,
+                                    "has_output": False
+                                })
+                    except Exception as he:
+                        logger.debug(f"Could not get history: {he}")
                 
-                return [TextContent(type="text", text=json.dumps({
-                    "cells_info": cells_info,
-                    "note": "Direct cell access requires additional Jupyter integration"
-                }, indent=2))]
+                # Add metadata
+                result = {
+                    "cells": cells,
+                    "total_cells": len(cells),
+                    "requested_cells": num_cells,
+                    "include_output": include_output,
+                    "current_execution_count": getattr(self.ipython, 'execution_count', 0),
+                    "kernel_info": {
+                        "implementation": getattr(self.ipython.kernel, 'implementation', 'unknown') if hasattr(self.ipython, 'kernel') else 'unknown',
+                        "language_info": getattr(self.ipython.kernel, 'language_info', {}) if hasattr(self.ipython, 'kernel') else {}
+                    }
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
                 
             except Exception as e:
                 logger.error(f"Error in get_notebook_cells: {e}")
