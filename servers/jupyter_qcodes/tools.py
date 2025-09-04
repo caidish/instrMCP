@@ -32,7 +32,30 @@ class QCodesReadOnlyTools:
         self.rate_limiter = RateLimiter(min_interval_s)
         self.poller = ParameterPoller(self.cache, self.rate_limiter)
         
+        # Initialize current cell capture
+        self.current_cell_content = None
+        self.current_cell_id = None
+        self.current_cell_timestamp = None
+        
+        # Register pre_run_cell event to capture current cell
+        if ipython and hasattr(ipython, 'events'):
+            ipython.events.register('pre_run_cell', self._capture_current_cell)
+            logger.debug("Registered pre_run_cell event for current cell capture")
+        else:
+            logger.warning("Could not register pre_run_cell event - events system unavailable")
+        
         logger.info("QCoDesReadOnlyTools initialized")
+    
+    def _capture_current_cell(self, info):
+        """Capture the current cell content before execution.
+        
+        Args:
+            info: IPython execution info object with raw_cell, cell_id, etc.
+        """
+        self.current_cell_content = info.raw_cell
+        self.current_cell_id = getattr(info, 'cell_id', None)
+        self.current_cell_timestamp = time.time()
+        logger.debug(f"Captured current cell: {len(info.raw_cell)} characters")
     
     def _get_instrument(self, name: str):
         """Get instrument from namespace."""
@@ -527,6 +550,83 @@ class QCodesReadOnlyTools:
             info["qcodes_instrument"] = False
         
         return info
+    
+    # Current cell tools
+    
+    async def get_current_cell(self) -> Dict[str, Any]:
+        """Get the currently executing cell content.
+        
+        This captures the cell that is currently being executed when this tool is called.
+        Useful for understanding the context of the current operation.
+        
+        Returns:
+            Dictionary with cell content, metadata, and capture status
+        """
+        if self.current_cell_content:
+            # Calculate age of captured content
+            age_seconds = time.time() - self.current_cell_timestamp if self.current_cell_timestamp else 0
+            
+            # Create preview for long cells
+            preview = self.current_cell_content
+            if len(preview) > 200:
+                preview = preview[:200] + "..."
+            
+            return {
+                "cell_content": self.current_cell_content,
+                "cell_id": self.current_cell_id,
+                "length": len(self.current_cell_content),
+                "lines": len(self.current_cell_content.splitlines()),
+                "preview": preview,
+                "captured": True,
+                "capture_timestamp": self.current_cell_timestamp,
+                "age_seconds": age_seconds,
+                "source": "pre_run_cell event"
+            }
+        else:
+            # Fall back to trying other methods
+            fallback_result = await self._get_current_cell_fallback()
+            if fallback_result["cell_content"]:
+                return fallback_result
+            
+            return {
+                "cell_content": None,
+                "cell_id": None,
+                "captured": False,
+                "message": "No current cell captured. This tool captures the cell when it's being executed.",
+                "suggestion": "Make sure this tool is called from within a Jupyter notebook cell.",
+                "source": "none"
+            }
+    
+    async def _get_current_cell_fallback(self) -> Dict[str, Any]:
+        """Get current cell using fallback methods."""
+        # Try to get the most recent input from magic variables
+        if hasattr(self.ipython, 'user_ns'):
+            # Check for _i (last input)
+            last_input = self.ipython.user_ns.get('_i', None)
+            if last_input:
+                return {
+                    "cell_content": last_input,
+                    "length": len(last_input),
+                    "captured": True,
+                    "source": "_i magic variable",
+                    "note": "This is the most recent executed input (fallback method)"
+                }
+            
+            # Try using In cache with current execution count
+            if hasattr(self.ipython, 'execution_count'):
+                In = self.ipython.user_ns.get('In', [])
+                current_idx = self.ipython.execution_count
+                if current_idx > 0 and current_idx < len(In) and In[current_idx]:
+                    return {
+                        "cell_content": In[current_idx],
+                        "length": len(In[current_idx]),
+                        "execution_count": current_idx,
+                        "captured": True,
+                        "source": "In cache at current execution count",
+                        "note": "Retrieved using execution count and In cache (fallback method)"
+                    }
+        
+        return {"cell_content": None, "captured": False, "source": "fallback_failed"}
     
     # Subscription tools
     

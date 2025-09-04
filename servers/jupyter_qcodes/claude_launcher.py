@@ -407,6 +407,16 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
+    async def get_current_cell() -> list[TextContent]:
+        """Get the currently executing cell content.
+        
+        This captures the cell that is currently being executed when this tool is called.
+        Useful for understanding the context of the current operation.
+        """
+        result = await proxy_tools._proxy_request("get_current_cell")
+        return [TextContent(type="text", text=str(result))]
+    
+    @mcp.tool()
     async def suggest_code(description: str, context: str = "") -> list[TextContent]:
         """Suggest code based on available instruments and context."""
         result = await proxy_tools._proxy_request("suggest_code", description=description, context=context)
@@ -548,6 +558,23 @@ def create_standalone_server() -> FastMCP:
             "mode": "standalone",
             "message": "Notebook cells not available in standalone mode",
             "suggestion": "Use Jupyter mode for full notebook integration"
+        }))]
+    
+    @mcp.tool()
+    async def get_current_cell() -> list[TextContent]:
+        """Get the currently executing cell content - not available in standalone mode.
+        
+        This captures the cell that is currently being executed when this tool is called.
+        Useful for understanding the context of the current operation.
+        """
+        return [TextContent(type="text", text=str({
+            "cell_content": None,
+            "cell_id": None,
+            "captured": False,
+            "mode": "standalone",
+            "message": "Current cell capture requires Jupyter integration",
+            "suggestion": "Use Jupyter mode for current cell capture functionality",
+            "source": "standalone_mode"
         }))]
     
     @mcp.tool()

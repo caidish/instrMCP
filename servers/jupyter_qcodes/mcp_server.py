@@ -233,6 +233,20 @@ class JupyterMCPServer:
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()
+        async def get_current_cell() -> List[TextContent]:
+            """Get the currently executing cell content.
+            
+            This captures the cell that is currently being executed when this tool is called.
+            Useful for understanding the context of the current operation.
+            """
+            try:
+                result = await self.tools.get_current_cell()
+                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+            except Exception as e:
+                logger.error(f"Error in get_current_cell: {e}")
+                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        
+        @self.mcp.tool()
         async def suggest_code(description: str, context: str = "") -> List[TextContent]:
             """Suggest code based on available instruments and context.
             
