@@ -21,6 +21,7 @@ instruments:
         unit: V
         limits: [-10.0, 10.0]
         initial_value: 0.2
+        
   mock_dac2:
     type: qcodes.instrument_drivers.mock_instruments.MockDAC
     init:

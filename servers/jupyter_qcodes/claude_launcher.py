@@ -359,7 +359,13 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
     
     @mcp.tool()
     async def get_parameter_value(instrument: str, parameter: str, fresh: bool = False) -> list[TextContent]:
-        """Get a parameter value with caching and rate limiting."""
+        """Get a parameter value with caching and rate limiting.
+        
+        Args:
+            instrument: Instrument name
+            parameter: Parameter name or hierarchical path (e.g., "voltage", "ch01.voltage", "submodule.param")
+            fresh: Force fresh read from hardware (rate limited)
+        """
         result = await proxy_tools._proxy_request("get_parameter_value", 
                                                  instrument=instrument, parameter=parameter, fresh=fresh)
         return [TextContent(type="text", text=str(result))]
@@ -469,7 +475,13 @@ def create_standalone_server() -> FastMCP:
     
     @mcp.tool()
     async def get_parameter_value(instrument: str, parameter: str, fresh: bool = False) -> list[TextContent]:
-        """Get a parameter value with caching and rate limiting."""
+        """Get a parameter value with caching and rate limiting.
+        
+        Args:
+            instrument: Instrument name
+            parameter: Parameter name or hierarchical path (e.g., "voltage", "ch01.voltage", "submodule.param")
+            fresh: Force fresh read from hardware (rate limited)
+        """
         try:
             result = await server.tools.get_parameter_value(instrument, parameter, fresh)
             return [TextContent(type="text", text=str(result))]

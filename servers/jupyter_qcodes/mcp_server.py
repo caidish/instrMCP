@@ -77,7 +77,7 @@ class JupyterMCPServer:
             
             Args:
                 instrument: Instrument name
-                parameter: Parameter name
+                parameter: Parameter name or hierarchical path (e.g., "voltage", "ch01.voltage", "submodule.param")
                 fresh: Force fresh read from hardware (rate limited)
             """
             try:
