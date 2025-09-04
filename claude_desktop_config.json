@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jupyter-qcodes": {
+      "command": "python",
+      "args": [
+        "-c",
+        "print('Jupyter QCoDeS MCP Server - Connect to your running Jupyter session'); import time; time.sleep(3600)"
+      ],
+      "env": {
+        "JUPYTER_MCP_HOST": "127.0.0.1",
+        "JUPYTER_MCP_PORT": "8123"
+      }
+    }
+  }
+}
