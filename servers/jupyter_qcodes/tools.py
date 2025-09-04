@@ -10,7 +10,11 @@ import time
 import logging
 from typing import Dict, List, Any, Optional, Union
 
-from .cache import ReadCache, RateLimiter, ParameterPoller
+try:
+    from .cache import ReadCache, RateLimiter, ParameterPoller
+except ImportError:
+    # Handle case when running as standalone script
+    from cache import ReadCache, RateLimiter, ParameterPoller
 
 logger = logging.getLogger(__name__)
 

@@ -1,150 +1,181 @@
 # Claude Desktop Setup for QCoDeS MCP Servers
 
-This guide shows you how to configure Claude Desktop to work with your QCoDeS instruments.
+This guide shows you how to configure Claude Desktop to work with your QCoDeS instruments using the **STDIO transport** method that Claude Desktop requires for local MCP servers.
 
-## Two Usage Options
+## Prerequisites
 
-### Option 1: Standalone QCoDeS Server (Recommended for dedicated instrument control)
+1. **Install Claude Desktop** (macOS/Windows)
+2. **Install Python environment** with QCoDeS
+3. **Activate your QCoDeS environment:**
+   ```bash
+   cd /Users/{your username}/GitHub/instrMCP
+   source venv/bin/activate
+   ```
 
-This runs a standalone MCP server with QCoDeS instruments loaded from your configuration.
+## Configuration Steps
 
-**Claude Desktop Configuration:**
-Add this to your Claude Desktop `claude_desktop_config.json`:
+### 1. Open Claude Desktop Settings
+
+1. Open Claude Desktop application
+2. Navigate to **Settings** → **Developer** tab
+3. Click **"Edit Config"** to open the configuration file
+
+### 2. Configure MCP Servers
+
+Add this configuration to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "qcodes-standalone": {
-      "command": "python",
-      "args": ["-m", "servers.qcodes.server", "--host", "127.0.0.1", "--port", "8000"],
-      "cwd": "/Users/caijiaqi/GitHub/instrMCP",
+    "jupyter-qcodes": {
+      "command": "/Users/{your username}/GitHub/instrMCP/venv/bin/python",
+      "args": [
+        "/Users/{your username}/GitHub/instrMCP/servers/jupyter_qcodes/claude_launcher.py"
+      ],
+      "cwd": "/Users/{your username}/GitHub/instrMCP",
       "env": {
-        "PYTHONPATH": "/Users/caijiaqi/GitHub/instrMCP",
-        "STATION_YAML": "/Users/caijiaqi/GitHub/instrMCP/config/station.yaml"
+        "PYTHONPATH": "/Users/{your username}/GitHub/instrMCP",
+        "JUPYTER_MCP_HOST": "127.0.0.1",
+        "JUPYTER_MCP_PORT": "8123"
       }
     }
   }
 }
 ```
 
-**Usage:**
-1. Make sure your QCoDeS environment is activated
-2. Start Claude Desktop
-3. The server auto-loads all instruments from `config/station.yaml`
-4. Claude has full access to instrument control
+**Important:** Update the paths to match your actual installation location.
 
-**Available Tools:**
-- `all_instr_health()` - Get health status of all instruments
-- `inst_health(name)` - Get specific instrument status  
-- `load_instrument(name)` - Load an instrument
-- `close_instrument(name)` - Close an instrument connection
-- `reconnect_instrument(name)` - Reconnect an instrument
-- `station_info()` - Get station information
+**Finding your Python path:**
 
----
+```bash
+# Use your virtual environment's Python
+ls /Users/{your username}/GitHub/instrMCP/venv/bin/python
+```
 
-### Option 2: Jupyter Integration (Recommended for interactive analysis)
+Use the full path to your virtual environment's Python executable in the "command" field. This ensures all the required dependencies (QCoDeS, FastMCP, etc.) are available.
 
-This runs an MCP server inside your Jupyter session with read-only access to your workspace.
+### 3. Save and Restart
 
-**Setup Steps:**
+1. **Save** the configuration file
+2. **Restart Claude Desktop** completely
+3. Look for the **MCP server indicator** in the bottom-right of the conversation input
 
-1. **Start Jupyter Lab/Notebook:**
+## How It Works
+
+The launcher script automatically detects your setup and chooses the best mode:
+
+### Mode 1: Jupyter Proxy Mode (When Jupyter is Running)
+
+**When detected:** If you have Jupyter Lab running with the MCP extension loaded
+**What it does:** Acts as a proxy between Claude Desktop (STDIO) and your Jupyter server (HTTP)
+
+**Setup:**
+1. **Start Jupyter Lab:**
    ```bash
-   cd /Users/caijiaqi/GitHub/instrMCP
+   cd /Users/{your username}/GitHub/instrMCP
    source venv/bin/activate
    jupyter lab
    ```
 
-2. **In your Jupyter notebook, load the extension:**
+2. **Load the MCP extension in a notebook cell:**
    ```python
    %load_ext servers.jupyter_qcodes.jupyter_mcp_extension
    ```
 
-3. **The MCP server starts automatically on `http://127.0.0.1:8123`**
+3. **Start Claude Desktop** - the launcher will automatically detect and proxy to your Jupyter session
 
-4. **Connect Claude Desktop to the running server:**
-   - Use the web interface or API to connect to `127.0.0.1:8123`
-   - Or add a client configuration (see below)
+### Mode 2: Standalone Mode (When No Jupyter)
 
-**Available Tools:**
-- `list_instruments()` - List all QCoDeS instruments
-- `instrument_info(name)` - Get instrument details
+**When activated:** If no Jupyter server is detected on port 8123
+**What it does:** Runs a limited MCP server directly without Jupyter integration
+
+**Setup:**
+1. **Just start Claude Desktop** - no Jupyter needed
+2. The launcher automatically runs in standalone mode
+3. Limited functionality with mock data
+
+**Available Tools (Both Modes):**
+- `list_instruments()` - List available QCoDeS instruments
+- `instrument_info(name)` - Get detailed instrument information  
 - `get_parameter_value(inst, param, fresh)` - Read parameter values
+- `list_variables()` - List available variables
+- `server_status()` - Check server mode and status
+
+**Full Jupyter Mode Additional Tools:**
 - `get_parameter_values(batch)` - Batch parameter reads
-- `list_variables()` - List Jupyter namespace variables
-- `get_variable_info(name)` - Variable information
+- `get_variable_info(name)` - Detailed variable information
 - `subscribe_parameter(inst, param, interval)` - Monitor parameters
 - `suggest_code(description)` - AI code suggestions
-- `station_snapshot()` - Full station snapshot
-- `server_status()` - Server information
+- `station_snapshot()` - Complete QCoDeS station snapshot
+- `get_cache_stats()` - Parameter cache statistics
 
----
+## Important Notes
 
-## Claude Desktop Config File Locations
+- **Transport Method:** Uses STDIO transport for Claude Desktop compatibility
+- **Auto-Detection:** Launcher automatically chooses between proxy and standalone modes  
+- **Security:** All operations require explicit user approval
+- **Read-Only:** Jupyter integration is read-only by default for safety
+- **Rate Limiting:** Built-in protections prevent hardware damage
 
-**macOS:**
-```
-~/Library/Application Support/Claude/claude_desktop_config.json
-```
+## Troubleshooting
 
-**Windows:**
-```
-%APPDATA%\Claude\claude_desktop_config.json
-```
+### Check Logs
 
-**Linux:**
-```
-~/.config/Claude/claude_desktop_config.json
-```
+- **macOS:** `~/Library/Logs/Claude`
+- **Windows:** `%APPDATA%\Claude\logs`
 
----
+### Common Issues
 
-## Example Complete Configuration
+**MCP Server Not Connecting:**
 
-Here's a complete `claude_desktop_config.json` with both options:
+- Verify configuration file syntax is correct
+- Check that Python path in config matches your installation
+- Restart Claude Desktop completely
+- Ensure Python environment has required dependencies
+
+**Wrong Mode Detected:**
+
+- Check if Jupyter is actually running on port 8123
+- Verify Jupyter MCP extension is loaded: `%load_ext servers.jupyter_qcodes.jupyter_mcp_extension`
+- Look for server status messages in Claude Desktop logs
+
+**Instruments Not Available:**
+
+- In Jupyter mode: Load your instruments in the Jupyter notebook first
+- In standalone mode: Limited functionality is expected - use Jupyter mode for full features
+- Verify `config/station.yaml` exists for instrument definitions
+
+**Python Import Errors:**
+
+- Check that PYTHONPATH in config includes the instrMCP directory
+- Verify all dependencies are installed in your Python environment
+- Ensure QCoDeS and FastMCP are properly installed
+
+### Path Configuration
+
+If you installed instrMCP in a different location, update the paths in the configuration:
 
 ```json
 {
   "mcpServers": {
-    "qcodes-standalone": {
-      "command": "python",
-      "args": ["-m", "servers.qcodes.server"],
-      "cwd": "/Users/caijiaqi/GitHub/instrMCP",
+    "jupyter-qcodes": {
+      "command": "/your/actual/path/to/instrMCP/venv/bin/python",
+      "args": ["/your/actual/path/to/instrMCP/servers/jupyter_qcodes/claude_launcher.py"],
+      "cwd": "/your/actual/path/to/instrMCP",
       "env": {
-        "PYTHONPATH": "/Users/caijiaqi/GitHub/instrMCP"
+        "PYTHONPATH": "/your/actual/path/to/instrMCP"
       }
     }
   }
 }
 ```
 
-**Note:** The Jupyter integration doesn't need a Claude Desktop config entry because it runs inside your Jupyter session. You connect to it directly via the web interface or API.
+## Security Considerations
 
----
+- **User Approval Required:** All file operations and instrument commands require explicit approval
+- **STDIO Transport:** Uses secure local communication (no network ports exposed)
+- **Read-Only Mode:** Jupyter integration provides safe, read-only access by default
+- **Rate Limiting:** Built-in protections prevent rapid instrument polling that could damage hardware
+- **Process Isolation:** Launcher runs in isolated Python environment
 
-## Troubleshooting
-
-### Standalone Server Issues:
-- **Server won't start:** Check that your Python environment has QCoDeS installed
-- **Instruments not loading:** Verify your `config/station.yaml` file
-- **Permission errors:** Make sure the working directory is accessible
-
-### Jupyter Integration Issues:
-- **Extension won't load:** Check that the extension is in your Python path
-- **Server not starting:** Look for error messages in Jupyter console
-- **Can't connect:** Verify the server is running on port 8123
-
-### General Issues:
-- **Path problems:** Update the `cwd` and `PYTHONPATH` to match your installation
-- **Port conflicts:** Change the port numbers if they're already in use
-- **Import errors:** Make sure all dependencies are installed in your environment
-
----
-
-## Security Notes
-
-- Both servers bind to `127.0.0.1` (localhost only) for security
-- The Jupyter integration is read-only by default
-- The standalone server has full instrument control capabilities
-- Use access tokens and authentication for production environments
+Follow the principle of **explicit approval** - carefully review each proposed action before approving.

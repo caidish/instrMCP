@@ -1,12 +1,13 @@
 {
   "mcpServers": {
     "jupyter-qcodes": {
-      "command": "python",
+      "command": "/Users/caijiaqi/GitHub/instrMCP/venv/bin/python",
       "args": [
-        "-c",
-        "print('Jupyter QCoDeS MCP Server - Connect to your running Jupyter session'); import time; time.sleep(3600)"
+        "/Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/claude_launcher.py"
       ],
+      "cwd": "/Users/caijiaqi/GitHub/instrMCP",
       "env": {
+        "PYTHONPATH": "/Users/caijiaqi/GitHub/instrMCP",
         "JUPYTER_MCP_HOST": "127.0.0.1",
         "JUPYTER_MCP_PORT": "8123"
       }
