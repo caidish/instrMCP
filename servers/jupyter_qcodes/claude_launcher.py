@@ -420,6 +420,20 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
+    async def update_editing_cell(content: str) -> list[TextContent]:
+        """Update the content of the currently editing cell in JupyterLab frontend.
+        
+        This tool allows you to programmatically set new Python code in the cell
+        that is currently being edited in JupyterLab. The content will replace
+        the entire current cell content.
+        
+        Args:
+            content: New Python code content to set in the active cell
+        """
+        result = await proxy_tools._proxy_request("update_editing_cell", content=content)
+        return [TextContent(type="text", text=str(result))]
+    
+    @mcp.tool()
     async def suggest_code(description: str, context: str = "") -> list[TextContent]:
         """Suggest code based on available instruments and context."""
         result = await proxy_tools._proxy_request("suggest_code", description=description, context=context)
@@ -581,6 +595,26 @@ def create_standalone_server() -> FastMCP:
             "suggestion": "Use Jupyter mode with the JupyterLab extension for editing cell functionality",
             "source": "standalone_mode",
             "fresh_ms": fresh_ms
+        }))]
+    
+    @mcp.tool()
+    async def update_editing_cell(content: str) -> list[TextContent]:
+        """Update the content of the currently editing cell - not available in standalone mode.
+        
+        This tool would allow updating the content of the currently editing cell
+        in JupyterLab, but requires the JupyterLab extension and Jupyter integration.
+        
+        Args:
+            content: New Python code content (not used in standalone mode)
+        """
+        return [TextContent(type="text", text=str({
+            "success": False,
+            "error": "Cell updating not available in standalone mode",
+            "mode": "standalone",
+            "message": "Editing cell update requires JupyterLab extension and Jupyter integration",
+            "suggestion": "Use Jupyter mode with the JupyterLab extension for cell editing functionality",
+            "source": "standalone_mode",
+            "content_preview": content[:100] + "..." if len(content) > 100 else content
         }))]
     
     @mcp.tool()

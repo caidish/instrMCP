@@ -616,6 +616,51 @@ class QCodesReadOnlyTools:
                 "bridge_status": active_cell_bridge.get_bridge_status()
             }
     
+    async def update_editing_cell(self, content: str) -> Dict[str, Any]:
+        """Update the content of the currently editing cell in JupyterLab frontend.
+        
+        This sends a request to the frontend to update the currently active cell
+        with the provided content.
+        
+        Args:
+            content: New Python code content to set in the active cell
+            
+        Returns:
+            Dictionary with update status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+            
+            # Validate input
+            if not isinstance(content, str):
+                return {
+                    "success": False,
+                    "error": f"Content must be a string, got {type(content).__name__}",
+                    "content": None
+                }
+            
+            # Send update request to frontend
+            result = active_cell_bridge.update_active_cell(content)
+            
+            # Add metadata
+            result.update({
+                "source": "update_editing_cell",
+                "content_preview": content[:100] + "..." if len(content) > 100 else content,
+                "bridge_status": active_cell_bridge.get_bridge_status()
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in update_editing_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "content": content[:100] + "..." if len(content) > 100 else content,
+                "source": "error"
+            }
+    
     # Subscription tools
     
     async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 

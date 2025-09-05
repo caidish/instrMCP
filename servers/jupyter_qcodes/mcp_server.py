@@ -160,6 +160,24 @@ class JupyterMCPServer:
                 logger.error(f"Error in get_editing_cell: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
+        @self.mcp.tool()
+        async def update_editing_cell(content: str) -> List[TextContent]:
+            """Update the content of the currently editing cell in JupyterLab frontend.
+            
+            This tool allows you to programmatically set new Python code in the cell
+            that is currently being edited in JupyterLab. The content will replace
+            the entire current cell content.
+            
+            Args:
+                content: New Python code content to set in the active cell
+            """
+            try:
+                result = await self.tools.update_editing_cell(content)
+                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+            except Exception as e:
+                logger.error(f"Error in update_editing_cell: {e}")
+                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        
         # Cell editing tools
         
         @self.mcp.tool()

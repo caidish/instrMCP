@@ -51,6 +51,53 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return comm && !comm.isDisposed && openedComms.get(kernel) === true;
     };
 
+    // Handle cell update requests from kernel
+    const handleCellUpdate = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const newContent = data.content;
+      
+      try {
+        const panel = notebooks.currentWidget;
+        const cell = notebooks.activeCell;
+        
+        if (!panel || !cell) {
+          // Send error response
+          comm.send({
+            type: 'update_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available for update'
+          });
+          return;
+        }
+        
+        // Update cell content
+        cell.model.sharedModel.setSource(newContent);
+        
+        // Send success response
+        comm.send({
+          type: 'update_response',
+          request_id: requestId,
+          success: true,
+          cell_id: cell.model.id,
+          message: 'Cell updated successfully'
+        });
+        
+        console.log(`MCP Active Cell Bridge: Updated cell content (${newContent.length} chars)`);
+        
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to update cell:', error);
+        
+        // Send error response
+        comm.send({
+          type: 'update_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to update cell: ${error}`
+        });
+      }
+    };
+
     // Ensure comm connection exists for a kernel
     const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
@@ -87,6 +134,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
               if (data.type === 'request_current') {
                 // Kernel is requesting fresh snapshot
                 sendSnapshot(kernel);
+              } else if (data.type === 'update_cell') {
+                // Kernel is requesting to update the active cell content
+                handleCellUpdate(kernel, comm, data);
               }
             };
             
