@@ -13,6 +13,7 @@ import logging
 from typing import Optional
 
 from .mcp_server import JupyterMCPServer
+from .active_cell_bridge import register_comm_target
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ def load_ipython_extension(ipython):
             # No event loop running, this shouldn't happen in Jupyter
             logger.error("No asyncio event loop found")
             return
+        
+        # Register comm target for active cell tracking
+        register_comm_target()
         
         # Create and start the MCP server
         _server = JupyterMCPServer(ipython)

@@ -69,3 +69,9 @@ logs/
 tmp/
 temp/
 *.tmp
+/servers/jupyter_qcodes/labextension/.yarn
+/servers/jupyter_qcodes/labextension/node_modules
+/servers/jupyter_qcodes/labextension/static
+servers/jupyter_qcodes/labextension/yarn.lock
+servers/jupyter_qcodes/labextension/tsconfig.tsbuildinfo
+servers/jupyter_qcodes/labextension/tsconfig.json

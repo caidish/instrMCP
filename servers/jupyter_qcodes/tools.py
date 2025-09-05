@@ -12,9 +12,11 @@ from typing import Dict, List, Any, Optional, Union
 
 try:
     from .cache import ReadCache, RateLimiter, ParameterPoller
+    from . import active_cell_bridge
 except ImportError:
     # Handle case when running as standalone script
     from cache import ReadCache, RateLimiter, ParameterPoller
+    import active_cell_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -551,82 +553,68 @@ class QCodesReadOnlyTools:
         
         return info
     
-    # Current cell tools
-    
-    async def get_current_cell(self) -> Dict[str, Any]:
-        """Get the currently executing cell content.
+    # Editing cell tools
+    async def get_editing_cell(self, fresh_ms: Optional[int] = None) -> Dict[str, Any]:
+        """Get the currently editing cell content from JupyterLab frontend.
         
-        This captures the cell that is currently being executed when this tool is called.
-        Useful for understanding the context of the current operation.
+        This captures the cell that is currently being edited in the frontend.
+        
+        Args:
+            fresh_ms: Optional maximum age in milliseconds. If provided and the
+                     cached snapshot is older, will request fresh data from frontend.
         
         Returns:
-            Dictionary with cell content, metadata, and capture status
+            Dictionary with editing cell information or error status
         """
-        if self.current_cell_content:
-            # Calculate age of captured content
-            age_seconds = time.time() - self.current_cell_timestamp if self.current_cell_timestamp else 0
+        try:
+            snapshot = active_cell_bridge.get_active_cell(fresh_ms=fresh_ms)
             
-            # Create preview for long cells
-            preview = self.current_cell_content
-            if len(preview) > 200:
-                preview = preview[:200] + "..."
+            if snapshot is None:
+                return {
+                    "cell_content": None,
+                    "cell_id": None,
+                    "captured": False,
+                    "message": "No editing cell captured from frontend. Make sure the JupyterLab extension is installed and enabled.",
+                    "source": "active_cell_bridge",
+                    "bridge_status": active_cell_bridge.get_bridge_status()
+                }
             
+            # Calculate age
+            now_ms = time.time() * 1000
+            age_ms = now_ms - snapshot.get("ts_ms", 0)
+            
+            # Create response
             return {
-                "cell_content": self.current_cell_content,
-                "cell_id": self.current_cell_id,
-                "length": len(self.current_cell_content),
-                "lines": len(self.current_cell_content.splitlines()),
-                "preview": preview,
+                "cell_content": snapshot.get("text", ""),
+                "cell_id": snapshot.get("cell_id"),
+                "cell_index": snapshot.get("cell_index"),
+                "cell_type": snapshot.get("cell_type", "code"),
+                "notebook_path": snapshot.get("notebook_path"),
+                "cursor": snapshot.get("cursor"),
+                "selection": snapshot.get("selection"),
+                "client_id": snapshot.get("client_id"),
+                "length": len(snapshot.get("text", "")),
+                "lines": len(snapshot.get("text", "").splitlines()),
                 "captured": True,
-                "capture_timestamp": self.current_cell_timestamp,
-                "age_seconds": age_seconds,
-                "source": "pre_run_cell event"
+                "age_ms": age_ms,
+                "age_seconds": age_ms / 1000,
+                "timestamp_ms": snapshot.get("ts_ms"),
+                "source": "jupyterlab_frontend",
+                "fresh_requested": fresh_ms is not None,
+                "fresh_threshold_ms": fresh_ms,
+                "is_stale": fresh_ms is not None and age_ms > fresh_ms
             }
-        else:
-            # Fall back to trying other methods
-            fallback_result = await self._get_current_cell_fallback()
-            if fallback_result["cell_content"]:
-                return fallback_result
             
+        except Exception as e:
+            logger.error(f"Error in get_editing_cell: {e}")
             return {
                 "cell_content": None,
                 "cell_id": None,
                 "captured": False,
-                "message": "No current cell captured. This tool captures the cell when it's being executed.",
-                "suggestion": "Make sure this tool is called from within a Jupyter notebook cell.",
-                "source": "none"
+                "error": str(e),
+                "source": "error",
+                "bridge_status": active_cell_bridge.get_bridge_status()
             }
-    
-    async def _get_current_cell_fallback(self) -> Dict[str, Any]:
-        """Get current cell using fallback methods."""
-        # Try to get the most recent input from magic variables
-        if hasattr(self.ipython, 'user_ns'):
-            # Check for _i (last input)
-            last_input = self.ipython.user_ns.get('_i', None)
-            if last_input:
-                return {
-                    "cell_content": last_input,
-                    "length": len(last_input),
-                    "captured": True,
-                    "source": "_i magic variable",
-                    "note": "This is the most recent executed input (fallback method)"
-                }
-            
-            # Try using In cache with current execution count
-            if hasattr(self.ipython, 'execution_count'):
-                In = self.ipython.user_ns.get('In', [])
-                current_idx = self.ipython.execution_count
-                if current_idx > 0 and current_idx < len(In) and In[current_idx]:
-                    return {
-                        "cell_content": In[current_idx],
-                        "length": len(In[current_idx]),
-                        "execution_count": current_idx,
-                        "captured": True,
-                        "source": "In cache at current execution count",
-                        "note": "Retrieved using execution count and In cache (fallback method)"
-                    }
-        
-        return {"cell_content": None, "captured": False, "source": "fallback_failed"}
     
     # Subscription tools
     

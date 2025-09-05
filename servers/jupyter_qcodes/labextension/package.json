@@ -1,0 +1,53 @@
+{
+  "name": "mcp-active-cell-bridge",
+  "version": "0.1.0",
+  "description": "JupyterLab extension to bridge active cell content to MCP server",
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension"
+  ],
+  "homepage": "https://github.com/caijiaqi/instrMCP",
+  "license": "MIT",
+  "author": {
+    "name": "InstrMCP Contributors"
+  },
+  "files": [
+    "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+    "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "style": "style/index.css",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caijiaqi/instrMCP.git"
+  },
+  "scripts": {
+    "build": "jlpm build:lib && jlpm build:labextension",
+    "build:labextension": "jupyter labextension build .",
+    "build:lib": "tsc --sourceMap",
+    "clean": "jlpm clean:lib",
+    "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
+    "watch": "run-p watch:src watch:labextension",
+    "watch:src": "tsc -w --sourceMap",
+    "watch:labextension": "jupyter labextension watch ."
+  },
+  "dependencies": {
+    "@jupyterlab/application": "^4.2.0",
+    "@jupyterlab/cells": "^4.2.0",
+    "@jupyterlab/notebook": "^4.2.0",
+    "@jupyterlab/services": "^7.2.0"
+  },
+  "devDependencies": {
+    "@jupyterlab/builder": "^4.2.0",
+    "rimraf": "^5.0.1",
+    "typescript": "~5.1.6"
+  },
+  "sideEffects": [
+    "style/*.css"
+  ],
+  "jupyterlab": {
+    "extension": true
+  }
+}

@@ -407,13 +407,16 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
-    async def get_current_cell() -> list[TextContent]:
-        """Get the currently executing cell content.
+    async def get_editing_cell(fresh_ms: int = 1000) -> list[TextContent]:
+        """Get the currently editing cell content from JupyterLab frontend.
         
-        This captures the cell that is currently being executed when this tool is called.
-        Useful for understanding the context of the current operation.
+        This captures the cell that is currently being edited in the frontend.
+        
+        Args:
+            fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
+                     will request fresh data from frontend (default: 1000ms)
         """
-        result = await proxy_tools._proxy_request("get_current_cell")
+        result = await proxy_tools._proxy_request("get_editing_cell", fresh_ms=fresh_ms)
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
@@ -561,20 +564,23 @@ def create_standalone_server() -> FastMCP:
         }))]
     
     @mcp.tool()
-    async def get_current_cell() -> list[TextContent]:
-        """Get the currently executing cell content - not available in standalone mode.
+    async def get_editing_cell(fresh_ms: int = 1000) -> list[TextContent]:
+        """Get the currently editing cell content - not available in standalone mode.
         
-        This captures the cell that is currently being executed when this tool is called.
-        Useful for understanding the context of the current operation.
+        This captures the cell that is currently being edited in the frontend.
+        
+        Args:
+            fresh_ms: Maximum age in milliseconds (default: 1000ms, not used in standalone mode)
         """
         return [TextContent(type="text", text=str({
             "cell_content": None,
             "cell_id": None,
             "captured": False,
             "mode": "standalone",
-            "message": "Current cell capture requires Jupyter integration",
-            "suggestion": "Use Jupyter mode for current cell capture functionality",
-            "source": "standalone_mode"
+            "message": "Editing cell capture requires JupyterLab extension and Jupyter integration",
+            "suggestion": "Use Jupyter mode with the JupyterLab extension for editing cell functionality",
+            "source": "standalone_mode",
+            "fresh_ms": fresh_ms
         }))]
     
     @mcp.tool()

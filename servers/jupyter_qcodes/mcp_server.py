@@ -143,6 +143,23 @@ class JupyterMCPServer:
                 logger.error(f"Error in get_variable_info: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
+        @self.mcp.tool()
+        async def get_editing_cell(fresh_ms: int = None) -> List[TextContent]:
+            """Get the currently editing cell content from JupyterLab frontend.
+            
+            This captures the cell that is currently being edited in the frontend.
+            
+            Args:
+                fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
+                         will request fresh data from frontend (default: None, accept any age)
+            """
+            try:
+                result = await self.tools.get_editing_cell(fresh_ms)
+                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+            except Exception as e:
+                logger.error(f"Error in get_editing_cell: {e}")
+                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        
         # Cell editing tools
         
         @self.mcp.tool()
@@ -230,20 +247,6 @@ class JupyterMCPServer:
                 
             except Exception as e:
                 logger.error(f"Error in get_notebook_cells: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
-        
-        @self.mcp.tool()
-        async def get_current_cell() -> List[TextContent]:
-            """Get the currently executing cell content.
-            
-            This captures the cell that is currently being executed when this tool is called.
-            Useful for understanding the context of the current operation.
-            """
-            try:
-                result = await self.tools.get_current_cell()
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-            except Exception as e:
-                logger.error(f"Error in get_current_cell: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()

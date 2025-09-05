@@ -42,6 +42,122 @@ python -m servers.qcodes.server --port 8000
 qcodes-mcp-server --port 8000
 ```
 
+### JupyterLab Extension Setup
+
+For the `get_editing_cell` functionality that captures currently editing cells from JupyterLab frontend:
+
+#### 1. Install the JupyterLab Extension
+
+```bash
+# Navigate to the extension directory
+cd servers/jupyter_qcodes/labextension
+
+# Clean any existing artifacts
+rm -rf node_modules package-lock.json yarn.lock .yarn lib tsconfig.tsbuildinfo
+
+# Install dependencies using jlpm (JupyterLab's package manager)
+jlpm install
+
+# Build the TypeScript library
+jlpm run build:lib
+
+# Build the extension
+jupyter labextension build .
+
+# Install the extension in development mode
+jupyter labextension develop . --overwrite
+
+# Or install in production mode
+jupyter labextension install .
+```
+
+#### Version Compatibility
+
+**Important**: The extension requires JupyterLab 4.2+ for compatibility. Check your version:
+```bash
+jupyter --version
+# Should show jupyterlab: 4.2.0 or higher
+```
+
+#### Troubleshooting
+
+**Error: "Could not find @jupyterlab/builder"**
+- This indicates version mismatch between JupyterLab and extension dependencies
+- The extension is configured for JupyterLab 4.2+ - ensure you have compatible versions
+- Solution: Clean and reinstall:
+  ```bash
+  cd servers/jupyter_qcodes/labextension
+  rm -rf node_modules yarn.lock .yarn lib
+  jlpm install
+  jlpm run build:lib
+  jupyter labextension build .
+  ```
+
+**Error: "This package doesn't seem to be present in your lockfile"**
+- This happens when mixing `npm` and `jlpm` package managers
+- Solution: Clean and reinstall with `jlpm` only:
+  ```bash
+  rm -rf node_modules package-lock.json lib
+  jlpm install
+  jlpm run build
+  ```
+
+**Yarn PnP Issues**
+- If you see Yarn PnP (Plug'n'Play) related errors, the extension includes a `.yarnrc.yml` file that disables PnP mode
+- This forces traditional `node_modules` structure that JupyterLab expects
+
+#### 2. Verify Installation
+
+```bash
+# List installed extensions
+jupyter labextension list
+
+# Should show: mcp-active-cell-bridge enabled
+```
+
+#### 3. Load the Jupyter MCP Extension
+
+In your Jupyter notebook, load the MCP extension:
+
+```python
+# Load the extension
+%load_ext servers.jupyter_qcodes.jupyter_mcp_extension
+
+# Verify it's running
+# You should see: 🚀 QCoDeS MCP Server starting...
+```
+
+#### 4. Test the Editing Cell Capture
+
+Once both the JupyterLab extension and MCP server are running, the `get_editing_cell` tool will capture the content of the currently active/editing cell in real-time via kernel communication.
+
+**Usage Examples:**
+- `get_editing_cell()` - Get current editing cell content (any age)
+- `get_editing_cell(fresh_ms=1000)` - Get content no older than 1 second
+
+**Note**: The extension uses a 2-second debounce for content changes to prevent excessive updates during typing.
+
+#### 5. Debug Information
+
+For debugging the extension:
+
+```bash
+# Check if extension is installed and enabled
+jupyter labextension list
+
+# View browser console for extension logs (look for "MCP Active Cell Bridge")
+# Open browser developer tools in JupyterLab
+
+# Check kernel-side comm registration
+# In notebook: print("Comm target registered") should appear on extension load
+```
+
+**Console Debug Messages:**
+- `"MCP Active Cell Bridge extension activated"` - Extension loaded
+- `"MCP Active Cell Bridge: Comm opened with kernel"` - Communication established  
+- `"MCP Active Cell Bridge: Sent snapshot (X chars)"` - Cell content sent to kernel
+- `"MCP Active Cell Bridge: Tracking new active cell"` - New cell selected
+
 ## Architecture
 
 ### Station-Based Design
