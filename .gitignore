@@ -125,3 +125,7 @@ temp/
 *.swo
 .DS_Store
 Thumbs.db
+/servers/jupyter_qcodes/tests/data_file
+/servers/jupyter_qcodes/tests
+*.csv
+config/station.yaml

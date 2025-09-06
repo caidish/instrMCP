@@ -40,7 +40,60 @@ instruments:
         unit: V
         limits: [-10.0, 10.0]
         initial_value: 1.2
-        
+
+  # MoTe2 QAHE Device Simulator
+  mote2_qahe:
+    type: servers.jupyter_qcodes.tests.MoTe2QAHE_instr.MoTe2Device
+    init:
+      data_file: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/processed_data.mat
+      interpolation_method: linear
+      bounds_error: false
+      fill_value: null
+    parameters:
+      Vtg:
+        alias: top_gate
+        label: Top Gate Voltage
+        unit: V
+        limits: [-4.5, 0.975]
+        initial_value: 0.0
+        monitor: true
+      Vbg:
+        alias: back_gate
+        label: Back Gate Voltage
+        unit: V
+        limits: [-12.485, 1.0]
+        initial_value: 0.0
+        monitor: true
+      lockin_xx:
+        alias: resistance_xx
+        label: Longitudinal Resistance
+        unit: V
+        monitor: true
+      lockin_xy:
+        alias: hall_voltage
+        label: Hall Voltage
+        unit: V
+        monitor: true
+      lockin_i:
+        alias: source_current
+        label: Source Current
+        unit: A
+        monitor: true
+
+  # General Test Instrument with MoTe2 Configuration
+  mote2_general:
+    type: servers.jupyter_qcodes.tests.test_instr.GeneralTestInstrument
+    init:
+      config_file: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
+      data_file_base_path: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE
+    parameters:
+      Vtg:
+        initial_value: 0.0
+        monitor: true
+      Vbg:
+        initial_value: 0.0
+        monitor: true
+
   # Real instruments (commented out by default for safety)
   # keithley_2400:
   #   type: qcodes.instrument_drivers.Keithley.Keithley_2400.Keithley_2400
@@ -60,3 +113,4 @@ instruments:
   # sr830:
   #   type: qcodes.instrument_drivers.stanford_research.SR830.SR830
   #   address: GPIB0::8::INSTR
+  
