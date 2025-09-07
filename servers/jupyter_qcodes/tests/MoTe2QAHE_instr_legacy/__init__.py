@@ -6,7 +6,6 @@ that interpolates from processed experimental data stored in MATLAB files.
 """
 
 from .mote2_simulator import MoTe2Device
-from .data_loader import MATFileLoader
-from ..test_instr.general_test_instrument import GeneralTestInstrument
+from ..data_loader import MATFileLoader
 
-__all__ = ['MoTe2Device', 'MATFileLoader', 'GeneralTestInstrument']
+__all__ = ['MoTe2Device', 'MATFileLoader']

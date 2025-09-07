@@ -28,7 +28,7 @@ try:
 except ImportError:
     HAS_SCIPY = False
 
-from ..MoTe2QAHE_instr.data_loader import MATFileLoader
+from ..data_loader import MATFileLoader
 
 logger = logging.getLogger(__name__)
 

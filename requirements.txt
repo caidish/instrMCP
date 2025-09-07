@@ -9,6 +9,7 @@ nest-asyncio>=1.5.0
 qcodes>=0.45.0
 numpy>=1.24.0
 pandas>=2.0.0
+scipy>=1.10.0
 
 # Testing
 pytest>=7.0.0
