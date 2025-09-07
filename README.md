@@ -61,8 +61,8 @@ jlpm install
 # Build the TypeScript library
 jlpm run build:lib
 
-# Build the extension
-jupyter labextension build .
+# Build the extension  
+jlpm run build:labextension
 
 # Install the extension in development mode
 jupyter labextension develop . --overwrite
@@ -90,7 +90,7 @@ jupyter --version
   rm -rf node_modules yarn.lock .yarn lib
   jlpm install
   jlpm run build:lib
-  jupyter labextension build .
+  jlpm run build:labextension
   ```
 
 **Error: "This package doesn't seem to be present in your lockfile"**

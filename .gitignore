@@ -47,7 +47,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
 
 # JupyterLab Extensions - Node.js/NPM/Yarn/JLPM
 **/labextension/node_modules/
@@ -68,7 +67,6 @@ Thumbs.db
 **/labextension/build/
 **/labextension/.tsbuildinfo
 **/labextension/tsconfig.tsbuildinfo
-**/labextension/tsconfig.json
 
 # JupyterLab Extensions - Development files
 **/labextension/.jupyter-cache/
@@ -125,7 +123,5 @@ temp/
 *.swo
 .DS_Store
 Thumbs.db
-/servers/jupyter_qcodes/tests/data_file
-/servers/jupyter_qcodes/tests
 *.csv
 config/station.yaml

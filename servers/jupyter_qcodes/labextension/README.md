@@ -11,11 +11,67 @@ A JupyterLab extension that captures the currently editing cell content and send
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.10+
+- Node.js (for building the extension)
+- JupyterLab 4.2+ (required for compatibility)
+
+### Step 1: Set up Python Environment
+
+First, create and activate a virtual environment, then install the required packages:
+
 ```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install core project dependencies
 pip install -e .
+
+# Install QCodes extras (for full functionality)
+pip install -e ".[qcodes]"
+
+# Install JupyterLab (if not already installed)
+pip install jupyterlab
 ```
 
-Or for development:
+### Step 2: Compile and Install JupyterLab Extension
+
+Navigate to the labextension directory and build the extension:
+
+```bash
+cd servers/jupyter_qcodes/labextension
+
+# Clean any existing build artifacts
+rm -rf node_modules package-lock.json yarn.lock .yarn lib tsconfig.tsbuildinfo
+
+# Install JavaScript dependencies
+jlpm install
+
+# Build the TypeScript library
+jlpm run build:lib
+
+# Build the JupyterLab extension
+jlpm run build:labextension
+
+# Install the extension
+jupyter labextension install .
+```
+
+### Step 3: Verify Installation
+
+Check that the extension is properly installed:
+
+```bash
+jupyter labextension list
+```
+
+You should see `mcp-active-cell-bridge v0.1.0 [enabled] [OK]` in the output.
+
+### Quick Development Install
+
+For development, you can use:
 
 ```bash
 jlpm install
@@ -64,6 +120,9 @@ If you see repeated "MCP Active Cell Bridge: Comm not ready for sending" errors 
 - **Comm closes immediately**: This indicates the kernel doesn't have the comm target registered
 - **Multiple open/close cycles**: Usually caused by not awaiting async operations properly (fixed in latest version)
 - **Extension not loading**: Ensure JupyterLab 4.2+ is installed and extension is properly built
+- **TypeScript compilation fails**: The project includes a `tsconfig.json` file with proper configuration. If compilation fails, ensure you have TypeScript dependencies installed via `jlpm install`
+- **Build artifacts conflicts**: If you encounter build issues, clean all artifacts and reinstall: `rm -rf node_modules yarn.lock .yarn lib && jlpm install`
+- **Version compatibility**: This extension requires JupyterLab 4.2+. Check your version with `jupyter --version`
 
 ## Development
 
@@ -76,10 +135,27 @@ If you see repeated "MCP Active Cell Bridge: Comm not ready for sending" errors 
 ### Build
 
 ```bash
+# Install dependencies
 jlpm install
+
+# Build TypeScript library
 jlpm run build:lib
-jupyter labextension build .
+
+# Build JupyterLab extension
+jlpm run build:labextension
+# OR alternatively: jupyter labextension build .
+
+# Install extension
+jupyter labextension install .
 ```
+
+### Configuration Files
+
+The project includes necessary configuration files:
+
+- `tsconfig.json`: TypeScript compilation configuration
+- `package.json`: NPM package and build script definitions
+- `.yarnrc.yml`: Yarn configuration to disable PnP mode for JupyterLab compatibility
 
 ### Debug
 
