@@ -470,6 +470,17 @@ def create_proxy_server(jupyter_url: str) -> FastMCP:
         return [TextContent(type="text", text=str(result))]
     
     @mcp.tool()
+    async def execute_editing_cell() -> list[TextContent]:
+        """Execute the currently editing cell in the JupyterLab frontend.
+        
+        UNSAFE: This tool executes code in the active notebook cell. Only available when
+        the Jupyter server is running in unsafe mode. The code will run in the frontend 
+        with output appearing in the notebook.
+        """
+        result = await proxy_tools._proxy_request("execute_editing_cell")
+        return [TextContent(type="text", text=str(result))]
+    
+    @mcp.tool()
     async def server_status() -> list[TextContent]:
         """Get server status - shows this is proxy mode."""
         result = await proxy_tools._proxy_request("server_status")
@@ -684,12 +695,29 @@ def create_standalone_server() -> FastMCP:
             return [TextContent(type="text", text=f"Error: {e}")]
     
     @mcp.tool()
+    async def execute_editing_cell() -> list[TextContent]:
+        """Execute the currently editing cell - not available in standalone mode.
+        
+        UNSAFE: This tool would execute code in the active notebook cell, but requires
+        JupyterLab integration and must be enabled in unsafe mode.
+        """
+        return [TextContent(type="text", text=str({
+            "success": False,
+            "error": "Cell execution not available in standalone mode",
+            "mode": "standalone",
+            "message": "Cell execution requires JupyterLab extension and unsafe mode",
+            "suggestion": "Use Jupyter mode with %mcp_unsafe and %mcp_start for cell execution functionality",
+            "source": "standalone_mode",
+            "warning": "UNSAFE: This tool would execute code if available"
+        }))]
+    
+    @mcp.tool()
     async def server_status() -> list[TextContent]:
         """Get server status - shows this is standalone mode."""
         return [TextContent(type="text", text=str({
             "mode": "standalone",
             "message": "Running without Jupyter - full tool functionality with mock data",
-            "tools_available": 15,
+            "tools_available": 16,  # Updated count
             "suggestion": "Start Jupyter with %load_ext servers.jupyter_qcodes.jupyter_mcp_extension for live instrument data"
         }))]
     
