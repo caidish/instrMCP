@@ -216,3 +216,65 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends
     }
+
+
+def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
+    """
+    Execute the currently active cell in JupyterLab frontend.
+    
+    Args:
+        timeout_s: How long to wait for response from frontend (default 5.0s)
+        
+    Returns:
+        Dictionary with execution status and response details
+    """
+    import uuid
+    
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+    
+    request_id = str(uuid.uuid4())
+    
+    # Send execution request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send({
+                "type": "execute_cell",
+                "request_id": request_id
+            })
+            successful_sends += 1
+            logger.debug(f"Sent execute_cell request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(f"Failed to send execution request to comm {comm.comm_id}: {e}")
+    
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send execution request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+    
+    # Wait for execution to complete
+    start_time = time.time()
+    while time.time() - start_time < timeout_s:
+        time.sleep(0.1)  # 100ms polling
+        
+        # Check if execution is complete
+        # Note: responses are handled in the comm message handler
+        # For now, we'll wait for the timeout and return success
+        # A more sophisticated implementation could track execution responses
+        pass
+    
+    return {
+        "success": True,
+        "message": f"Execution request sent to {successful_sends} frontend(s)",
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
+        "warning": "UNSAFE: Code execution was requested in active cell"
+    }

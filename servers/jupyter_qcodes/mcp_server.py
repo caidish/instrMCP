@@ -22,10 +22,11 @@ logger = logging.getLogger(__name__)
 class JupyterMCPServer:
     """MCP server for Jupyter QCoDeS integration."""
     
-    def __init__(self, ipython, host: str = "127.0.0.1", port: int = 8123):
+    def __init__(self, ipython, host: str = "127.0.0.1", port: int = 8123, safe_mode: bool = True):
         self.ipython = ipython
         self.host = host
         self.port = port
+        self.safe_mode = safe_mode
         self.running = False
         self.server_task: Optional[asyncio.Task] = None
         
@@ -36,10 +37,12 @@ class JupyterMCPServer:
         self.tools = QCodesReadOnlyTools(ipython)
         
         # Create FastMCP server
-        self.mcp = FastMCP("Jupyter QCoDeS MCP Server")
+        server_name = f"Jupyter QCoDeS MCP Server ({'Safe' if safe_mode else 'Unsafe'} Mode)"
+        self.mcp = FastMCP(server_name)
         self._register_tools()
         
-        logger.info(f"Jupyter MCP Server initialized on {host}:{port}")
+        mode_status = "safe" if safe_mode else "unsafe"
+        logger.info(f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode")
     
     def _register_tools(self):
         """Register all MCP tools."""
@@ -295,85 +298,113 @@ class JupyterMCPServer:
                 logger.error(f"Error in suggest_code: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
+        # Unsafe mode tools
+        if not self.safe_mode:
+            @self.mcp.tool()
+            async def execute_editing_cell() -> List[TextContent]:
+                """Execute the currently editing cell in the JupyterLab frontend.
+                
+                UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
+                The code will run in the frontend with output appearing in the notebook.
+                """
+                try:
+                    result = await self.tools.execute_editing_cell()
+                    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                except Exception as e:
+                    logger.error(f"Error in execute_editing_cell: {e}")
+                    return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        
         # Parameter subscription tools
         
-        @self.mcp.tool()
-        async def subscribe_parameter(instrument: str, parameter: str, interval_s: float = 1.0) -> List[TextContent]:
-            """Subscribe to periodic parameter updates.
-            
-            Args:
-                instrument: Instrument name
-                parameter: Parameter name
-                interval_s: Polling interval in seconds
-            """
-            try:
-                result = await self.tools.subscribe_parameter(instrument, parameter, interval_s)
-                return [TextContent(type="text", text=json.dumps(result, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in subscribe_parameter: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        # @self.mcp.tool()
+        # async def subscribe_parameter(instrument: str, parameter: str, interval_s: float = 1.0) -> List[TextContent]:
+        #     """Subscribe to periodic parameter updates.
+        #     
+        #     Args:
+        #         instrument: Instrument name
+        #         parameter: Parameter name
+        #         interval_s: Polling interval in seconds
+        #     """
+        #     try:
+        #         result = await self.tools.subscribe_parameter(instrument, parameter, interval_s)
+        #         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        #     except Exception as e:
+        #         logger.error(f"Error in subscribe_parameter: {e}")
+        #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
-        @self.mcp.tool()
-        async def unsubscribe_parameter(instrument: str, parameter: str) -> List[TextContent]:
-            """Unsubscribe from parameter updates.
-            
-            Args:
-                instrument: Instrument name
-                parameter: Parameter name
-            """
-            try:
-                result = await self.tools.unsubscribe_parameter(instrument, parameter)
-                return [TextContent(type="text", text=json.dumps(result, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in unsubscribe_parameter: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        # @self.mcp.tool()
+        # async def unsubscribe_parameter(instrument: str, parameter: str) -> List[TextContent]:
+        #     """Unsubscribe from parameter updates.
+        #     
+        #     Args:
+        #         instrument: Instrument name
+        #         parameter: Parameter name
+        #     """
+        #     try:
+        #         result = await self.tools.unsubscribe_parameter(instrument, parameter)
+        #         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        #     except Exception as e:
+        #         logger.error(f"Error in unsubscribe_parameter: {e}")
+        #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
-        @self.mcp.tool()
-        async def list_subscriptions() -> List[TextContent]:
-            """List current parameter subscriptions."""
-            try:
-                result = await self.tools.list_subscriptions()
-                return [TextContent(type="text", text=json.dumps(result, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in list_subscriptions: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        # @self.mcp.tool()
+        # async def list_subscriptions() -> List[TextContent]:
+        #     """List current parameter subscriptions."""
+        #     try:
+        #         result = await self.tools.list_subscriptions()
+        #         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        #     except Exception as e:
+        #         logger.error(f"Error in list_subscriptions: {e}")
+        #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         # System tools
         
-        @self.mcp.tool()
-        async def get_cache_stats() -> List[TextContent]:
-            """Get parameter cache statistics."""
-            try:
-                stats = await self.tools.get_cache_stats()
-                return [TextContent(type="text", text=json.dumps(stats, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in get_cache_stats: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        # @self.mcp.tool()
+        # async def get_cache_stats() -> List[TextContent]:
+        #     """Get parameter cache statistics."""
+        #     try:
+        #         stats = await self.tools.get_cache_stats()
+        #         return [TextContent(type="text", text=json.dumps(stats, indent=2))]
+        #     except Exception as e:
+        #         logger.error(f"Error in get_cache_stats: {e}")
+        #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
-        @self.mcp.tool()
-        async def clear_cache() -> List[TextContent]:
-            """Clear the parameter cache."""
-            try:
-                result = await self.tools.clear_cache()
-                return [TextContent(type="text", text=json.dumps(result, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in clear_cache: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        # @self.mcp.tool()
+        # async def clear_cache() -> List[TextContent]:
+        #     """Clear the parameter cache."""
+        #     try:
+        #         result = await self.tools.clear_cache()
+        #         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        #     except Exception as e:
+        #         logger.error(f"Error in clear_cache: {e}")
+        #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()
         async def server_status() -> List[TextContent]:
             """Get server status and configuration."""
             try:
+                # Get list of registered tools from FastMCP
+                registered_tools = []
+                if hasattr(self.mcp, '_tools'):
+                    registered_tools = list(self.mcp._tools.keys())
+                elif hasattr(self.mcp, 'tools'):
+                    registered_tools = list(self.mcp.tools.keys())
+                
                 status = {
                     "server_running": self.running,
+                    "safe_mode": self.safe_mode,
+                    "mode": "safe" if self.safe_mode else "unsafe",
                     "host": self.host,
                     "port": self.port,
-                    "tools_count": len([name for name in dir(self.mcp) if not name.startswith('_')]),
+                    "tools_count": len(registered_tools),
+                    "registered_tools": registered_tools,
                     "ipython_info": {
                         "class": self.ipython.__class__.__name__,
                         "execution_count": getattr(self.ipython, 'execution_count', 0)
                     },
-                    "rate_limit_interval": self.tools.min_interval_s
+                    "rate_limit_interval": self.tools.min_interval_s,
+                    "unsafe_tools_expected": ["execute_editing_cell"] if not self.safe_mode else [],
+                    "unsafe_tools_registered": [tool for tool in registered_tools if "execute" in tool.lower()]
                 }
                 return [TextContent(type="text", text=json.dumps(status, indent=2))]
             except Exception as e:
@@ -407,7 +438,8 @@ class JupyterMCPServer:
                 self.mcp.run,
                 transport="http",
                 host=self.host,
-                port=self.port
+                port=self.port,
+                show_banner=False
             )
         except Exception as e:
             logger.error(f"MCP server error: {e}")
@@ -437,3 +469,30 @@ class JupyterMCPServer:
             
         except Exception as e:
             logger.error(f"Error stopping MCP server: {e}")
+    
+    def set_safe_mode(self, safe_mode: bool) -> Dict[str, Any]:
+        """Change the server's safe mode setting.
+        
+        Note: This requires server restart to take effect for tool registration.
+        
+        Args:
+            safe_mode: True for safe mode, False for unsafe mode
+            
+        Returns:
+            Dictionary with status information
+        """
+        old_mode = self.safe_mode
+        self.safe_mode = safe_mode
+        
+        mode_status = "safe" if safe_mode else "unsafe"
+        old_mode_status = "safe" if old_mode else "unsafe"
+        
+        logger.info(f"MCP server mode changed from {old_mode_status} to {mode_status}")
+        
+        return {
+            "old_mode": old_mode_status,
+            "new_mode": mode_status,
+            "server_running": self.running,
+            "restart_required": True,
+            "message": f"Server mode changed to {mode_status}. Restart required for tool changes to take effect."
+        }

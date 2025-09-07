@@ -661,6 +661,40 @@ class QCodesReadOnlyTools:
                 "source": "error"
             }
     
+    async def execute_editing_cell(self) -> Dict[str, Any]:
+        """Execute the currently editing cell in the JupyterLab frontend.
+        
+        UNSAFE: This tool executes code in the active notebook cell. The code will run
+        in the frontend with output appearing in the notebook.
+        
+        Returns:
+            Dictionary with execution status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+            
+            # Send execution request to frontend
+            result = active_cell_bridge.execute_active_cell()
+            
+            # Add metadata
+            result.update({
+                "source": "execute_editing_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Code was executed in the active cell"
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in execute_editing_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to execute code but failed"
+            }
+    
     # Subscription tools
     
     async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 

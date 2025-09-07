@@ -11,6 +11,7 @@ import { Kernel } from '@jupyterlab/services';
 
 import { NotebookPanel } from '@jupyterlab/notebook';
 import { ICellModel } from '@jupyterlab/cells';
+import { NotebookActions } from '@jupyterlab/notebook';
 
 /**
  * MCP Active Cell Bridge Extension
@@ -98,6 +99,52 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Handle cell execution requests from kernel
+    const handleCellExecution = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      
+      try {
+        const panel = notebooks.currentWidget;
+        const cell = notebooks.activeCell;
+        
+        if (!panel || !cell) {
+          // Send error response
+          comm.send({
+            type: 'execute_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available for execution'
+          });
+          return;
+        }
+        
+        // Execute the active cell using NotebookActions
+        await NotebookActions.run(panel.content, panel.sessionContext);
+        
+        // Send success response
+        comm.send({
+          type: 'execute_response',
+          request_id: requestId,
+          success: true,
+          cell_id: cell.model.id,
+          message: 'Cell executed successfully'
+        });
+        
+        console.log('MCP Active Cell Bridge: Executed active cell');
+        
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to execute cell:', error);
+        
+        // Send error response
+        comm.send({
+          type: 'execute_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to execute cell: ${error}`
+        });
+      }
+    };
+
     // Ensure comm connection exists for a kernel
     const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
@@ -137,6 +184,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
               } else if (data.type === 'update_cell') {
                 // Kernel is requesting to update the active cell content
                 handleCellUpdate(kernel, comm, data);
+              } else if (data.type === 'execute_cell') {
+                // Kernel is requesting to execute the active cell
+                handleCellExecution(kernel, comm, data);
               }
             };
             
