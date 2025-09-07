@@ -8,6 +8,7 @@ and derived parameter calculations.
 
 import json
 import numpy as np
+import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Union, Callable
 import logging
@@ -53,9 +54,13 @@ class GeneralTestInstrument(DummyBase):
         
         Args:
             name: Instrument name
-            config_file: Path to JSON configuration file
-            data_file_base_path: Base path for data files (if relative paths in config)
+            config_file: Path to JSON configuration file (supports ${VAR} environment variables)
+            data_file_base_path: Base path for data files (supports ${VAR} environment variables)
             **kwargs: Additional arguments passed to DummyBase
+            
+        Note:
+            Both config_file and data_file_base_path support environment variable expansion
+            using ${VAR} or $VAR syntax (e.g., ${instrMCP_PATH}/config/file.json)
         """
         if not HAS_QCODES:
             raise ImportError("qcodes is required. Install with: pip install qcodes")
@@ -63,12 +68,19 @@ class GeneralTestInstrument(DummyBase):
             raise ImportError("scipy is required. Install with: pip install scipy")
             
         # Load and validate configuration
-        self.config_file = Path(config_file)
+        # Expand environment variables in file paths
+        expanded_config_file = os.path.expandvars(config_file)
+        self.config_file = Path(expanded_config_file)
         if not self.config_file.exists():
-            raise FileNotFoundError(f"Configuration file not found: {config_file}")
+            raise FileNotFoundError(f"Configuration file not found: {config_file} (expanded: {expanded_config_file})")
             
         self.config = self._load_configuration()
-        self.data_file_base_path = Path(data_file_base_path) if data_file_base_path else self.config_file.parent
+        
+        if data_file_base_path:
+            expanded_base_path = os.path.expandvars(data_file_base_path)
+            self.data_file_base_path = Path(expanded_base_path)
+        else:
+            self.data_file_base_path = self.config_file.parent
         
         # Initialize base class
         super().__init__(name, **kwargs)
@@ -84,7 +96,7 @@ class GeneralTestInstrument(DummyBase):
         self._setup_interpolators()
         self._setup_derived_parameters()
         
-        logger.info(f"General test instrument '{name}' initialized from {config_file}")
+        logger.info(f"General test instrument '{name}' initialized from {config_file} (expanded: {self.config_file})")
     
     def _load_configuration(self) -> Dict[str, Any]:
         """Load and validate JSON configuration."""

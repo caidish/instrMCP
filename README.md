@@ -49,7 +49,7 @@ $env:instrMCP_PATH = "C:\path\to\your\instrMCP"
 [System.Environment]::SetEnvironmentVariable("instrMCP_PATH", "C:\path\to\your\instrMCP", "User")
 ```
 
-**Why this is needed:** The station configuration files reference test data and configuration files using `${instrMCP_PATH}` to avoid exposing personal directory paths in the repository.
+**Why this is needed:** The station configuration files reference test data and configuration files using `${instrMCP_PATH}` to avoid exposing personal directory paths in the repository. The `GeneralTestInstrument` class automatically expands environment variables in file paths.
 
 #### Optional Environment Configuration
 
@@ -260,6 +260,18 @@ LLM → inst_health("mock_dac")
 - Restart your terminal or IDE to pick up new environment variables
 - Verify the environment variable contains the correct path (no trailing slash needed)
 - Check that the referenced files exist: `ls -la "${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/"`
+
+### Instrument Environment Variable Support
+
+The following instruments have built-in support for `${VAR}` environment variable expansion:
+
+- **GeneralTestInstrument**: Automatically expands environment variables in `config_file` and `data_file_base_path` parameters
+- **MoTe2Device**: Uses environment variables through data file paths
+
+This allows the station.yaml configuration to use portable paths like:
+```yaml
+config_file: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
+```
 
 ## Development
 
