@@ -1,5 +1,10 @@
 # Standard QCoDeS Station Configuration
 # This file uses the official QCoDeS station YAML format
+#
+# IMPORTANT: This configuration file uses the instrMCP_PATH environment variable
+# Set this variable to point to your instrMCP installation directory:
+#   export instrMCP_PATH="/path/to/your/instrMCP"
+# Add this line to your shell configuration file (~/.bashrc, ~/.zshrc, etc.)
 
 instruments:
   # Mock instruments for testing and development
@@ -45,7 +50,7 @@ instruments:
   mote2_qahe:
     type: servers.jupyter_qcodes.tests.MoTe2QAHE_instr.MoTe2Device
     init:
-      data_file: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/processed_data.mat
+      data_file: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/processed_data.mat
       interpolation_method: linear
       bounds_error: false
       fill_value: null
@@ -84,8 +89,8 @@ instruments:
   mote2_general:
     type: servers.jupyter_qcodes.tests.test_instr.GeneralTestInstrument
     init:
-      config_file: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
-      data_file_base_path: /Users/caijiaqi/GitHub/instrMCP/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE
+      config_file: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
+      data_file_base_path: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE
     parameters:
       Vtg:
         initial_value: 0.0

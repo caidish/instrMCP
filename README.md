@@ -24,8 +24,37 @@ pip install -e ".[qcodes]"
 
 ### Configuration
 
+#### Required Environment Variable
+
+Set the `instrMCP_PATH` environment variable to point to your instrMCP installation directory:
+
+**For macOS/Linux (bash/zsh):**
 ```bash
-# Copy environment template
+# Add to your shell configuration file (~/.bashrc, ~/.zshrc, etc.)
+export instrMCP_PATH="/path/to/your/instrMCP"
+
+# For this installation, use:
+export instrMCP_PATH="$(pwd)"
+
+# Apply changes immediately
+source ~/.zshrc  # or ~/.bashrc
+```
+
+**For Windows (PowerShell):**
+```powershell
+# Add to your PowerShell profile
+$env:instrMCP_PATH = "C:\path\to\your\instrMCP"
+
+# Or set permanently in system environment variables
+[System.Environment]::SetEnvironmentVariable("instrMCP_PATH", "C:\path\to\your\instrMCP", "User")
+```
+
+**Why this is needed:** The station configuration files reference test data and configuration files using `${instrMCP_PATH}` to avoid exposing personal directory paths in the repository.
+
+#### Optional Environment Configuration
+
+```bash
+# Copy environment template (if needed)
 cp .env.example .env
 
 # Edit configuration
@@ -208,6 +237,29 @@ LLM → inst_health("mock_dac")
 - **Configuration Control**: Instruments disabled by default in YAML
 - **Validation**: Parameter bounds checking and error handling
 - **Isolated Environments**: Virtual environment per module
+- **Path Security**: Uses environment variables to avoid exposing personal directories
+
+## Troubleshooting
+
+### Environment Variable Issues
+
+**Error: "File not found" or path-related errors**
+- Ensure `instrMCP_PATH` environment variable is set correctly:
+  ```bash
+  echo $instrMCP_PATH  # Should show your instrMCP directory path
+  ```
+- If the variable is not set, add it to your shell configuration:
+  ```bash
+  # For current directory
+  export instrMCP_PATH="$(pwd)"
+  echo 'export instrMCP_PATH="/path/to/your/instrMCP"' >> ~/.zshrc
+  source ~/.zshrc
+  ```
+
+**Error: "Template expansion failed" in station configuration**
+- Restart your terminal or IDE to pick up new environment variables
+- Verify the environment variable contains the correct path (no trailing slash needed)
+- Check that the referenced files exist: `ls -la "${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/"`
 
 ## Development
 
