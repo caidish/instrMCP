@@ -48,7 +48,7 @@ instruments:
 
   # General Test Instrument with MoTe2 Configuration
   mote2_general:
-    type: servers.jupyter_qcodes.tests.test_instr.GeneralTestInstrument
+    type: qdevBench.tests.test_instr.general_test_instrument.GeneralTestInstrument
     init:
       config_file: ${instrMCP_PATH}/qdevBench/tests/data_file/MoTe2QAHE/MoTe2Para.json
       data_file_base_path: ${instrMCP_PATH}/qdevBench/tests/data_file/MoTe2QAHE

@@ -60,13 +60,15 @@ Thumbs.db
 **/labextension/yarn-debug.log*
 **/labextension/yarn-error.log*
 
-# JupyterLab Extensions - Build artifacts
+# JupyterLab Extensions - Build artifacts (except pre-built static files)
 **/labextension/lib/
-**/labextension/static/
 **/labextension/dist/
 **/labextension/build/
 **/labextension/.tsbuildinfo
 **/labextension/tsconfig.tsbuildinfo
+
+# KEEP pre-built static files for distribution
+# !**/labextension/static/
 
 # JupyterLab Extensions - Development files
 **/labextension/.jupyter-cache/
@@ -116,6 +118,12 @@ temp/
 *.seed
 *.pid.lock
 
+# JupyterLab Extension Development - Exclude ALL node_modules
+**/node_modules/
+**/.yarn/
+**/yarn.lock
+**/package-lock.json
+
 # Editor and system temporary files
 .vscode/settings.json
 .idea/workspace.xml
@@ -125,7 +133,3 @@ temp/
 Thumbs.db
 *.csv
 config/station.yaml
-/instrmcp/extensions/jupyterlab/.yarn/cache
-/instrmcp/extensions/jupyterlab/node_modules/@codemirror
-/instrmcp/extensions/jupyterlab/node_modules
-/instrmcp/extensions/jupyterlab/static/static
