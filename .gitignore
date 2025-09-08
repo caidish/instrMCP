@@ -111,6 +111,9 @@ tmp/
 temp/
 *.tmp
 
+# QDevBench simulation data
+qdevbench/
+
 # Node.js general (catch any missed Node.js artifacts)
 .npm
 .node_repl_history
