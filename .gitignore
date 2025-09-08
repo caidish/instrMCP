@@ -125,3 +125,7 @@ temp/
 Thumbs.db
 *.csv
 config/station.yaml
+/instrmcp/extensions/jupyterlab/.yarn/cache
+/instrmcp/extensions/jupyterlab/node_modules/@codemirror
+/instrmcp/extensions/jupyterlab/node_modules
+/instrmcp/extensions/jupyterlab/static/static

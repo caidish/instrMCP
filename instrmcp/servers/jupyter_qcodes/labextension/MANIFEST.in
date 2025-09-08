@@ -1,0 +1,4 @@
+include README.md
+include LICENSE
+include install.json
+recursive-include mcp_active_cell_bridge/labextension *.js *.js.map *.json *.css *.svg

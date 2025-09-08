@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "instrMCP"
-version = "0.2.0"
+name = "instrmcp"
+version = "0.3.0"
 description = "MCP server suite for physics laboratory instrumentation control"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -30,6 +30,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: System :: Hardware",
     "License :: OSI Approved :: MIT License",
+    "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -43,17 +44,27 @@ dependencies = [
     "mcp>=1.0.0",
     "pyyaml>=6.0",
     "httpx>=0.25.0",
-    "asyncio-mqtt>=0.16.0"
-]
-
-[project.optional-dependencies]
-qcodes = [
     "qcodes>=0.45.0",
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "matplotlib>=3.7.0",
+    "scipy>=1.10.0",
     "h5py>=3.8.0",
-    "xarray>=2023.1.0"
+    "xarray>=2023.1.0",
+    "jupyterlab>=4.0.0,<5",
+    "ipython>=8.0.0",
+    "notebook>=6.4.0",
+    "jupyter-core>=5.0.0"
+]
+
+[project.optional-dependencies]
+jupyter = [
+    # Jupyter dependencies are now core dependencies
+    # This section kept for backwards compatibility
+]
+qcodes = [
+    # QCodes is now a core dependency
+    # This section kept for backwards compatibility
 ]
 redpitaya = [
     "pyrpl>=0.9.4",
@@ -74,6 +85,9 @@ docs = [
     "sphinx-rtd-theme>=1.3.0",
     "sphinx-autodoc-typehints>=1.19.0"
 ]
+full = [
+    "instrmcp[jupyter,qcodes]"
+]
 
 [project.urls]
 Homepage = "https://github.com/instrmcp/instrMCP"
@@ -83,18 +97,31 @@ Issues = "https://github.com/instrmcp/instrMCP/issues"
 Changelog = "https://github.com/instrmcp/instrMCP/blob/main/CHANGELOG.md"
 
 [project.scripts]
-qcodes-mcp-server = "instrMCP.servers.qcodes.server:main"
+instrmcp = "instrmcp.cli:main"
+instrmcp-jupyter = "instrmcp.servers.jupyter_qcodes.cli:main" 
+instrmcp-qcodes = "instrmcp.servers.qcodes.server:main"
+instrmcp-setup = "instrmcp.setup_utils:setup_all"
 
 [project.entry-points."mcp.servers"]
-qcodes = "instrMCP.servers.qcodes:QCodesStationServer"
+jupyter_qcodes = "instrmcp.servers.jupyter_qcodes:JupyterMCPServer"
+qcodes = "instrmcp.servers.qcodes:QCodesStationServer"
+
+
+[project.entry-points."jupyter_labextension_paths"]
+instrmcp = "instrmcp.extensions.jupyterlab:_jupyter_labextension_paths"
+
+[project.entry-points."ipython.extensions"]  
+instrmcp = "instrmcp.extensions:load_jupyter_extension"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["servers*", "tools*", "tests*"]
-exclude = ["tests*", "docs*"]
+include = ["instrmcp*"]
+exclude = ["tests*", "docs*", "servers*", "tools*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.yaml", "*.yml", "*.json", "*.ini", "*.md"]
+"instrmcp" = ["**/*.yaml", "**/*.yml", "**/*.json", "**/*.ini", "**/*.md"]
+"instrmcp.config" = ["data/**/*", "templates/**/*"] 
+"instrmcp.extensions.jupyterlab.mcp_active_cell_bridge" = ["labextension/**/*", "install.json"]
 
 [tool.black]
 line-length = 88

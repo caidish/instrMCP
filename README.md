@@ -4,209 +4,157 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
 
-MCP server suite for physics laboratory instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems.
+Professional MCP server suite for physics laboratory instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
-## Quick Start
+## ✨ Features
+
+- **🔬 Full QCodes Integration**: Built-in support for all QCodes instrument drivers
+- **📊 JupyterLab Native**: Seamless integration with JupyterLab notebooks
+- **🛡️ Safe by Default**: Read-only mode with optional unsafe execution
+- **⚡ Zero Configuration**: Automatic setup with no environment variables required
+- **🎯 Professional CLI**: Easy server management with `instrmcp` command
+- **🔗 MCP Protocol**: Standard Model Context Protocol for LLM integration
+
+## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/instrmcp/instrMCP.git
+# Install from PyPI (recommended - when available)
+pip install instrmcp && instrmcp-setup
+
+# Install from source (current method)
+git clone https://github.com/caijiaqi/instrMCP.git
 cd instrMCP
-
-# Install dependencies
-pip install -e .
-
-# For QCodes support
-pip install -e ".[qcodes]"
+pip install -e . && instrmcp-setup
 ```
 
-### Configuration
+**That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
 
-#### Required Environment Variable
+**What gets installed & configured:**
+- 📦 **instrmcp** Python package with MCP servers
+- 🧪 **JupyterLab extension** (mcp-active-cell-bridge) for active cell capture (via `instrmcp-setup`)
+- 🐍 **IPython extension** with magic commands (manual loading)
+- ⚙️ **CLI tools** (`instrmcp`, `instrmcp-setup` commands)
 
-Set the `instrMCP_PATH` environment variable to point to your instrMCP installation directory:
+### Usage
 
-**For macOS/Linux (bash/zsh):**
-```bash
-# Add to your shell configuration file (~/.bashrc, ~/.zshrc, etc.)
-export instrMCP_PATH="/path/to/your/instrMCP"
+#### Loading InstrMCP in Jupyter
 
-# For this installation, use:
-export instrMCP_PATH="$(pwd)"
-
-# Apply changes immediately
-source ~/.zshrc  # or ~/.bashrc
-```
-
-**For Windows (PowerShell):**
-```powershell
-# Add to your PowerShell profile
-$env:instrMCP_PATH = "C:\path\to\your\instrMCP"
-
-# Or set permanently in system environment variables
-[System.Environment]::SetEnvironmentVariable("instrMCP_PATH", "C:\path\to\your\instrMCP", "User")
-```
-
-**Why this is needed:** The station configuration files reference test data and configuration files using `${instrMCP_PATH}` to avoid exposing personal directory paths in the repository. The `GeneralTestInstrument` class automatically expands environment variables in file paths.
-
-#### Optional Environment Configuration
+**📋 Manual Loading:** Load the extension when needed using the magic command below.
 
 ```bash
-# Copy environment template (if needed)
-cp .env.example .env
-
-# Edit configuration
-nano .env
+# Start JupyterLab
+jupyter lab
 ```
 
-### Run QCodes MCP Server
-
-```bash
-# Start server
-python -m servers.qcodes.server --port 8000
-
-# Or using entry point
-qcodes-mcp-server --port 8000
-```
-
-### JupyterLab Extension Setup
-
-For the `get_editing_cell` functionality that captures currently editing cells from JupyterLab frontend:
-
-#### 1. Install the JupyterLab Extension
-
-```bash
-# Navigate to the extension directory
-cd servers/jupyter_qcodes/labextension
-
-# Clean any existing artifacts
-rm -rf node_modules package-lock.json yarn.lock .yarn lib tsconfig.tsbuildinfo
-
-# Install dependencies using jlpm (JupyterLab's package manager)
-jlpm install
-
-# Build the TypeScript library
-jlpm run build:lib
-
-# Build the extension  
-jlpm run build:labextension
-
-# Install the extension in development mode
-jupyter labextension develop . --overwrite
-
-# Or install in production mode
-jupyter labextension install .
-```
-
-#### Version Compatibility
-
-**Important**: The extension requires JupyterLab 4.2+ for compatibility. Check your version:
-```bash
-jupyter --version
-# Should show jupyterlab: 4.2.0 or higher
-```
-
-#### Troubleshooting
-
-**Error: "Could not find @jupyterlab/builder"**
-- This indicates version mismatch between JupyterLab and extension dependencies
-- The extension is configured for JupyterLab 4.2+ - ensure you have compatible versions
-- Solution: Clean and reinstall:
-  ```bash
-  cd servers/jupyter_qcodes/labextension
-  rm -rf node_modules yarn.lock .yarn lib
-  jlpm install
-  jlpm run build:lib
-  jlpm run build:labextension
-  ```
-
-**Error: "This package doesn't seem to be present in your lockfile"**
-- This happens when mixing `npm` and `jlpm` package managers
-- Solution: Clean and reinstall with `jlpm` only:
-  ```bash
-  rm -rf node_modules package-lock.json lib
-  jlpm install
-  jlpm run build
-  ```
-
-**Yarn PnP Issues**
-- If you see Yarn PnP (Plug'n'Play) related errors, the extension includes a `.yarnrc.yml` file that disables PnP mode
-- This forces traditional `node_modules` structure that JupyterLab expects
-
-#### 2. Verify Installation
-
-```bash
-# List installed extensions
-jupyter labextension list
-
-# Should show: mcp-active-cell-bridge enabled
-```
-
-#### 3. Load the Jupyter MCP Extension
-
-In your Jupyter notebook, load the MCP extension:
+In a Jupyter notebook cell, load the InstrMCP extension:
 
 ```python
-# Load the extension
-%load_ext servers.jupyter_qcodes.jupyter_mcp_extension
+# Load InstrMCP extension
+%load_ext instrmcp.extensions
 
-# Verify it's running
-# You should see: 🚀 QCoDeS MCP Server starting...
+# Now use the magic commands:
+%mcp_start        # Start MCP server
+%mcp_status       # Check server status  
+%mcp_unsafe       # Enable unsafe mode (code execution)
+%mcp_safe         # Return to safe mode
+%mcp_restart      # Restart server
+%mcp_close        # Stop server
 ```
 
-#### 4. Test the Editing Cell Capture
-
-Once both the JupyterLab extension and MCP server are running, the `get_editing_cell` tool will capture the content of the currently active/editing cell in real-time via kernel communication.
-
-**Usage Examples:**
-- `get_editing_cell()` - Get current editing cell content (any age)
-- `get_editing_cell(fresh_ms=1000)` - Get content no older than 1 second
-
-**Note**: The extension uses a 2-second debounce for content changes to prevent excessive updates during typing.
-
-#### 5. Debug Information
-
-For debugging the extension:
+#### CLI Server Management
 
 ```bash
-# Check if extension is installed and enabled
-jupyter labextension list
+# Start standalone servers
+instrmcp jupyter --port 3000                # Jupyter MCP server
+instrmcp jupyter --port 3000 --unsafe       # With unsafe mode
+instrmcp qcodes --port 3001                 # QCodes station server
 
-# View browser console for extension logs (look for "MCP Active Cell Bridge")
-# Open browser developer tools in JupyterLab
-
-# Check kernel-side comm registration
-# In notebook: print("Comm target registered") should appear on extension load
+# Configuration and info
+instrmcp config    # Show configuration paths
+instrmcp version   # Show version
+instrmcp --help    # Show all commands
 ```
 
-**Console Debug Messages:**
-- `"MCP Active Cell Bridge extension activated"` - Extension loaded
-- `"MCP Active Cell Bridge: Comm opened with kernel"` - Communication established  
-- `"MCP Active Cell Bridge: Sent snapshot (X chars)"` - Cell content sent to kernel
-- `"MCP Active Cell Bridge: Tracking new active cell"` - New cell selected
+#### Configuration (Optional)
 
-## Architecture
+Configuration is automatic! The system auto-detects installation paths. For custom setups:
 
-### Station-Based Design
-- **YAML Configuration**: Define instruments in `config/station.station.yaml`
+```bash
+# View current configuration
+instrmcp config
+
+# Custom config file (optional)
+mkdir -p ~/.instrmcp
+echo "custom_setting: value" > ~/.instrmcp/config.yaml
+```
+
+## 🔧 Advanced Features
+
+### Active Cell Capture
+
+InstrMCP automatically captures your currently editing JupyterLab cell content for LLM analysis:
+
+```python
+# In your notebook, the LLM can access:
+get_editing_cell()                    # Current cell content (any age)
+get_editing_cell(fresh_ms=1000)       # Content no older than 1 second
+get_notebook_cells()                  # All notebook cells  
+update_editing_cell("new code")       # Update current cell
+```
+
+The extension uses intelligent debouncing (2-second delay) to avoid excessive updates while typing.
+
+### Extension Management
+
+```bash
+# Check extension status
+jupyter labextension list
+
+# Should show: mcp-active-cell-bridge v0.1.0 enabled OK
+```
+
+Both extensions are automatically installed and configured - no manual setup required!
+
+## 🏗️ Architecture
+
+### Modern Package Structure
+```
+instrmcp/
+├── servers/           # MCP server implementations
+│   ├── jupyter_qcodes/ # Jupyter integration  
+│   └── qcodes/        # QCodes station server
+├── extensions/        # Jupyter/IPython extensions
+├── tools/            # Helper utilities
+├── config/           # Configuration management
+└── cli.py            # Command-line interface
+```
+
+### QCodes Integration
+- **Station-Based Design**: YAML configuration in `instrmcp/config/data/`
 - **Lazy Loading**: Instruments loaded on-demand for safety
-- **Snapshot Health**: Read-only instrument status via `snapshot()` methods
+- **Professional Drivers**: Full QCodes driver ecosystem support
+- **Health Monitoring**: Real-time instrument status via snapshots
 
-### MCP Tools
-- `all_instr_health(update=False)` - Get station-wide instrument status
-- `inst_health(name, update=True)` - Get single instrument snapshot  
+### Available MCP Tools
+- `all_instr_health()` - Station-wide instrument status
+- `inst_health(name)` - Single instrument snapshot  
 - `load_instrument(name)` - Load instrument from configuration
 - `station_info()` - General station information
+- `get_editing_cell()` - Current JupyterLab cell content
+- `execute_editing_cell()` - Execute current cell (unsafe mode)
 
 ### Resources
 - `available_instr` - JSON list of configured instruments
+- `notebook_cells` - All notebook cell contents
 
-## Configuration Example
+## 📝 Configuration Example
+
+Station configuration uses standard YAML format:
 
 ```yaml
-# config/station.station.yaml
+# instrmcp/config/data/default_station.yaml
 instruments:
   mock_dac:
     driver: qcodes.instrument_drivers.mock.MockDAC
@@ -218,9 +166,15 @@ instruments:
     name: k2400
     address: GPIB0::24::INSTR
     enable: false  # Disabled for safety
+    
+  general_test_device:
+    driver: instrmcp.servers.general_test_instrument.GeneralTestInstrument
+    name: test_device
+    config_file: instrmcp://config/data/test_device.json
+    enable: true
 ```
 
-## Usage with LLMs
+## 🤖 Usage with LLMs
 
 ```
 User: "Show me the health status of all instruments"
@@ -229,74 +183,96 @@ LLM → all_instr_health()
 User: "Load the mock DAC and check its status"  
 LLM → load_instrument("mock_dac")
 LLM → inst_health("mock_dac")
+
+User: "What code am I currently writing?"
+LLM → get_editing_cell()
+
+User: "Execute the current cell"
+LLM → execute_editing_cell()  # (requires unsafe mode)
 ```
 
-## Safety Features
+## 🛡️ Safety Features
 
-- **Read-Only by Default**: Only snapshot/health tools enabled initially
-- **Configuration Control**: Instruments disabled by default in YAML
-- **Validation**: Parameter bounds checking and error handling
-- **Isolated Environments**: Virtual environment per module
-- **Path Security**: Uses environment variables to avoid exposing personal directories
+- **🔒 Safe by Default**: Read-only mode prevents accidental instrument commands
+- **⚡ Unsafe Mode**: Explicit opt-in for code execution capabilities
+- **🎛️ Configuration Control**: Instruments disabled by default in YAML
+- **✅ Validation**: Parameter bounds checking and error handling  
+- **📦 Isolated Package**: Clean installation without conflicts
+- **🔍 Auto-Discovery**: Automatic path detection eliminates configuration errors
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-### Environment Variable Issues
+### Installation Issues
 
-**Error: "File not found" or path-related errors**
-- Ensure `instrMCP_PATH` environment variable is set correctly:
-  ```bash
-  echo $instrMCP_PATH  # Should show your instrMCP directory path
-  ```
-- If the variable is not set, add it to your shell configuration:
-  ```bash
-  # For current directory
-  export instrMCP_PATH="$(pwd)"
-  echo 'export instrMCP_PATH="/path/to/your/instrMCP"' >> ~/.zshrc
-  source ~/.zshrc
-  ```
+**Error: "Module not found" or import errors**
+- Ensure you installed with: `pip install instrmcp`
+- Check installation: `instrmcp version`
+- Verify in Python: `import instrmcp; print("OK")`
 
-**Error: "Template expansion failed" in station configuration**
-- Restart your terminal or IDE to pick up new environment variables
-- Verify the environment variable contains the correct path (no trailing slash needed)
-- Check that the referenced files exist: `ls -la "${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/"`
+**Error: "JupyterLab extension not found"**
+- Restart JupyterLab after installation
+- Check extensions: `jupyter labextension list`
+- Should show: `mcp-active-cell-bridge v0.1.0 enabled OK`
 
-### Instrument Environment Variable Support
+### Magic Commands Not Working
 
-The following instruments have built-in support for `${VAR}` environment variable expansion:
+**Error: "Magic command not found"**
+- Run setup: `instrmcp-setup` (sets up Jupyter auto-loading)
+- Restart Jupyter kernel after setup
+- Manual load (if needed): `%load_ext instrmcp.extensions`
+- Check status: `%mcp_status`
 
-- **GeneralTestInstrument**: Automatically expands environment variables in `config_file` and `data_file_base_path` parameters
-- **MoTe2Device**: Uses environment variables through data file paths
+### Configuration Issues
 
-This allows the station.yaml configuration to use portable paths like:
-```yaml
-config_file: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
-```
+**Error: "Configuration file not found"**
+- Configuration is automatic - no setup required
+- Check paths: `instrmcp config`
+- Custom config location: `~/.instrmcp/config.yaml`
 
-## Development
+**Error: "Instrument not found"**
+- Check available instruments: Use MCP tool `available_instr`
+- Verify YAML config in: `instrmcp/config/data/default_station.yaml`
+- Enable instruments: Set `enable: true` in configuration
+
+## 👨‍💻 Development
 
 ```bash
 # Install development dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/
+pip install instrmcp[dev]
 
 # Code formatting
-black servers/ tools/ tests/
+black instrmcp/ tests/
+
+# Type checking  
+mypy instrmcp/
+
+# Install from source
+git clone https://github.com/instrmcp/instrMCP.git
+cd instrMCP
+pip install -e .
 ```
 
-## Project Structure
+## 📦 Optional Dependencies
 
+```bash
+# Install specific features
+pip install instrmcp[redpitaya]    # RedPitaya FPGA support
+pip install instrmcp[full]         # Everything (recommended)
+
+# Development tools
+pip install instrmcp[dev]          # Testing, formatting, type checking
+pip install instrmcp[docs]         # Documentation building
 ```
-instrMCP/
-├── plan.md                    # Implementation roadmap
-├── servers/qcodes/           # QCodes MCP server
-├── config/                   # Configuration files  
-├── state/                    # Runtime state
-├── tools/                    # Helper utilities
-└── tests/                    # Test suite
-```
+
+## 🚀 What's New in v0.3.0
+
+- **✨ Zero Configuration**: No environment variables required
+- **📦 Professional Package**: Standard `pip install instrmcp`
+- **🎯 CLI Interface**: New `instrmcp` command suite
+- **🔄 Auto-Loading**: Extensions load automatically
+- **📊 Built-in QCodes**: Full QCodes ecosystem included
+- **🏗️ Modern Architecture**: Clean package structure
+- **🛡️ Enhanced Safety**: Improved safe/unsafe mode handling
 
 ## Context7 Integration
 
@@ -325,4 +301,3 @@ MIT License - see [LICENSE](LICENSE) file.
 - [Issues](https://github.com/instrmcp/instrMCP/issues)
 - [QCodes](https://qcodes.github.io/Qcodes/)
 - [Model Context Protocol](https://github.com/anthropics/mcp)
-

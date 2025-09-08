@@ -1,0 +1,5 @@
+{
+  "packageManager": "python",
+  "packageName": "instrmcp",
+  "uninstallInstructions": "pip uninstall instrmcp"
+}

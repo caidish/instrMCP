@@ -50,8 +50,8 @@ instruments:
   mote2_general:
     type: servers.jupyter_qcodes.tests.test_instr.GeneralTestInstrument
     init:
-      config_file: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE/MoTe2Para.json
-      data_file_base_path: ${instrMCP_PATH}/servers/jupyter_qcodes/tests/data_file/MoTe2QAHE
+      config_file: ${instrMCP_PATH}/qdevBench/tests/data_file/MoTe2QAHE/MoTe2Para.json
+      data_file_base_path: ${instrMCP_PATH}/qdevBench/tests/data_file/MoTe2QAHE
     parameters:
       Vtg:
         initial_value: 0.0

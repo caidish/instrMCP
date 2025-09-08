@@ -1,0 +1,5 @@
+{
+  "packageManager": "python",
+  "packageName": "mcp_active_cell_bridge",
+  "uninstallInstructions": "Use your Python package manager (pip, conda, etc.) to uninstall the package mcp_active_cell_bridge"
+}
