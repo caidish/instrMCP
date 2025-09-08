@@ -147,14 +147,14 @@ class JupyterMCPServer:
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()
-        async def get_editing_cell(fresh_ms: int = None) -> List[TextContent]:
+        async def get_editing_cell(fresh_ms: int = 1000) -> List[TextContent]:
             """Get the currently editing cell content from JupyterLab frontend.
             
             This captures the cell that is currently being edited in the frontend.
             
             Args:
                 fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
-                         will request fresh data from frontend (default: None, accept any age)
+                         will request fresh data from frontend (default: 1000, accept any age)
             """
             try:
                 result = await self.tools.get_editing_cell(fresh_ms)

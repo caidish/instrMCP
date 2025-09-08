@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 _server: Optional[JupyterMCPServer] = None
 _server_task: Optional[asyncio.Task] = None
 _desired_mode: bool = True  # True = safe, False = unsafe
+_server_host: str = "127.0.0.1"  # Default host
+_server_port: int = 8123  # Default port
 
 
 @magics_class

@@ -8,34 +8,41 @@ Professional MCP server suite for physics laboratory instrumentation control, en
 
 ## ✨ Features
 
-- **🔬 Full QCodes Integration**: Built-in support for all QCodes instrument drivers
-- **📊 JupyterLab Native**: Seamless integration with JupyterLab notebooks
-- **🛡️ Safe by Default**: Read-only mode with optional unsafe execution
-- **⚡ Zero Configuration**: Automatic setup with no environment variables required
-- **🎯 Professional CLI**: Easy server management with `instrmcp` command
-- **🔗 MCP Protocol**: Standard Model Context Protocol for LLM integration
+- **Full QCodes Integration**: Built-in support for all QCodes instrument drivers
+- **JupyterLab Native**: Seamless integration with JupyterLab. 
+- **Safe mode**: Read-only mode with optional unsafe execution
+- **CLI**: Easy server management with `instrmcp` command
+- **MCP**: Standard Model Context Protocol for LLM integration
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Install from PyPI (recommended - when available)
-pip install instrmcp && instrmcp-setup
-
 # Install from source (current method)
 git clone https://github.com/caijiaqi/instrMCP.git
 cd instrMCP
-pip install -e . && instrmcp-setup
+pip install -e .
+
+# Set required environment variable
+export instrMCP_PATH="$(pwd)"
+echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Alternative: Install from PyPI (when available)**
+```bash
+pip install instrmcp
+# Still need to set instrMCP_PATH to your config location
 ```
 
 **That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
 
-**What gets installed & configured:**
+**What gets installed:**
 - 📦 **instrmcp** Python package with MCP servers
-- 🧪 **JupyterLab extension** (mcp-active-cell-bridge) for active cell capture (via `instrmcp-setup`)
-- 🐍 **IPython extension** with magic commands (manual loading)
-- ⚙️ **CLI tools** (`instrmcp`, `instrmcp-setup` commands)
+- 🧪 **QCodes** for instrument control
+- 🐍 **JupyterLab** for interactive development
+- ⚙️ **All dependencies** automatically resolved
 
 ### Usage
 
@@ -88,6 +95,12 @@ instrmcp config
 # Custom config file (optional)
 mkdir -p ~/.instrmcp
 echo "custom_setting: value" > ~/.instrmcp/config.yaml
+
+# Environment variable setup (required for QCodes station.yaml)
+export instrMCP_PATH="/path/to/your/instrMCP"
+# Add to shell config for persistence:
+echo 'export instrMCP_PATH="/path/to/your/instrMCP"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ## 🔧 Advanced Features
@@ -265,24 +278,12 @@ pip install instrmcp[docs]         # Documentation building
 ```
 
 ## 🚀 What's New in v0.3.0
-
-- **✨ Zero Configuration**: No environment variables required
 - **📦 Professional Package**: Standard `pip install instrmcp`
 - **🎯 CLI Interface**: New `instrmcp` command suite
 - **🔄 Auto-Loading**: Extensions load automatically
 - **📊 Built-in QCodes**: Full QCodes ecosystem included
 - **🏗️ Modern Architecture**: Clean package structure
 - **🛡️ Enhanced Safety**: Improved safe/unsafe mode handling
-
-## Context7 Integration
-
-InstrMCP includes optional Context7 integration for QCodes documentation lookup:
-
-```bash
-# Configure Context7 API key
-export CONTEXT7_API_KEY="your_key_here"
-```
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
@@ -294,6 +295,140 @@ MIT License - see [LICENSE](LICENSE) file.
 3. Commit changes (`git commit -m 'Add amazing feature'`)
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
+
+## 🤖 Claude Desktop Integration
+
+InstrMCP provides seamless integration with Claude Desktop, enabling AI-assisted laboratory instrumentation control through natural language.
+
+### Quick Setup (2 Steps)
+
+1. **Run Automated Setup**:
+```bash
+cd /path/to/your/instrMCP
+./claudedesktopsetting/setup_claude.sh
+```
+
+2. **Restart Claude Desktop** completely and test with: *"What MCP tools are available?"*
+
+**Manual Setup Alternative:**
+```bash
+# 1. Copy and edit configuration
+cp claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
+
+# 2. Edit the copied file - replace placeholders with actual paths:
+#    /path/to/your/python3 → $(which python3)
+#    /path/to/your/instrMCP → $(pwd)
+```
+
+### How Claude Desktop Integration Works
+
+**🔄 Automatic Mode Detection:**
+- **Full Mode**: When Jupyter is running (`%load_ext instrmcp.extensions` + `%mcp_start`)
+  - Complete access to live instruments, notebook cells, code execution
+  - Real-time parameter monitoring and control
+- **Standalone Mode**: When Jupyter is not running
+  - Basic functionality with mock instrument data
+  - Station configuration access without live hardware
+
+**📡 Communication Flow:**
+```
+Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ HTTP ←→ Jupyter MCP Server
+```
+
+### Available Tools & Capabilities
+
+#### 🔬 Instrument Control
+- `list_instruments()` - Show all available QCodes instruments
+- `instrument_info(name)` - Detailed instrument parameters and status
+- `get_parameter_value(instrument, parameter)` - Read instrument values
+- `station_snapshot()` - Complete laboratory setup overview
+
+#### 📊 Data & Monitoring  
+- `get_parameter_values(queries)` - Batch parameter readings
+- `subscribe_parameter(instrument, parameter)` - Real-time monitoring
+- `get_cache_stats()` - Performance monitoring
+
+#### 💻 Jupyter Integration (Full Mode Only)
+- `get_notebook_cells()` - Access recent notebook execution history
+- `get_editing_cell()` - Current cell content from JupyterLab
+- `update_editing_cell(content)` - Modify active cell programmatically
+- `execute_editing_cell()` - Run current cell (unsafe mode required)
+
+#### 🔧 Code Assistance
+- `suggest_code(description)` - AI-generated measurement scripts
+- `list_variables()` - Jupyter namespace inspection
+- `get_variable_info(name)` - Detailed variable analysis
+
+### Usage Examples
+
+**Natural Language Queries:**
+```
+User: "What instruments are connected to the station?"
+Claude: [Calls list_instruments() and provides formatted response]
+
+User: "Set gate voltage to 1.5V and measure the current"
+Claude: [Uses instrument tools to safely configure and measure]
+
+User: "Show me the last measurement I ran"
+Claude: [Retrieves notebook cells with get_notebook_cells()]
+
+User: "Monitor the temperature every 2 seconds"
+Claude: [Sets up parameter subscription]
+```
+
+**Advanced Automation:**
+- Multi-instrument coordination
+- Automated measurement sequences
+- Real-time data analysis and plotting
+- Experiment logging and documentation
+
+### Configuration Details
+
+**Manual Configuration** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "instrmcp-jupyter": {
+      "command": "/path/to/your/python3",
+      "args": ["/path/to/your/instrMCP/claudedesktopsetting/claude_launcher.py"],
+      "env": {
+        "PYTHONPATH": "/path/to/your/instrMCP",
+        "instrMCP_PATH": "/path/to/your/instrMCP",
+        "JUPYTER_MCP_HOST": "127.0.0.1",
+        "JUPYTER_MCP_PORT": "8123"
+      }
+    }
+  }
+}
+```
+
+**⚠️ Important**: Claude Desktop doesn't support environment variable expansion - use absolute paths only.
+
+### Troubleshooting
+
+**"spawn python ENOENT" error:**
+- Use full Python path: `which python3` 
+- Update `command` field in config with absolute path
+
+**Claude Desktop shows no MCP tools:**
+- Check Claude config file exists and has absolute paths
+- Restart Claude Desktop completely (don't just reload)
+- Verify Python executable is accessible
+
+**"Standalone mode" message:**
+- Start Jupyter: `jupyter lab`
+- Load extension: `%load_ext instrmcp.extensions`
+- Start MCP server: `%mcp_start`
+
+**Import errors in launcher:**
+- Ensure InstrMCP installed: `pip install -e .`
+- Check PYTHONPATH in config points to instrMCP directory
+
+**Setup script help:**
+- Re-run: `./claudedesktopsetting/setup_claude.sh`
+- Check generated config: `cat ~/Library/Application\ Support/Claude/claude_desktop_config.json`
+
+See [`claudedesktopsetting/README.md`](claudedesktopsetting/README.md) for detailed setup instructions.
 
 ## Links
 
