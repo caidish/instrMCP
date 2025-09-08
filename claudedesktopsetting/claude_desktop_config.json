@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "instrmcp-jupyter": {
+      "command": "/path/to/your/python3",
+      "args": [
+        "/path/to/your/instrMCP/claudedesktopsetting/claude_launcher.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/path/to/your/instrMCP",
+        "instrMCP_PATH": "/path/to/your/instrMCP",
+        "JUPYTER_MCP_HOST": "127.0.0.1",
+        "JUPYTER_MCP_PORT": "8123"
+      }
+    }
+  }
+}

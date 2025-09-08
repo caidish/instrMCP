@@ -1,11 +1,8 @@
 """
 IPython extension entry point for the Jupyter QCoDeS MCP server.
 
-Load this extension in Jupyter with:
-%load_ext servers.jupyter_qcodes.jupyter_mcp_extension
-
-Or add to your Jupyter startup by adding this line to:
-~/.ipython/profile_default/startup/00-load-mcp-extension.py
+This extension is automatically loaded when installing instrmcp.
+Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 """
 
 import asyncio
@@ -24,6 +21,8 @@ logger = logging.getLogger(__name__)
 _server: Optional[JupyterMCPServer] = None
 _server_task: Optional[asyncio.Task] = None
 _desired_mode: bool = True  # True = safe, False = unsafe
+_server_host: str = "127.0.0.1"  # Default host
+_server_port: int = 8123  # Default port
 
 
 @magics_class
@@ -246,13 +245,19 @@ def load_ipython_extension(ipython):
         if shell_type != 'ZMQInteractiveShell':
             logger.warning(f"MCP extension designed for Jupyter, got {shell_type}")
         
-        # Get the current event loop
+        # Get or create an event loop
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No event loop running, this shouldn't happen in Jupyter
-            logger.error("No asyncio event loop found")
-            return
+            # No event loop running, create one for terminal IPython
+            logger.info("No event loop found, creating one for terminal IPython")
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            except Exception as e:
+                logger.error(f"Could not create event loop: {e}")
+                # Still register magic commands even without event loop
+                pass
         
         # Register comm target for active cell tracking
         register_comm_target()
