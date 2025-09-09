@@ -15,8 +15,9 @@
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI.
 
+ 
 
-https://github.com/user-attachments/assets/60eeca88-c0eb-4046-96dd-35ff02961266
+https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 
 
 ## Plan
