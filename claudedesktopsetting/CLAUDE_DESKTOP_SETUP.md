@@ -52,7 +52,7 @@ Add this configuration to your `claude_desktop_config.json`:
     "jupyter-qcodes": {
       "command": "${instrMCP_PATH}/venv/bin/python",
       "args": [
-        "${instrMCP_PATH}/servers/jupyter_qcodes/claude_launcher.py"
+        "${instrMCP_PATH}/claudedesktopsetting/claude_launcher.py"
       ],
       "cwd": "${instrMCP_PATH}",
       "env": {
@@ -79,6 +79,8 @@ ls $instrMCP_PATH/venv/bin/python
 ```
 
 The environment variable approach ensures all required dependencies (QCoDeS, FastMCP, etc.) are available and keeps your configuration portable.
+
+Note: The Claude launcher uses a shared STDIO↔HTTP proxy in `instrmcp.tools.stdio_proxy` so Codex and Claude share the same proxy logic while remaining configured separately.
 
 ### 3. Save and Restart
 

@@ -270,7 +270,7 @@ MIT License - see [LICENSE](LICENSE) file.
 
 InstrMCP provides seamless integration with Claude Desktop, enabling AI-assisted laboratory instrumentation control through natural language. 
 
-Claude Desktop now only supports stdio, so we have claude_launcher for proxying to HTTP requests.
+Claude Desktop communicates over STDIO. The launcher `claudedesktopsetting/claude_launcher.py` proxies STDIO↔HTTP using the shared proxy in `instrmcp.tools.stdio_proxy` to reach your HTTP MCP server.
 
 ### Quick Setup (2 Steps)
 
@@ -296,7 +296,7 @@ cp claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Suppor
 
 **📡 Communication Flow:**
 ```
-Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ HTTP ←→ Jupyter MCP Server
+Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ (instrmcp.tools.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
 ```
 
 ### Available Tools & Capabilities
@@ -393,6 +393,24 @@ Claude: [Sets up parameter subscription]
 - Check generated config: `cat ~/Library/Application\ Support/Claude/claude_desktop_config.json`
 
 See [`claudedesktopsetting/README.md`](claudedesktopsetting/README.md) for detailed setup instructions.
+
+## Codex CLI Integration
+
+Codex expects MCP servers over STDIO. Use the Codex launcher to proxy STDIO calls to your HTTP MCP server.
+
+**Command**
+- command: `python`
+- args: `["/path/to/your/instrMCP/codexsetting/codex_launcher.py"]`
+- env:
+  - `JUPYTER_MCP_HOST=127.0.0.1`
+  - `JUPYTER_MCP_PORT=8123`
+
+**Flow**
+```
+Codex CLI ←→ STDIO ←→ codex_launcher.py ←→ (instrmcp.tools.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
+```
+
+After configuring, start Codex and ask to list MCP tools. You should see tools from the HTTP server (proxied through the launcher).
 
 ## Links
 
