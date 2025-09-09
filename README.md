@@ -15,6 +15,10 @@
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI.
 
+
+https://github.com/user-attachments/assets/60eeca88-c0eb-4046-96dd-35ff02961266
+
+
 ## Plan
 - Support RedPitaya. 
 - Support Raspberry Pi for outdated instruments. 
