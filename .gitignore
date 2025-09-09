@@ -136,3 +136,4 @@ qdevbench/
 Thumbs.db
 *.csv
 config/station.yaml
+TestNotebook.ipynb

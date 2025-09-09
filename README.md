@@ -6,7 +6,7 @@
 
 Professional MCP server suite for physics laboratory instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
-## ✨ Features
+## Features
 
 - **Full QCodes Integration**: Built-in support for all QCodes instrument drivers
 - **JupyterLab Native**: Seamless integration with JupyterLab. 
@@ -14,7 +14,13 @@ Professional MCP server suite for physics laboratory instrumentation control, en
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
 
-## 🚀 Quick Start
+## Plan
+- Support RedPitaya. 
+- Support Raspberry Pi for outdated instruments. 
+- Integrating lab wiki knowledge base for safety rails
+- More LLM integration examples.
+
+##  Quick Start
 
 ### Installation
 
@@ -30,19 +36,12 @@ echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-**Alternative: Install from PyPI (when available)**
-```bash
-pip install instrmcp
-# Still need to set instrMCP_PATH to your config location
-```
-
 **That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
 
 **What gets installed:**
 - 📦 **instrmcp** Python package with MCP servers
 - 🧪 **QCodes** for instrument control
 - 🐍 **JupyterLab** for interactive development
-- ⚙️ **All dependencies** automatically resolved
 
 ### Usage
 
@@ -103,36 +102,9 @@ echo 'export instrMCP_PATH="/path/to/your/instrMCP"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-## 🔧 Advanced Features
+## Architecture
 
-### Active Cell Capture
-
-InstrMCP automatically captures your currently editing JupyterLab cell content for LLM analysis:
-
-```python
-# In your notebook, the LLM can access:
-get_editing_cell()                    # Current cell content (any age)
-get_editing_cell(fresh_ms=1000)       # Content no older than 1 second
-get_notebook_cells()                  # All notebook cells  
-update_editing_cell("new code")       # Update current cell
-```
-
-The extension uses intelligent debouncing (2-second delay) to avoid excessive updates while typing.
-
-### Extension Management
-
-```bash
-# Check extension status
-jupyter labextension list
-
-# Should show: mcp-active-cell-bridge v0.1.0 enabled OK
-```
-
-Both extensions are automatically installed and configured - no manual setup required!
-
-## 🏗️ Architecture
-
-### Modern Package Structure
+### Package Structure
 ```
 instrmcp/
 ├── servers/           # MCP server implementations
@@ -145,10 +117,8 @@ instrmcp/
 ```
 
 ### QCodes Integration
-- **Station-Based Design**: YAML configuration in `instrmcp/config/data/`
 - **Lazy Loading**: Instruments loaded on-demand for safety
 - **Professional Drivers**: Full QCodes driver ecosystem support
-- **Health Monitoring**: Real-time instrument status via snapshots
 
 ### Available MCP Tools
 - `all_instr_health()` - Station-wide instrument status
@@ -156,7 +126,7 @@ instrmcp/
 - `load_instrument(name)` - Load instrument from configuration
 - `station_info()` - General station information
 - `get_editing_cell()` - Current JupyterLab cell content
-- `execute_editing_cell()` - Execute current cell (unsafe mode)
+- `execute_editing_cell()` - Execute current cell (unsafe mode only)
 
 ### Resources
 - `available_instr` - JSON list of configured instruments
@@ -296,9 +266,11 @@ MIT License - see [LICENSE](LICENSE) file.
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
 
-## 🤖 Claude Desktop Integration
+## Claude Desktop Integration
 
-InstrMCP provides seamless integration with Claude Desktop, enabling AI-assisted laboratory instrumentation control through natural language.
+InstrMCP provides seamless integration with Claude Desktop, enabling AI-assisted laboratory instrumentation control through natural language. 
+
+Claude Desktop now only supports stdio, so we have claude_launcher for proxying to HTTP requests.
 
 ### Quick Setup (2 Steps)
 
@@ -321,14 +293,6 @@ cp claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Suppor
 ```
 
 ### How Claude Desktop Integration Works
-
-**🔄 Automatic Mode Detection:**
-- **Full Mode**: When Jupyter is running (`%load_ext instrmcp.extensions` + `%mcp_start`)
-  - Complete access to live instruments, notebook cells, code execution
-  - Real-time parameter monitoring and control
-- **Standalone Mode**: When Jupyter is not running
-  - Basic functionality with mock instrument data
-  - Station configuration access without live hardware
 
 **📡 Communication Flow:**
 ```
