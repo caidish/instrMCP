@@ -184,6 +184,80 @@ class JupyterMCPServer:
         # Cell editing tools
         
         @self.mcp.tool()
+        async def get_editing_cell_output() -> List[TextContent]:
+            """Get the output of the most recently executed cell.
+            
+            This tool retrieves the output from the last executed cell in the notebook.
+            If a cell is currently running, it will indicate that status instead.
+            """
+            try:
+                # Use IPython's In/Out cache to get the last executed cell
+                if hasattr(self.ipython, 'user_ns'):
+                    In = self.ipython.user_ns.get('In', [])
+                    Out = self.ipython.user_ns.get('Out', {})
+                    current_execution_count = getattr(self.ipython, 'execution_count', 0)
+                    
+                    if len(In) > 1:  # In[0] is empty
+                        latest_cell_num = len(In) - 1
+                        
+                        # Check if the latest cell is currently running
+                        # Cell is running if: it exists in In but not in Out, and matches current execution count
+                        if (latest_cell_num not in Out and 
+                            latest_cell_num == current_execution_count and
+                            In[latest_cell_num]):
+                            
+                            cell_info = {
+                                "cell_number": latest_cell_num,
+                                "execution_count": latest_cell_num,
+                                "input": In[latest_cell_num],
+                                "status": "running",
+                                "message": "Cell is currently executing - no output available yet",
+                                "has_output": False,
+                                "output": None
+                            }
+                            return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                        
+                        # Find the most recent completed cell (has both input and output)
+                        for i in range(len(In) - 1, 0, -1):  # Start from most recent
+                            if In[i]:  # Skip empty entries
+                                if i in Out:
+                                    # Cell completed with output
+                                    cell_info = {
+                                        "cell_number": i,
+                                        "execution_count": i,
+                                        "input": In[i],
+                                        "status": "completed",
+                                        "output": str(Out[i]),
+                                        "has_output": True
+                                    }
+                                    return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                                elif i < current_execution_count:
+                                    # Cell was executed but produced no output
+                                    cell_info = {
+                                        "cell_number": i,
+                                        "execution_count": i,
+                                        "input": In[i],
+                                        "status": "completed_no_output",
+                                        "message": "Cell executed successfully but produced no output",
+                                        "output": None,
+                                        "has_output": False
+                                    }
+                                    return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                
+                # Fallback: no recent executed cells
+                result = {
+                    "status": "no_cells",
+                    "error": "No recently executed cells found",
+                    "message": "Execute a cell first to see its output",
+                    "has_output": False
+                }
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                
+            except Exception as e:
+                logger.error(f"Error in get_editing_cell_output: {e}")
+                return [TextContent(type="text", text=json.dumps({"status": "error", "error": str(e)}, indent=2))]
+        
+        @self.mcp.tool()
         async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> List[TextContent]:
             """Get recent notebook cells with input and output.
             
@@ -268,34 +342,6 @@ class JupyterMCPServer:
                 
             except Exception as e:
                 logger.error(f"Error in get_notebook_cells: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
-        
-        @self.mcp.tool()
-        async def suggest_code(description: str, context: str = "") -> List[TextContent]:
-            """Suggest code based on available instruments and context.
-            
-            Args:
-                description: Description of what you want to do
-                context: Additional context (e.g., current variables, measurement type)
-            """
-            try:
-                # Get current instruments for context
-                instruments = await self.tools.list_instruments()
-                variables = await self.tools.list_variables()
-                
-                suggestion = {
-                    "description": description,
-                    "context": context,
-                    "available_instruments": instruments,
-                    "available_variables": variables[:10],  # Limit for brevity
-                    "suggested_code": f"# Code suggestion for: {description}\\n# Available instruments: {[i['name'] for i in instruments]}\\n# Add your implementation here",
-                    "note": "This is a basic code suggestion. Implement your logic based on available instruments and variables."
-                }
-                
-                return [TextContent(type="text", text=json.dumps(suggestion, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error in suggest_code: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         # Unsafe mode tools

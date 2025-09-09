@@ -252,6 +252,11 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool()
+    async def get_editing_cell_output() -> list[TextContent]:
+        result = await proxy.call("get_editing_cell_output")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool()
     async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
         result = await proxy.call("get_notebook_cells", num_cells=num_cells, include_output=include_output)
         return [TextContent(type="text", text=str(result))]
@@ -264,11 +269,6 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
     @mcp.tool()
     async def update_editing_cell(content: str) -> list[TextContent]:
         result = await proxy.call("update_editing_cell", content=content)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool()
-    async def suggest_code(description: str, context: str = "") -> list[TextContent]:
-        result = await proxy.call("suggest_code", description=description, context=context)
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool()

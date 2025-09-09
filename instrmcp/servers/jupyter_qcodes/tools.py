@@ -695,53 +695,53 @@ class QCodesReadOnlyTools:
                 "warning": "UNSAFE: Attempted to execute code but failed"
             }
     
-    # Subscription tools
+    # # Subscription tools
     
-    async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 
-                                interval_s: float = 1.0) -> Dict[str, Any]:
-        """Subscribe to periodic parameter updates."""
-        # Validate parameters
-        self._get_parameter(instrument_name, parameter_name)
+    # async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 
+    #                             interval_s: float = 1.0) -> Dict[str, Any]:
+    #     """Subscribe to periodic parameter updates."""
+    #     # Validate parameters
+    #     self._get_parameter(instrument_name, parameter_name)
         
-        # Create a parameter reader function
-        async def get_param_func(inst_name, param_name):
-            return await self._read_parameter_live(inst_name, param_name)
+    #     # Create a parameter reader function
+    #     async def get_param_func(inst_name, param_name):
+    #         return await self._read_parameter_live(inst_name, param_name)
         
-        await self.poller.subscribe(
-            instrument_name, parameter_name, interval_s, get_param_func
-        )
+    #     await self.poller.subscribe(
+    #         instrument_name, parameter_name, interval_s, get_param_func
+    #     )
         
-        return {
-            "instrument": instrument_name,
-            "parameter": parameter_name,
-            "interval_s": interval_s,
-            "status": "subscribed"
-        }
+    #     return {
+    #         "instrument": instrument_name,
+    #         "parameter": parameter_name,
+    #         "interval_s": interval_s,
+    #         "status": "subscribed"
+    #     }
     
-    async def unsubscribe_parameter(self, instrument_name: str, parameter_name: str) -> Dict[str, Any]:
-        """Unsubscribe from parameter updates."""
-        await self.poller.unsubscribe(instrument_name, parameter_name)
+    # async def unsubscribe_parameter(self, instrument_name: str, parameter_name: str) -> Dict[str, Any]:
+    #     """Unsubscribe from parameter updates."""
+    #     await self.poller.unsubscribe(instrument_name, parameter_name)
         
-        return {
-            "instrument": instrument_name,
-            "parameter": parameter_name,
-            "status": "unsubscribed"
-        }
+    #     return {
+    #         "instrument": instrument_name,
+    #         "parameter": parameter_name,
+    #         "status": "unsubscribed"
+    #     }
     
-    async def list_subscriptions(self) -> Dict[str, Any]:
-        """List current parameter subscriptions."""
-        return self.poller.get_subscriptions()
+    # async def list_subscriptions(self) -> Dict[str, Any]:
+    #     """List current parameter subscriptions."""
+    #     return self.poller.get_subscriptions()
     
-    # System tools
+    # # System tools
     
-    async def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        return await self.cache.get_stats()
+    # async def get_cache_stats(self) -> Dict[str, Any]:
+    #     """Get cache statistics."""
+    #     return await self.cache.get_stats()
     
-    async def clear_cache(self) -> Dict[str, Any]:
-        """Clear the parameter cache."""
-        await self.cache.clear()
-        return {"status": "cache_cleared"}
+    # async def clear_cache(self) -> Dict[str, Any]:
+    #     """Clear the parameter cache."""
+    #     await self.cache.clear()
+    #     return {"status": "cache_cleared"}
     
     async def cleanup(self):
         """Clean up resources."""

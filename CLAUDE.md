@@ -1,0 +1,5 @@
+- Remember to update stdio_proxy.py whenever we change the tools for mcp server.
+- check requirements.txt when new python file is created.
+- don't forge t o update pyproject.toml
+- whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.tools.stdio_proxy
+- when removing features, update readme.md
