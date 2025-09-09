@@ -13,6 +13,7 @@ Professional MCP server suite for physics laboratory instrumentation control, en
 - **Safe mode**: Read-only mode with optional unsafe execution
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
+- The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI.
 
 ## Plan
 - Support RedPitaya. 
@@ -143,45 +144,7 @@ instruments:
     driver: qcodes.instrument_drivers.mock.MockDAC
     name: mock_dac_1
     enable: true
-    
-  keithley_2400:
-    driver: qcodes.instrument_drivers.Keithley.keithley_2400.Keithley2400
-    name: k2400
-    address: GPIB0::24::INSTR
-    enable: false  # Disabled for safety
-    
-  general_test_device:
-    driver: instrmcp.servers.general_test_instrument.GeneralTestInstrument
-    name: test_device
-    config_file: instrmcp://config/data/test_device.json
-    enable: true
 ```
-
-## 🤖 Usage with LLMs
-
-```
-User: "Show me the health status of all instruments"
-LLM → all_instr_health()
-
-User: "Load the mock DAC and check its status"  
-LLM → load_instrument("mock_dac")
-LLM → inst_health("mock_dac")
-
-User: "What code am I currently writing?"
-LLM → get_editing_cell()
-
-User: "Execute the current cell"
-LLM → execute_editing_cell()  # (requires unsafe mode)
-```
-
-## 🛡️ Safety Features
-
-- **🔒 Safe by Default**: Read-only mode prevents accidental instrument commands
-- **⚡ Unsafe Mode**: Explicit opt-in for code execution capabilities
-- **🎛️ Configuration Control**: Instruments disabled by default in YAML
-- **✅ Validation**: Parameter bounds checking and error handling  
-- **📦 Isolated Package**: Clean installation without conflicts
-- **🔍 Auto-Discovery**: Automatic path detection eliminates configuration errors
 
 ## 🔧 Troubleshooting
 
@@ -247,13 +210,6 @@ pip install instrmcp[dev]          # Testing, formatting, type checking
 pip install instrmcp[docs]         # Documentation building
 ```
 
-## 🚀 What's New in v0.3.0
-- **📦 Professional Package**: Standard `pip install instrmcp`
-- **🎯 CLI Interface**: New `instrmcp` command suite
-- **🔄 Auto-Loading**: Extensions load automatically
-- **📊 Built-in QCodes**: Full QCodes ecosystem included
-- **🏗️ Modern Architecture**: Clean package structure
-- **🛡️ Enhanced Safety**: Improved safe/unsafe mode handling
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
@@ -294,60 +250,6 @@ cp claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Suppor
 
 ### How Claude Desktop Integration Works
 
-**📡 Communication Flow:**
-```
-Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ (instrmcp.tools.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
-```
-
-### Available Tools & Capabilities
-
-#### 🔬 Instrument Control
-- `list_instruments()` - Show all available QCodes instruments
-- `instrument_info(name)` - Detailed instrument parameters and status
-- `get_parameter_value(instrument, parameter)` - Read instrument values
-- `station_snapshot()` - Complete laboratory setup overview
-
-#### 📊 Data & Monitoring  
-- `get_parameter_values(queries)` - Batch parameter readings
-- `subscribe_parameter(instrument, parameter)` - Real-time monitoring
-- `get_cache_stats()` - Performance monitoring
-
-#### 💻 Jupyter Integration (Full Mode Only)
-- `get_notebook_cells()` - Access recent notebook execution history
-- `get_editing_cell()` - Current cell content from JupyterLab
-- `update_editing_cell(content)` - Modify active cell programmatically
-- `execute_editing_cell()` - Run current cell (unsafe mode required)
-
-#### 🔧 Code Assistance
-- `suggest_code(description)` - AI-generated measurement scripts
-- `list_variables()` - Jupyter namespace inspection
-- `get_variable_info(name)` - Detailed variable analysis
-
-### Usage Examples
-
-**Natural Language Queries:**
-```
-User: "What instruments are connected to the station?"
-Claude: [Calls list_instruments() and provides formatted response]
-
-User: "Set gate voltage to 1.5V and measure the current"
-Claude: [Uses instrument tools to safely configure and measure]
-
-User: "Show me the last measurement I ran"
-Claude: [Retrieves notebook cells with get_notebook_cells()]
-
-User: "Monitor the temperature every 2 seconds"
-Claude: [Sets up parameter subscription]
-```
-
-**Advanced Automation:**
-- Multi-instrument coordination
-- Automated measurement sequences
-- Real-time data analysis and plotting
-- Experiment logging and documentation
-
-### Configuration Details
-
 **Manual Configuration** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 ```json
 {
@@ -365,8 +267,7 @@ Claude: [Sets up parameter subscription]
   }
 }
 ```
-
-**⚠️ Important**: Claude Desktop doesn't support environment variable expansion - use absolute paths only.
+ Claude Desktop doesn't support environment variable expansion - use absolute paths only.
 
 ### Troubleshooting
 
@@ -393,6 +294,58 @@ Claude: [Sets up parameter subscription]
 - Check generated config: `cat ~/Library/Application\ Support/Claude/claude_desktop_config.json`
 
 See [`claudedesktopsetting/README.md`](claudedesktopsetting/README.md) for detailed setup instructions.
+
+## Claude Code Integration
+
+Claude Code supports local MCP servers via STDIO. Use the provided launcher to connect instrMCP to Claude Code for AI-assisted laboratory instrumentation control directly from the command line.
+
+### Quick Setup
+
+**Add instrMCP as MCP Server:**
+```bash
+# With virtual environment Python (recommended)
+claude mcp add instrMCP --env instrMCP_PATH=$instrMCP_PATH \
+  --env PYTHONPATH=$instrMCP_PATH \
+  -- $instrMCP_PATH/venv/bin/python \
+  $instrMCP_PATH/claudedesktopsetting/claude_launcher.py
+
+# Or with system Python
+claude mcp add instrMCP --env instrMCP_PATH=$instrMCP_PATH \
+  --env PYTHONPATH=$instrMCP_PATH \
+  -- python $instrMCP_PATH/claudedesktopsetting/claude_launcher.py
+```
+
+**Verify Connection:**
+```bash
+# Check MCP servers
+/mcp
+
+# Restart if needed
+claude mcp restart instrMCP
+```
+
+### Communication Flow
+```
+Claude Code ←→ STDIO ←→ claude_launcher.py ←→ (instrmcp.tools.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
+```
+
+### Usage
+Once connected, you can interact with your instruments through natural language:
+```
+User: "List all available instruments"
+Claude: [Uses mcp__instrMCP__list_instruments()]
+
+User: "Check the health status of the mock DAC"
+Claude: [Uses mcp__instrMCP__instrument_info("mock_dac")]
+
+User: "Show me my recent Jupyter notebook cells"
+Claude: [Uses mcp__instrMCP__get_notebook_cells()]
+```
+
+### Prerequisites
+- Ensure `instrMCP_PATH` environment variable is set in your shell
+- Have a Jupyter server running with the instrMCP extension loaded
+- MCP server should be started in Jupyter with `%mcp_start`
 
 ## Codex CLI Integration
 
