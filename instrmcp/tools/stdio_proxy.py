@@ -216,25 +216,13 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
     mcp = FastMCP(server_name)
     proxy = HttpMCPProxy(base_url)
 
-    @mcp.tool()
-    async def list_instruments() -> list[TextContent]:
-        result = await proxy.call("list_instruments")
-        return [TextContent(type="text", text=str(result))]
 
     @mcp.tool()
     async def instrument_info(name: str, with_values: bool = False) -> list[TextContent]:
         result = await proxy.call("instrument_info", name=name, with_values=with_values)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def get_parameter_value(instrument: str, parameter: str, fresh: bool = False) -> list[TextContent]:
-        result = await proxy.call("get_parameter_value", instrument=instrument, parameter=parameter, fresh=fresh)
-        return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def station_snapshot() -> list[TextContent]:
-        result = await proxy.call("station_snapshot")
-        return [TextContent(type="text", text=str(result))]
 
     @mcp.tool()
     async def list_variables(type_filter: Optional[str] = None) -> list[TextContent]:

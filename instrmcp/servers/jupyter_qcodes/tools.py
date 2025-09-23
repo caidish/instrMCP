@@ -372,10 +372,10 @@ class QCodesReadOnlyTools:
         
         return enhanced_snapshot
     
-    async def get_parameter_value(self, instrument_name: str, parameter_name: str, 
-                                fresh: bool = False) -> Dict[str, Any]:
-        """Get parameter value with caching and rate limiting.
-        
+    async def _get_single_parameter_value(self, instrument_name: str, parameter_name: str,
+                                        fresh: bool = False) -> Dict[str, Any]:
+        """Internal method to get a single parameter value with caching and rate limiting.
+
         Args:
             instrument_name: Name of the instrument
             parameter_name: Parameter path (supports hierarchical paths like "ch01.voltage")
@@ -383,10 +383,10 @@ class QCodesReadOnlyTools:
         """
         key = self._make_cache_key(instrument_name, parameter_name)
         now = time.time()
-        
+
         # Check cache first
         cached = await self.cache.get(key)
-        
+
         if not fresh and cached:
             value, timestamp = cached
             return {
@@ -396,7 +396,7 @@ class QCodesReadOnlyTools:
                 "source": "cache",
                 "stale": False
             }
-        
+
         # Check rate limiting
         if cached and not await self.rate_limiter.can_access(instrument_name):
             value, timestamp = cached
@@ -408,18 +408,18 @@ class QCodesReadOnlyTools:
                 "stale": True,
                 "message": f"Rate limited (min interval: {self.min_interval_s}s)"
             }
-        
+
         # Read fresh value from hardware
         try:
             async with self.rate_limiter.get_instrument_lock(instrument_name):
                 await self.rate_limiter.wait_if_needed(instrument_name)
-                
+
                 value = await self._read_parameter_live(instrument_name, parameter_name)
                 read_time = time.time()
-                
+
                 await self.cache.set(key, value, read_time)
                 await self.rate_limiter.record_access(instrument_name)
-                
+
                 return {
                     "value": value,
                     "timestamp": read_time,
@@ -427,10 +427,10 @@ class QCodesReadOnlyTools:
                     "source": "live",
                     "stale": False
                 }
-        
+
         except Exception as e:
             logger.error(f"Error reading {instrument_name}.{parameter_name}: {e}")
-            
+
             # Fall back to cached value if available
             if cached:
                 value, timestamp = cached
@@ -444,28 +444,54 @@ class QCodesReadOnlyTools:
                 }
             else:
                 raise
-    
-    async def get_parameter_values(self, queries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Get multiple parameter values in batch."""
+
+    async def get_parameter_values(self, queries: Union[List[Dict[str, Any]], Dict[str, Any]]) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+        """Get parameter values - supports both single parameter and batch queries.
+
+        Args:
+            queries: Single query dict or list of query dicts
+                    Single: {"instrument": "name", "parameter": "param", "fresh": false}
+                    Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
+
+        Returns:
+            Single result dict or list of result dicts
+        """
+        # Handle single query case
+        if isinstance(queries, dict):
+            try:
+                result = await self._get_single_parameter_value(
+                    queries["instrument"],
+                    queries["parameter"],
+                    queries.get("fresh", False)
+                )
+                result["query"] = queries
+                return result
+            except Exception as e:
+                return {
+                    "query": queries,
+                    "error": str(e),
+                    "source": "error"
+                }
+
+        # Handle batch query case
         results = []
-        
         for query in queries:
             try:
-                result = await self.get_parameter_value(
+                result = await self._get_single_parameter_value(
                     query["instrument"],
                     query["parameter"],
                     query.get("fresh", False)
                 )
                 result["query"] = query
                 results.append(result)
-                
+
             except Exception as e:
                 results.append({
                     "query": query,
                     "error": str(e),
                     "source": "error"
                 })
-        
+
         return results
     
     async def station_snapshot(self) -> Dict[str, Any]:

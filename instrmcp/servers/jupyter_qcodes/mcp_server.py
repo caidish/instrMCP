@@ -12,7 +12,7 @@ import secrets
 from typing import List, Dict, Any, Optional
 
 from fastmcp import FastMCP
-from mcp.types import TextContent
+from mcp.types import TextContent, Resource, TextResourceContents
 
 from .tools import QCodesReadOnlyTools
 
@@ -39,25 +39,101 @@ class JupyterMCPServer:
         # Create FastMCP server
         server_name = f"Jupyter QCoDeS MCP Server ({'Safe' if safe_mode else 'Unsafe'} Mode)"
         self.mcp = FastMCP(server_name)
+        self._register_resources()
         self._register_tools()
         
         mode_status = "safe" if safe_mode else "unsafe"
         logger.info(f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode")
-    
+
+    def _register_resources(self):
+        """Register MCP resources."""
+
+        @self.mcp.resource("resource://available_instruments")
+        async def available_instruments() -> Resource:
+            """Resource providing list of available QCodes instruments."""
+            try:
+                # Get list of instruments
+                instruments = await self.tools.list_instruments()
+
+                # Convert to JSON string
+                content = json.dumps(instruments, indent=2, default=str)
+
+                return Resource(
+                    uri="resource://available_instruments",
+                    name="Available Instruments",
+                    description="List of QCodes instruments available in the namespace with hierarchical parameter structure",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://available_instruments",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            except Exception as e:
+                logger.error(f"Error generating available_instruments resource: {e}")
+                error_content = json.dumps({
+                    "error": str(e),
+                    "status": "error"
+                }, indent=2)
+
+                return Resource(
+                    uri="resource://available_instruments",
+                    name="Available Instruments (Error)",
+                    description="Error retrieving available instruments",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://available_instruments",
+                        mimeType="application/json",
+                        text=error_content
+                    )]
+                )
+
+        @self.mcp.resource("resource://station_state")
+        async def station_state() -> Resource:
+            """Resource providing current QCodes station snapshot."""
+            try:
+                # Get station snapshot
+                snapshot = await self.tools.station_snapshot()
+
+                # Convert to JSON string
+                content = json.dumps(snapshot, indent=2, default=str)
+
+                return Resource(
+                    uri="resource://station_state",
+                    name="Station State",
+                    description="Current QCodes station snapshot without parameter values",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://station_state",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            except Exception as e:
+                logger.error(f"Error generating station_state resource: {e}")
+                error_content = json.dumps({
+                    "error": str(e),
+                    "status": "error"
+                }, indent=2)
+
+                return Resource(
+                    uri="resource://station_state",
+                    name="Station State (Error)",
+                    description="Error retrieving station state",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://station_state",
+                        mimeType="application/json",
+                        text=error_content
+                    )]
+                )
+
     def _register_tools(self):
         """Register all MCP tools."""
         
         # QCoDeS instrument tools
-        
-        @self.mcp.tool()
-        async def list_instruments() -> List[TextContent]:
-            """List all QCoDeS instruments in the Jupyter namespace."""
-            try:
-                instruments = await self.tools.list_instruments()
-                return [TextContent(type="text", text=json.dumps(instruments, indent=2))]
-            except Exception as e:
-                logger.error(f"Error in list_instruments: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()
         async def instrument_info(name: str, with_values: bool = False) -> List[TextContent]:
@@ -75,45 +151,20 @@ class JupyterMCPServer:
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         @self.mcp.tool()
-        async def get_parameter_value(instrument: str, parameter: str, fresh: bool = False) -> List[TextContent]:
-            """Get a parameter value with caching and rate limiting.
-            
-            Args:
-                instrument: Instrument name
-                parameter: Parameter name or hierarchical path (e.g., "voltage", "ch01.voltage", "submodule.param")
-                fresh: Force fresh read from hardware (rate limited)
-            """
-            try:
-                result = await self.tools.get_parameter_value(instrument, parameter, fresh)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-            except Exception as e:
-                logger.error(f"Error in get_parameter_value: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
-        
-        @self.mcp.tool()
         async def get_parameter_values(queries: str) -> List[TextContent]:
-            """Get multiple parameter values in batch.
-            
+            """Get parameter values - supports both single parameter and batch queries.
+
             Args:
-                queries: JSON string containing list of queries
-                         Format: [{"instrument": "name", "parameter": "param", "fresh": false}, ...]
+                queries: JSON string containing single query or list of queries
+                         Single: {"instrument": "name", "parameter": "param", "fresh": false}
+                         Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
             """
             try:
-                queries_list = json.loads(queries)
-                results = await self.tools.get_parameter_values(queries_list)
+                queries_data = json.loads(queries)
+                results = await self.tools.get_parameter_values(queries_data)
                 return [TextContent(type="text", text=json.dumps(results, indent=2, default=str))]
             except Exception as e:
                 logger.error(f"Error in get_parameter_values: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
-        
-        @self.mcp.tool()
-        async def station_snapshot() -> List[TextContent]:
-            """Get full QCoDeS station snapshot without parameter values."""
-            try:
-                snapshot = await self.tools.station_snapshot()
-                return [TextContent(type="text", text=json.dumps(snapshot, indent=2, default=str))]
-            except Exception as e:
-                logger.error(f"Error in station_snapshot: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
         
         # Namespace and variable tools

@@ -127,11 +127,8 @@ instrmcp/
 - **Professional Drivers**: Full QCodes driver ecosystem support
 
 ### Available MCP Tools
-- `list_instruments()` - List all available instruments
 - `instrument_info(name, with_values)` - Get instrument details and parameter values
-- `get_parameter_value(instrument, parameter, fresh)` - Read specific parameter value
-- `get_parameter_values(queries)` - Batch parameter reads
-- `station_snapshot()` - Complete QCodes station snapshot
+- `get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
 - `list_variables(type_filter)` - List notebook variables by type
 - `get_variable_info(name)` - Detailed variable information
 - `get_editing_cell_output()` - Get output of the most recently executed cell (detects running cells)
@@ -142,7 +139,8 @@ instrmcp/
 - `server_status()` - Check server mode and status
 
 ### Resources
-- `available_instr` - JSON list of configured instruments
+- `available_instruments` - JSON list of available QCodes instruments with hierarchical parameter structure
+- `station_state` - Current QCodes station snapshot without parameter values
 - `notebook_cells` - All notebook cell contents
 
 ## 📝 Configuration Example
