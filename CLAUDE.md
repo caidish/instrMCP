@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+**Environment Setup:**
+```bash
+# Always use conda environment instrMCPdev for testing
+conda activate instrMCPdev
+```
+
 **Package Management:**
 ```bash
 # Install for development
@@ -119,6 +125,7 @@ This is controlled via the `safe_mode` parameter in server initialization and th
 
 ### Testing
 
+- **Always use conda environment instrMCPdev for testing**
 - Use `pytest` for running tests
 - Test files are in `qdevbench/tests/`
 - Mock instruments available for testing without hardware
@@ -144,6 +151,7 @@ The package includes a JupyterLab extension for active cell bridging:
 - Rate limiting protects instruments from command flooding
 - The system supports hierarchical parameter access (e.g., `ch01.voltage`)
 - Jupyter cell tracking happens via IPython event hooks for real-time access
+- **Always use conda environment instrMCPdev for testing**
 - Remember to update stdio_proxy.py whenever we change the tools for mcp server.
 - check requirements.txt when new python file is created.
 - don't forget to update pyproject.toml
