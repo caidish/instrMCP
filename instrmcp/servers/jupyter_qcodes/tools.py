@@ -880,6 +880,85 @@ class QCodesReadOnlyTools:
     #     await self.cache.clear()
     #     return {"status": "cache_cleared"}
     
+    async def get_measureit_status(self) -> Dict[str, Any]:
+        """Check if any MeasureIt sweep is currently running.
+
+        Returns information about active MeasureIt sweeps in the notebook namespace,
+        including sweep type, status, and basic configuration if available.
+
+        Returns:
+            Dict containing:
+                - running: bool - whether any sweep is active
+                - sweeps: List of active sweep information
+                - error: str (if any error occurred)
+        """
+        try:
+            import inspect
+
+            result = {
+                "running": False,
+                "sweeps": [],
+                "checked_variables": []
+            }
+
+            # Look for MeasureIt sweep objects in the namespace
+            for var_name, var_value in self.namespace.items():
+                # Skip private/internal variables
+                if var_name.startswith('_'):
+                    continue
+
+                # Check if this is a MeasureIt sweep object
+                type_name = type(var_value).__name__
+                module_name = type(var_value).__module__ if hasattr(type(var_value), '__module__') else ""
+
+                # Look for MeasureIt sweep types
+                if 'measureit' in module_name.lower() or any(sweep_type in type_name for sweep_type in ['Sweep0D', 'Sweep1D', 'Sweep2D', 'SimulSweep', 'SweepQueue']):
+                    result["checked_variables"].append(var_name)
+
+                    sweep_info = {
+                        "variable_name": var_name,
+                        "type": type_name,
+                        "module": module_name
+                    }
+
+                    # Try to get sweep status/configuration
+                    try:
+                        # Check for common MeasureIt attributes
+                        if hasattr(var_value, 'is_running'):
+                            sweep_info["is_running"] = bool(var_value.is_running)
+                            if var_value.is_running:
+                                result["running"] = True
+
+                        if hasattr(var_value, 'running'):
+                            sweep_info["running"] = bool(var_value.running)
+                            if var_value.running:
+                                result["running"] = True
+
+                        if hasattr(var_value, 'get_status'):
+                            sweep_info["status"] = str(var_value.get_status())
+
+                        # Get sweep configuration if available
+                        if hasattr(var_value, 'num_points'):
+                            sweep_info["num_points"] = var_value.num_points
+
+                        if hasattr(var_value, 'delay'):
+                            sweep_info["delay"] = var_value.delay
+
+                    except Exception as attr_error:
+                        sweep_info["attribute_error"] = str(attr_error)
+
+                    result["sweeps"].append(sweep_info)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error checking MeasureIt status: {e}")
+            return {
+                "running": False,
+                "sweeps": [],
+                "error": str(e)
+            }
+
     async def cleanup(self):
         """Clean up resources."""
         await self.poller.stop_all()
