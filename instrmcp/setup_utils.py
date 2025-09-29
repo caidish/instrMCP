@@ -11,13 +11,44 @@ from jupyter_core.paths import jupyter_config_dir
 
 
 def setup_jupyter_extension():
-    """Build JupyterLab to include the extension."""
+    """Link and build JupyterLab extension."""
     try:
-        print("🔧 Extension is automatically installed via pip...")
-        print("🔨 Building JupyterLab with extension...")
+        # Get the path to the extension
+        package_dir = Path(__file__).parent
+        extension_path = package_dir / "extensions" / "jupyterlab" / "mcp_active_cell_bridge" / "labextension"
 
-        # Build JupyterLab to include the extension
-        # The extension is already installed via pip install, just need to rebuild
+        if not extension_path.exists():
+            print(f"❌ Extension not found at: {extension_path}")
+            return False
+
+        print("🔧 Linking JupyterLab extension...")
+
+        # Create symlink in labextensions directory
+        import site
+        import sys
+
+        # Try to find the jupyter labextensions directory
+        if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+            # We're in a virtual environment
+            lab_ext_dir = Path(sys.prefix) / "share" / "jupyter" / "labextensions"
+        else:
+            # Use site-packages location
+            site_packages = Path(site.getsitepackages()[0])
+            lab_ext_dir = site_packages.parent.parent.parent / "share" / "jupyter" / "labextensions"
+
+        lab_ext_dir.mkdir(parents=True, exist_ok=True)
+        extension_link = lab_ext_dir / "mcp-active-cell-bridge"
+
+        # Remove existing link if it exists
+        if extension_link.exists() or extension_link.is_symlink():
+            extension_link.unlink()
+
+        # Create new symlink
+        extension_link.symlink_to(extension_path)
+        print(f"✅ Extension linked to: {extension_link}")
+
+        # Build JupyterLab
+        print("🔨 Building JupyterLab with extension...")
         build_result = subprocess.run([
             "jupyter", "lab", "build", "--minimize=False"
         ], capture_output=True, text=True)
@@ -30,7 +61,9 @@ def setup_jupyter_extension():
             return False
 
     except Exception as e:
-        print(f"❌ Error building JupyterLab: {e}")
+        print(f"❌ Error setting up extension: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 

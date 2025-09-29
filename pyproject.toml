@@ -120,8 +120,9 @@ exclude = ["tests*", "docs*", "servers*", "tools*"]
 
 [tool.setuptools.package-data]
 "instrmcp" = ["**/*.yaml", "**/*.yml", "**/*.json", "**/*.ini", "**/*.md"]
-"instrmcp.config" = ["data/**/*", "templates/**/*"] 
-"instrmcp.extensions.jupyterlab.mcp_active_cell_bridge" = ["labextension/**/*", "install.json"]
+"instrmcp.config" = ["data/**/*", "templates/**/*"]
+"instrmcp.extensions.jupyterlab" = ["install.json"]
+"instrmcp.extensions.jupyterlab.mcp_active_cell_bridge" = ["labextension/**/*"]
 
 [tool.black]
 line-length = 88

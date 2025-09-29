@@ -217,6 +217,7 @@ instruments:
 - Restart JupyterLab after installation
 - Check extensions: `jupyter labextension list`
 - Should show: `mcp-active-cell-bridge v0.1.0 enabled OK`
+- If issues persist, clean and rebuild: `jupyter lab clean --all && jupyter lab build`
 
 ### Magic Commands Not Working
 
@@ -237,6 +238,41 @@ instruments:
 - Check available instruments: Use MCP tool `available_instr`
 - Verify YAML config in: `instrmcp/config/data/default_station.yaml`
 - Enable instruments: Set `enable: true` in configuration
+
+### Clean Installation (Fresh Start)
+
+If you need to completely uninstall and reinstall InstrMCP (e.g., to test as a new user):
+
+```bash
+# 1. Uninstall instrmcp
+pip uninstall instrmcp -y
+
+# 2. Clean JupyterLab build cache
+jupyter lab clean --all
+
+# 3. Verify extension is removed
+jupyter labextension list | grep mcp
+
+# 4. (Optional) Create fresh conda environment
+conda deactivate
+conda env remove -n instrMCPdev
+conda create -n instrMCPdev python=3.11 -y
+conda activate instrMCPdev
+
+# 5. Install JupyterLab and dependencies
+pip install jupyterlab ipython qcodes
+
+# 6. Reinstall instrmcp
+cd /path/to/instrMCP
+pip install -e .
+
+# 7. Run setup
+instrmcp-setup
+
+# 8. Verify installation
+jupyter labextension list | grep mcp-active-cell-bridge
+# Should show: mcp-active-cell-bridge v0.1.0 enabled OK
+```
 
 ## 👨‍💻 Development
 
