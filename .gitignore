@@ -69,6 +69,8 @@ Thumbs.db
 **/labextension/build/
 **/labextension/.tsbuildinfo
 **/labextension/tsconfig.tsbuildinfo
+**/extensions/jupyterlab/static/static/
+**/extensions/jupyterlab/tsconfig.tsbuildinfo
 
 # KEEP pre-built static files for distribution
 # !**/labextension/static/

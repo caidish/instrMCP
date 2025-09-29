@@ -22,8 +22,9 @@ _ACTIVE_COMMS = set()
 
 def _on_comm_open(comm, open_msg):
     """Handle new comm connection from frontend."""
-    logger.debug(f"New comm opened: {comm.comm_id}")
+    logger.info(f"🔌 NEW COMM OPENED: {comm.comm_id}")
     _ACTIVE_COMMS.add(comm)
+    logger.info(f"📊 Active comms count: {len(_ACTIVE_COMMS)}")
 
     def _on_msg(msg):
         """Handle incoming messages from frontend."""
@@ -54,6 +55,18 @@ def _on_comm_open(comm, open_msg):
         elif msg_type == "pong":
             # Response to our ping request
             logger.debug("Received pong from frontend")
+
+        elif msg_type in ["update_response", "execute_response", "add_cell_response", "delete_cell_response", "apply_patch_response"]:
+            # Response from frontend for our requests
+            request_id = data.get("request_id")
+            success = data.get("success", False)
+            message = data.get("message", "")
+            logger.info(f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}")
+            # Note: For now we just log the response, but we could store it for the waiting functions
+
+        else:
+            # Unknown message type - log for debugging
+            logger.warning(f"❓ UNKNOWN MESSAGE TYPE: {msg_type}, data: {data}")
 
     def _on_close(msg):
         """Handle comm close."""
@@ -221,24 +234,24 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
 def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
     """
     Execute the currently active cell in JupyterLab frontend.
-    
+
     Args:
         timeout_s: How long to wait for response from frontend (default 5.0s)
-        
+
     Returns:
         Dictionary with execution status and response details
     """
     import uuid
-    
+
     if not _ACTIVE_COMMS:
         return {
             "success": False,
             "error": "No active comm connections to frontend",
             "active_comms": 0
         }
-    
+
     request_id = str(uuid.uuid4())
-    
+
     # Send execution request to all active comms
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
@@ -251,25 +264,25 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
             logger.debug(f"Sent execute_cell request to comm {comm.comm_id}")
         except Exception as e:
             logger.debug(f"Failed to send execution request to comm {comm.comm_id}: {e}")
-    
+
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send execution request to any frontend",
             "active_comms": len(_ACTIVE_COMMS)
         }
-    
+
     # Wait for execution to complete
     start_time = time.time()
     while time.time() - start_time < timeout_s:
         time.sleep(0.1)  # 100ms polling
-        
+
         # Check if execution is complete
         # Note: responses are handled in the comm message handler
         # For now, we'll wait for the timeout and return success
         # A more sophisticated implementation could track execution responses
         pass
-    
+
     return {
         "success": True,
         "message": f"Execution request sent to {successful_sends} frontend(s)",
@@ -277,4 +290,247 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
         "warning": "UNSAFE: Code execution was requested in active cell"
+    }
+
+
+def add_new_cell(cell_type: str = "code", position: str = "below", content: str = "", timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Add a new cell relative to the currently active cell in JupyterLab frontend.
+
+    Args:
+        cell_type: Type of cell to create ("code", "markdown", "raw")
+        position: Position relative to active cell ("above", "below")
+        content: Initial content for the new cell
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with creation status and response details
+    """
+    import uuid
+
+    logger.info(f"🚀 ADD_NEW_CELL called: type={cell_type}, position={position}, content_len={len(content)}")
+    logger.info(f"📊 Active comms available: {len(_ACTIVE_COMMS)}")
+
+    if not _ACTIVE_COMMS:
+        logger.error("❌ NO ACTIVE COMMS - cannot send add_cell message")
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+
+    # Add small delay to ensure comms are fully ready
+    import time
+    time.sleep(0.1)
+    logger.info("⏱️ Added small delay for comm readiness")
+
+    # Validate parameters
+    valid_types = {"code", "markdown", "raw"}
+    valid_positions = {"above", "below"}
+
+    if cell_type not in valid_types:
+        return {
+            "success": False,
+            "error": f"Invalid cell_type '{cell_type}'. Must be one of: {', '.join(valid_types)}"
+        }
+
+    if position not in valid_positions:
+        return {
+            "success": False,
+            "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}"
+        }
+
+    request_id = str(uuid.uuid4())
+
+    # Send add cell request to all active comms
+    successful_sends = 0
+    logger.info(f"📤 SENDING add_cell message to {len(_ACTIVE_COMMS)} comm(s)")
+
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            # Check if comm is still valid
+            if hasattr(comm, 'comm_id') and hasattr(comm, 'send'):
+                message = {
+                    "type": "add_cell",
+                    "cell_type": cell_type,
+                    "position": position,
+                    "content": content,
+                    "request_id": request_id
+                }
+                logger.info(f"📤 Sending to comm {comm.comm_id}: {message}")
+                comm.send(message)
+                successful_sends += 1
+                logger.info(f"✅ Successfully sent add_cell request to comm {comm.comm_id}")
+            else:
+                logger.warning(f"⚠️ Comm appears invalid, removing from active list")
+                _ACTIVE_COMMS.discard(comm)
+        except Exception as e:
+            logger.error(f"❌ Failed to send add cell request to comm {comm.comm_id}: {e}")
+            # Remove failed comm from active list
+            _ACTIVE_COMMS.discard(comm)
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send add cell request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+
+    # Wait for response
+    start_time = time.time()
+    while time.time() - start_time < timeout_s:
+        time.sleep(0.05)  # 50ms polling
+
+        # Check if cell was added
+        # Note: responses are handled in the comm message handler
+        # For now, we'll wait for the timeout and return success
+        pass
+
+    return {
+        "success": True,
+        "message": f"Add cell request sent to {successful_sends} frontend(s)",
+        "cell_type": cell_type,
+        "position": position,
+        "content_length": len(content),
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
+        "warning": "UNSAFE: New cell was added to notebook"
+    }
+
+
+def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Delete the currently active cell in JupyterLab frontend.
+
+    Args:
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with deletion status and response details
+    """
+    import uuid
+
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+
+    request_id = str(uuid.uuid4())
+
+    # Send delete cell request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send({
+                "type": "delete_cell",
+                "request_id": request_id
+            })
+            successful_sends += 1
+            logger.debug(f"Sent delete_cell request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(f"Failed to send delete cell request to comm {comm.comm_id}: {e}")
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send delete cell request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+
+    # Wait for response
+    start_time = time.time()
+    while time.time() - start_time < timeout_s:
+        time.sleep(0.05)  # 50ms polling
+
+        # Check if cell was deleted
+        # Note: responses are handled in the comm message handler
+        # For now, we'll wait for the timeout and return success
+        pass
+
+    return {
+        "success": True,
+        "message": f"Delete cell request sent to {successful_sends} frontend(s)",
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
+        "warning": "UNSAFE: Cell was deleted from notebook"
+    }
+
+
+def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Apply a simple text replacement patch to the currently active cell.
+
+    This function replaces the first occurrence of old_text with new_text
+    in the active cell content.
+
+    Args:
+        old_text: Text to find and replace
+        new_text: Text to replace with
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with patch status and response details
+    """
+    import uuid
+
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+
+    if not old_text:
+        return {
+            "success": False,
+            "error": "old_text parameter cannot be empty"
+        }
+
+    request_id = str(uuid.uuid4())
+
+    # Send patch request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send({
+                "type": "apply_patch",
+                "old_text": old_text,
+                "new_text": new_text,
+                "request_id": request_id
+            })
+            successful_sends += 1
+            logger.debug(f"Sent apply_patch request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(f"Failed to send patch request to comm {comm.comm_id}: {e}")
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send patch request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+
+    # Wait for response
+    start_time = time.time()
+    while time.time() - start_time < timeout_s:
+        time.sleep(0.05)  # 50ms polling
+
+        # Check if patch was applied
+        # Note: responses are handled in the comm message handler
+        # For now, we'll wait for the timeout and return success
+        pass
+
+    return {
+        "success": True,
+        "message": f"Patch request sent to {successful_sends} frontend(s)",
+        "old_text_length": len(old_text),
+        "new_text_length": len(new_text),
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
+        "warning": "UNSAFE: Cell content was modified via patch"
     }

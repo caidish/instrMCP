@@ -265,6 +265,25 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool()
+    async def add_new_cell(
+        cell_type: str = "code",
+        position: str = "below",
+        content: str = ""
+    ) -> list[TextContent]:
+        result = await proxy.call("add_new_cell", cell_type=cell_type, position=position, content=content)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool()
+    async def delete_editing_cell() -> list[TextContent]:
+        result = await proxy.call("delete_editing_cell")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool()
+    async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
+        result = await proxy.call("apply_patch", old_text=old_text, new_text=new_text)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool()
     async def server_status() -> list[TextContent]:
         result = await proxy.call("server_status")
         info = {"mode": "proxy", "proxy_target": base_url, "jupyter_server_status": result}

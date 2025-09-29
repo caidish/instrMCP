@@ -720,7 +720,118 @@ class QCodesReadOnlyTools:
                 "source": "error",
                 "warning": "UNSAFE: Attempted to execute code but failed"
             }
-    
+
+    async def add_new_cell(self, cell_type: str = "code", position: str = "below", content: str = "") -> Dict[str, Any]:
+        """Add a new cell in the notebook.
+
+        UNSAFE: This tool adds new cells to the notebook. The cell will be created
+        relative to the currently active cell.
+
+        Args:
+            cell_type: Type of cell to create ("code", "markdown", "raw")
+            position: Position relative to active cell ("above", "below")
+            content: Initial content for the new cell
+
+        Returns:
+            Dictionary with creation status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send add cell request to frontend
+            result = active_cell_bridge.add_new_cell(cell_type, position, content)
+
+            # Add metadata
+            result.update({
+                "source": "add_new_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: New cell was added to the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in add_new_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to add cell but failed"
+            }
+
+    async def delete_editing_cell(self) -> Dict[str, Any]:
+        """Delete the currently editing cell.
+
+        UNSAFE: This tool deletes the currently active cell from the notebook.
+        Use with caution as this action cannot be undone easily.
+
+        Returns:
+            Dictionary with deletion status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send delete cell request to frontend
+            result = active_cell_bridge.delete_editing_cell()
+
+            # Add metadata
+            result.update({
+                "source": "delete_editing_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cell was deleted from the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in delete_editing_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to delete cell but failed"
+            }
+
+    async def apply_patch(self, old_text: str, new_text: str) -> Dict[str, Any]:
+        """Apply a patch to the current cell content.
+
+        UNSAFE: This tool modifies the content of the currently active cell by
+        replacing the first occurrence of old_text with new_text.
+
+        Args:
+            old_text: Text to find and replace
+            new_text: Text to replace with
+
+        Returns:
+            Dictionary with patch status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send patch request to frontend
+            result = active_cell_bridge.apply_patch(old_text, new_text)
+
+            # Add metadata
+            result.update({
+                "source": "apply_patch",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cell content was modified via patch"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in apply_patch: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to apply patch but failed"
+            }
+
     # # Subscription tools
     
     # async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 

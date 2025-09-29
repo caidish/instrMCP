@@ -94,6 +94,9 @@ The system uses a proxy pattern where:
 - `get_editing_cell(fresh_ms)` - Current JupyterLab cell content
 - `update_editing_cell(content)` - Update current cell content
 - `execute_editing_cell()` - Execute current cell (unsafe mode only)
+- `add_new_cell(cell_type, position, content)` - Add new cell relative to active cell (unsafe mode only)
+- `delete_editing_cell()` - Delete the currently active cell (unsafe mode only)
+- `apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (unsafe mode only)
 - `server_status()` - Check server mode and status
 
 **Database Integration Tools (Optional - requires `%mcp_option database`):**
@@ -132,7 +135,18 @@ The server supports optional features that can be enabled/disabled via magic com
 
 **Safe/Unsafe Mode:**
 - `%mcp_safe` - Switch to safe mode (read-only access)
-- `%mcp_unsafe` - Switch to unsafe mode (allows code execution via `execute_editing_cell`)
+- `%mcp_unsafe` - Switch to unsafe mode (allows cell manipulation and code execution)
+
+**Unsafe Mode Tools (Only available when `%mcp_unsafe` is active):**
+- `execute_editing_cell()` - Execute code in the active cell
+- `add_new_cell(cell_type, position, content)` - Add new cells to the notebook
+  - `cell_type`: "code", "markdown", or "raw" (default: "code")
+  - `position`: "above" or "below" active cell (default: "below")
+  - `content`: Initial cell content (default: empty)
+- `delete_editing_cell()` - Delete the active cell (clears content if last cell)
+- `apply_patch(old_text, new_text)` - Replace text in active cell
+  - More efficient than `update_editing_cell` for small changes
+  - Replaces first occurrence of `old_text` with `new_text`
 
 **Optional Features:**
 - `%mcp_option measureit` - Enable MeasureIt template resources
@@ -179,8 +193,17 @@ This is controlled via the `safe_mode` parameter in server initialization and th
 
 The package includes a JupyterLab extension for active cell bridging:
 - Located in `instrmcp/extensions/jupyterlab/`
+- **Build workflow:** `cd instrmcp/extensions/jupyterlab && jlpm run build`
+  - The build automatically copies files to `mcp_active_cell_bridge/labextension/`
+  - This ensures `pip install -e .` will find the latest built files
 - Automatically installed with the main package
 - Enables real-time cell content access for MCP tools
+
+**Important for development:** After modifying TypeScript files, you must:
+1. Run `jlpm run build` in the extension directory
+2. The postbuild script automatically copies files to the correct location
+3. Reinstall: `pip install -e . --force-reinstall --no-deps`
+4. Restart JupyterLab completely
 
 ### Configuration
 

@@ -102,11 +102,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Handle cell execution requests from kernel
     const handleCellExecution = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
-      
+
       try {
         const panel = notebooks.currentWidget;
         const cell = notebooks.activeCell;
-        
+
         if (!panel || !cell) {
           // Send error response
           comm.send({
@@ -117,10 +117,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
           return;
         }
-        
+
         // Execute the active cell using NotebookActions
         await NotebookActions.run(panel.content, panel.sessionContext);
-        
+
         // Send success response
         comm.send({
           type: 'execute_response',
@@ -129,18 +129,267 @@ const plugin: JupyterFrontEndPlugin<void> = {
           cell_id: cell.model.id,
           message: 'Cell executed successfully'
         });
-        
+
         console.log('MCP Active Cell Bridge: Executed active cell');
-        
+
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to execute cell:', error);
-        
+
         // Send error response
         comm.send({
           type: 'execute_response',
           request_id: requestId,
           success: false,
           message: `Failed to execute cell: ${error}`
+        });
+      }
+    };
+
+    // Handle add cell requests from kernel
+    const handleAddCell = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const cellType = data.cell_type || 'code';
+      const position = data.position || 'below';
+      const content = data.content || '';
+
+      try {
+        const panel = notebooks.currentWidget;
+
+        if (!panel) {
+          // Send error response
+          comm.send({
+            type: 'add_cell_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+
+        // Validate cell type
+        const validTypes = ['code', 'markdown', 'raw'];
+        if (!validTypes.includes(cellType)) {
+          comm.send({
+            type: 'add_cell_response',
+            request_id: requestId,
+            success: false,
+            message: `Invalid cell_type '${cellType}'. Must be one of: ${validTypes.join(', ')}`
+          });
+          return;
+        }
+
+        // Validate position
+        const validPositions = ['above', 'below'];
+        if (!validPositions.includes(position)) {
+          comm.send({
+            type: 'add_cell_response',
+            request_id: requestId,
+            success: false,
+            message: `Invalid position '${position}'. Must be one of: ${validPositions.join(', ')}`
+          });
+          return;
+        }
+
+        // Create new cell
+        if (position === 'above') {
+          await NotebookActions.insertAbove(panel.content);
+        } else {
+          await NotebookActions.insertBelow(panel.content);
+        }
+
+        // Get the newly created cell
+        const newCell = notebooks.activeCell;
+        if (newCell) {
+          // Set cell type if needed
+          if (newCell.model.type !== cellType) {
+            await NotebookActions.changeCellType(panel.content, cellType as any);
+          }
+
+          // Set content if provided
+          if (content) {
+            newCell.model.sharedModel.setSource(content);
+          }
+        }
+
+        // Send success response
+        comm.send({
+          type: 'add_cell_response',
+          request_id: requestId,
+          success: true,
+          cell_type: cellType,
+          position: position,
+          content_length: content.length,
+          cell_id: newCell?.model.id,
+          message: 'Cell added successfully'
+        });
+
+        console.log(`MCP Active Cell Bridge: Added ${cellType} cell ${position} with ${content.length} chars`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to add cell:', error);
+
+        // Send error response
+        comm.send({
+          type: 'add_cell_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to add cell: ${error}`
+        });
+      }
+    };
+
+    // Handle delete cell requests from kernel
+    const handleDeleteCell = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+
+      try {
+        const panel = notebooks.currentWidget;
+        const cell = notebooks.activeCell;
+
+        if (!panel || !cell) {
+          // Send error response
+          comm.send({
+            type: 'delete_cell_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available for deletion'
+          });
+          return;
+        }
+
+        const cellId = cell.model.id;
+        const totalCells = panel.content.model?.cells.length || 0;
+
+        // Check if this is the only cell
+        if (totalCells <= 1) {
+          // Clear the content instead of deleting
+          cell.model.sharedModel.setSource('');
+
+          // Send success response
+          comm.send({
+            type: 'delete_cell_response',
+            request_id: requestId,
+            success: true,
+            cell_id: cellId,
+            action: 'cleared',
+            message: 'Last cell content cleared (cell preserved)'
+          });
+
+          console.log('MCP Active Cell Bridge: Cleared last cell content');
+        } else {
+          // Delete the cell
+          await NotebookActions.deleteCells(panel.content);
+
+          // Send success response
+          comm.send({
+            type: 'delete_cell_response',
+            request_id: requestId,
+            success: true,
+            cell_id: cellId,
+            action: 'deleted',
+            message: 'Cell deleted successfully'
+          });
+
+          console.log('MCP Active Cell Bridge: Deleted cell');
+        }
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to delete cell:', error);
+
+        // Send error response
+        comm.send({
+          type: 'delete_cell_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to delete cell: ${error}`
+        });
+      }
+    };
+
+    // Handle apply patch requests from kernel
+    const handleApplyPatch = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const oldText = data.old_text || '';
+      const newText = data.new_text || '';
+
+      try {
+        const panel = notebooks.currentWidget;
+        const cell = notebooks.activeCell;
+
+        if (!panel || !cell) {
+          // Send error response
+          comm.send({
+            type: 'apply_patch_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available for patching'
+          });
+          return;
+        }
+
+        if (!oldText) {
+          comm.send({
+            type: 'apply_patch_response',
+            request_id: requestId,
+            success: false,
+            message: 'old_text parameter cannot be empty'
+          });
+          return;
+        }
+
+        // Get current cell content
+        const currentContent = cell.model.sharedModel.getSource();
+
+        // Apply patch (replace first occurrence)
+        const patchedContent = currentContent.replace(oldText, newText);
+
+        // Check if replacement was made
+        const wasReplaced = patchedContent !== currentContent;
+
+        if (wasReplaced) {
+          // Update cell content
+          cell.model.sharedModel.setSource(patchedContent);
+
+          // Send success response
+          comm.send({
+            type: 'apply_patch_response',
+            request_id: requestId,
+            success: true,
+            cell_id: cell.model.id,
+            replaced: true,
+            old_text_length: oldText.length,
+            new_text_length: newText.length,
+            content_length_before: currentContent.length,
+            content_length_after: patchedContent.length,
+            message: 'Patch applied successfully'
+          });
+
+          console.log(`MCP Active Cell Bridge: Applied patch (${oldText.length} -> ${newText.length} chars)`);
+        } else {
+          // No replacement made
+          comm.send({
+            type: 'apply_patch_response',
+            request_id: requestId,
+            success: true,
+            cell_id: cell.model.id,
+            replaced: false,
+            old_text_length: oldText.length,
+            new_text_length: newText.length,
+            message: 'Patch target not found - no changes made'
+          });
+
+          console.log('MCP Active Cell Bridge: Patch target not found');
+        }
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to apply patch:', error);
+
+        // Send error response
+        comm.send({
+          type: 'apply_patch_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to apply patch: ${error}`
         });
       }
     };
@@ -174,19 +423,26 @@ const plugin: JupyterFrontEndPlugin<void> = {
         initPromise = (async () => {
           try {
             comm = kernel.createComm('mcp:active_cell');
-            
+
             // Handle incoming messages from kernel
             comm.onMsg = (msg: any) => {
               const data = msg?.content?.data || {};
-              if (data.type === 'request_current') {
-                // Kernel is requesting fresh snapshot
+              const msgType = data.type;
+
+              if (msgType === 'request_current') {
                 sendSnapshot(kernel);
-              } else if (data.type === 'update_cell') {
-                // Kernel is requesting to update the active cell content
+              } else if (msgType === 'update_cell') {
                 handleCellUpdate(kernel, comm, data);
-              } else if (data.type === 'execute_cell') {
-                // Kernel is requesting to execute the active cell
+              } else if (msgType === 'execute_cell') {
                 handleCellExecution(kernel, comm, data);
+              } else if (msgType === 'add_cell') {
+                handleAddCell(kernel, comm, data);
+              } else if (msgType === 'delete_cell') {
+                handleDeleteCell(kernel, comm, data);
+              } else if (msgType === 'apply_patch') {
+                handleApplyPatch(kernel, comm, data);
+              } else {
+                console.warn(`MCP Active Cell Bridge: Unknown message type: ${msgType}`);
               }
             };
             
@@ -197,14 +453,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
               comms.delete(kernel);
               commInitializing.delete(kernel);
             };
-            
+
             // Open comm and wait for it to be ready
             await comm.open({}).done;
-            
+
             // Mark comm as successfully opened
             openedComms.set(kernel, true);
             comms.set(kernel, comm);
-            console.log('MCP Active Cell Bridge: Comm opened and ready');
             return comm;
           } catch (error) {
             console.error('MCP Active Cell Bridge: Failed to create comm:', error);

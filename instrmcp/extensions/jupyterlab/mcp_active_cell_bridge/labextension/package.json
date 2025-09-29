@@ -24,9 +24,10 @@
     "url": "https://github.com/caijiaqi/instrMCP.git"
   },
   "scripts": {
-    "build": "jlpm build:lib && jlpm build:labextension",
+    "build": "jlpm build:lib && jlpm build:labextension && jlpm postbuild",
     "build:labextension": "jupyter labextension build .",
     "build:lib": "tsc --sourceMap",
+    "postbuild": "rm -f mcp_active_cell_bridge/labextension/static/*.js && cp static/static/*.js static/static/*.json mcp_active_cell_bridge/labextension/static/ && cp static/package.json mcp_active_cell_bridge/labextension/package.json",
     "clean": "jlpm clean:lib",
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
     "watch": "run-p watch:src watch:labextension",
@@ -50,7 +51,7 @@
   "jupyterlab": {
     "extension": true,
     "_build": {
-      "load": "static/remoteEntry.307d0680ad11a0163ade.js",
+      "load": "static/remoteEntry.286f925f11b01aef9706.js",
       "extension": "./extension",
       "style": "./style"
     }
