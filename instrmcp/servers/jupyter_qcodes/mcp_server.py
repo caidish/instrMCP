@@ -16,17 +16,40 @@ from mcp.types import TextContent, Resource, TextResourceContents
 
 from .tools import QCodesReadOnlyTools
 
+# MeasureIt integration (optional)
+try:
+    from ...extensions.MeasureIt import (
+        get_sweep0d_template,
+        get_sweep1d_template,
+        get_sweep2d_template,
+        get_simulsweep_template,
+        get_sweepqueue_template,
+        get_common_patterns_template,
+        get_measureit_code_examples
+    )
+    MEASUREIT_AVAILABLE = True
+except ImportError:
+    MEASUREIT_AVAILABLE = False
+
+# Database integration (optional)
+try:
+    from ...extensions import database as db_integration
+    DATABASE_AVAILABLE = True
+except ImportError:
+    DATABASE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
 class JupyterMCPServer:
     """MCP server for Jupyter QCoDeS integration."""
     
-    def __init__(self, ipython, host: str = "127.0.0.1", port: int = 8123, safe_mode: bool = True):
+    def __init__(self, ipython, host: str = "127.0.0.1", port: int = 8123, safe_mode: bool = True, enabled_options: set = None):
         self.ipython = ipython
         self.host = host
         self.port = port
         self.safe_mode = safe_mode
+        self.enabled_options = enabled_options or set()
         self.running = False
         self.server_task: Optional[asyncio.Task] = None
         
@@ -129,6 +152,157 @@ class JupyterMCPServer:
                         text=error_content
                     )]
                 )
+
+        # MeasureIt template resources (optional - only if measureit option enabled)
+        if MEASUREIT_AVAILABLE and 'measureit' in self.enabled_options:
+
+            @self.mcp.resource("resource://measureit_sweep0d_template")
+            async def measureit_sweep0d_template() -> Resource:
+                """Resource providing Sweep0D code templates and examples."""
+                content = get_sweep0d_template()
+                return Resource(
+                    uri="resource://measureit_sweep0d_template",
+                    name="MeasureIt Sweep0D Template",
+                    description="Sweep0D code examples and patterns for time-based monitoring",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_sweep0d_template",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_sweep1d_template")
+            async def measureit_sweep1d_template() -> Resource:
+                """Resource providing Sweep1D code templates and examples."""
+                content = get_sweep1d_template()
+                return Resource(
+                    uri="resource://measureit_sweep1d_template",
+                    name="MeasureIt Sweep1D Template",
+                    description="Sweep1D code examples and patterns for single parameter sweeps",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_sweep1d_template",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_sweep2d_template")
+            async def measureit_sweep2d_template() -> Resource:
+                """Resource providing Sweep2D code templates and examples."""
+                content = get_sweep2d_template()
+                return Resource(
+                    uri="resource://measureit_sweep2d_template",
+                    name="MeasureIt Sweep2D Template",
+                    description="Sweep2D code examples and patterns for 2D parameter mapping",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_sweep2d_template",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_simulsweep_template")
+            async def measureit_simulsweep_template() -> Resource:
+                """Resource providing SimulSweep code templates and examples."""
+                content = get_simulsweep_template()
+                return Resource(
+                    uri="resource://measureit_simulsweep_template",
+                    name="MeasureIt SimulSweep Template",
+                    description="SimulSweep code examples and patterns for simultaneous parameter sweeping",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_simulsweep_template",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_sweepqueue_template")
+            async def measureit_sweepqueue_template() -> Resource:
+                """Resource providing SweepQueue code templates and examples."""
+                content = get_sweepqueue_template()
+                return Resource(
+                    uri="resource://measureit_sweepqueue_template",
+                    name="MeasureIt SweepQueue Template",
+                    description="SweepQueue code examples and patterns for sequential measurement workflows",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_sweepqueue_template",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_common_patterns")
+            async def measureit_common_patterns() -> Resource:
+                """Resource providing common MeasureIt patterns and best practices."""
+                content = get_common_patterns_template()
+                return Resource(
+                    uri="resource://measureit_common_patterns",
+                    name="MeasureIt Common Patterns",
+                    description="Common MeasureIt patterns and best practices for measurement workflows",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_common_patterns",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://measureit_code_examples")
+            async def measureit_code_examples() -> Resource:
+                """Resource providing all MeasureIt patterns in a structured format."""
+                content = get_measureit_code_examples()
+                return Resource(
+                    uri="resource://measureit_code_examples",
+                    name="MeasureIt Code Examples",
+                    description="Complete collection of all MeasureIt patterns and templates in structured format",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://measureit_code_examples",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+        # Database integration resources (optional - only if database option enabled)
+        if DATABASE_AVAILABLE and 'database' in self.enabled_options:
+
+            @self.mcp.resource("resource://database_config")
+            async def database_config() -> Resource:
+                """Resource providing current database configuration and connection status."""
+                content = db_integration.get_current_database_config(database_path=None)
+                return Resource(
+                    uri="resource://database_config",
+                    name="Database Configuration",
+                    description="Current QCodes database configuration, path, and connection status",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://database_config",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
+            @self.mcp.resource("resource://recent_measurements")
+            async def recent_measurements() -> Resource:
+                """Resource providing recent measurement metadata."""
+                content = db_integration.get_recent_measurements(limit=20, database_path=None)
+                return Resource(
+                    uri="resource://recent_measurements",
+                    name="Recent Measurements",
+                    description="Metadata for recent measurements across all experiments",
+                    mimeType="application/json",
+                    contents=[TextResourceContents(
+                        uri="resource://recent_measurements",
+                        mimeType="application/json",
+                        text=content
+                    )]
+                )
+
 
     def _register_tools(self):
         """Register all MCP tools."""
@@ -475,7 +649,68 @@ class JupyterMCPServer:
         #     except Exception as e:
         #         logger.error(f"Error in clear_cache: {e}")
         #         return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
-        
+
+        # Database integration tools (optional - only if database option enabled)
+        if DATABASE_AVAILABLE and 'database' in self.enabled_options:
+
+            @self.mcp.tool()
+            async def list_experiments(database_path: Optional[str] = None) -> List[TextContent]:
+                """List all experiments in the specified QCodes database.
+
+                Args:
+                    database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+
+                Returns JSON containing experiment information including ID, name,
+                sample_name, start_time, end_time, and number of datasets.
+                """
+                try:
+                    result = db_integration.list_experiments(database_path=database_path)
+                    return [TextContent(type="text", text=result)]
+                except Exception as e:
+                    logger.error(f"Error in list_experiments: {e}")
+                    return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+
+
+            @self.mcp.tool()
+            async def get_dataset_info(
+                id: int,
+                database_path: Optional[str] = None
+            ) -> List[TextContent]:
+                """Get detailed information about a specific dataset.
+
+                Args:
+                    id: Dataset run ID to load (e.g., load_by_id(2))
+                    database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+                """
+                try:
+                    result = db_integration.get_dataset_info(
+                        id=id,
+                        database_path=database_path
+                    )
+                    return [TextContent(type="text", text=result)]
+                except Exception as e:
+                    logger.error(f"Error in get_dataset_info: {e}")
+                    return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+
+            @self.mcp.tool()
+            async def get_database_stats(database_path: Optional[str] = None) -> List[TextContent]:
+                """Get database statistics and health information.
+
+                Args:
+                    database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+
+                Returns JSON containing database statistics including path, size,
+                experiment count, dataset count, and last modified time.
+                """
+                try:
+                    result = db_integration.get_database_stats(database_path=database_path)
+                    return [TextContent(type="text", text=result)]
+                except Exception as e:
+                    logger.error(f"Error in get_database_stats: {e}")
+                    return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+
+
+
         @self.mcp.tool()
         async def server_status() -> List[TextContent]:
             """Get server status and configuration."""
@@ -592,4 +827,33 @@ class JupyterMCPServer:
             "server_running": self.running,
             "restart_required": True,
             "message": f"Server mode changed to {mode_status}. Restart required for tool changes to take effect."
+        }
+
+    def set_enabled_options(self, enabled_options: set) -> Dict[str, Any]:
+        """Change the server's enabled options.
+
+        Note: This requires server restart to take effect for resource registration.
+
+        Args:
+            enabled_options: Set of enabled option names
+
+        Returns:
+            Dictionary with status information
+        """
+        old_options = self.enabled_options.copy()
+        self.enabled_options = enabled_options.copy()
+
+        added = enabled_options - old_options
+        removed = old_options - enabled_options
+
+        logger.info(f"MCP server options changed: added={added}, removed={removed}")
+
+        return {
+            "old_options": sorted(old_options),
+            "new_options": sorted(enabled_options),
+            "added_options": sorted(added),
+            "removed_options": sorted(removed),
+            "server_running": self.running,
+            "restart_required": True,
+            "message": f"Server options updated. Restart required for resource changes to take effect."
         }

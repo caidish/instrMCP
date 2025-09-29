@@ -24,6 +24,9 @@ _desired_mode: bool = True  # True = safe, False = unsafe
 _server_host: str = "127.0.0.1"  # Default host
 _server_port: int = 8123  # Default port
 
+# Global options tracking
+_enabled_options: set = set()  # Set of enabled option names
+
 
 @magics_class
 class MCPMagics(Magics):
@@ -112,8 +115,8 @@ class MCPMagics(Magics):
                     print("❌ Could not get IPython instance")
                     return
                 
-                # Create NEW server instance with the desired mode
-                _server = JupyterMCPServer(ipython, safe_mode=_desired_mode)
+                # Create NEW server instance with the desired mode and options
+                _server = JupyterMCPServer(ipython, safe_mode=_desired_mode, enabled_options=_enabled_options)
                 _server_task = asyncio.create_task(_start_server_task())
                 await asyncio.sleep(0.1)  # Give it a moment to start
                 
@@ -177,6 +180,115 @@ class MCPMagics(Magics):
             print("❌ No event loop available for server stop")
     
     @line_magic
+    def mcp_option(self, line):
+        """Enable or disable optional MCP features using add/remove subcommands."""
+        global _server, _enabled_options
+
+        parts = line.strip().split()
+        valid_options = {'measureit', 'database'}
+
+        if not parts:
+            # Show current options status
+            print("🎛️  MCP Options Status:")
+            print(f"   Enabled options: {', '.join(sorted(_enabled_options)) if _enabled_options else 'None'}")
+            print("   Available options:")
+            print("   - measureit: Enable MeasureIt template resources")
+            print("   - database: Enable database integration tools and resources")
+            print()
+            print("   Usage:")
+            print("   %mcp_option add measureit database    # Add multiple options")
+            print("   %mcp_option remove measureit          # Remove single option")
+            print("   %mcp_option list                      # Show current status")
+            print()
+            print("   Legacy syntax (deprecated):")
+            print("   %mcp_option measureit                 # Enable single option")
+            print("   %mcp_option -measureit                # Disable single option")
+            return
+
+        subcommand = parts[0].lower()
+
+        if subcommand in ['add', 'remove']:
+            # New subcommand style
+            if len(parts) < 2:
+                print(f"❌ No options specified for '{subcommand}' command")
+                print(f"   Usage: %mcp_option {subcommand} <option1> [option2] ...")
+                return
+
+            options = parts[1:]
+
+            # Validate all options first
+            invalid_options = [opt for opt in options if opt not in valid_options]
+            if invalid_options:
+                print(f"❌ Invalid options: {', '.join(invalid_options)}")
+                print(f"   Valid options: {', '.join(sorted(valid_options))}")
+                return
+
+            # Apply changes
+            changes_made = []
+            if subcommand == 'add':
+                for option in options:
+                    if option not in _enabled_options:
+                        _enabled_options.add(option)
+                        changes_made.append(f"✅ Added: {option}")
+                    else:
+                        changes_made.append(f"ℹ️  Already enabled: {option}")
+            else:  # remove
+                for option in options:
+                    if option in _enabled_options:
+                        _enabled_options.remove(option)
+                        changes_made.append(f"❌ Removed: {option}")
+                    else:
+                        changes_made.append(f"ℹ️  Not enabled: {option}")
+
+            # Show results
+            for change in changes_made:
+                print(change)
+
+        elif subcommand == 'list':
+            # Show status
+            print("🎛️  MCP Options Status:")
+            print(f"   Enabled options: {', '.join(sorted(_enabled_options)) if _enabled_options else 'None'}")
+            return
+
+        else:
+            # Legacy single-option style (backward compatibility)
+            print("⚠️  Legacy syntax detected. Consider using: %mcp_option add/remove <options>")
+
+            option_name = parts[0]
+            disable = False
+
+            if option_name.startswith('-'):
+                disable = True
+                option_name = option_name[1:]
+
+            # Validate option name
+            if option_name not in valid_options:
+                print(f"❌ Unknown option: {option_name}")
+                print(f"   Valid options: {', '.join(sorted(valid_options))}")
+                return
+
+            # Enable/disable option
+            if disable:
+                if option_name in _enabled_options:
+                    _enabled_options.remove(option_name)
+                    print(f"❌ Removed: {option_name}")
+                else:
+                    print(f"ℹ️  Option '{option_name}' was not enabled")
+            else:
+                _enabled_options.add(option_name)
+                print(f"✅ Added: {option_name}")
+
+        # Update server if running (for all code paths that make changes)
+        if subcommand in ['add', 'remove'] or (subcommand not in ['list'] and parts):
+            if _server and _server.running:
+                # Update the server's options
+                _server.set_enabled_options(_enabled_options)
+                print("⚠️  Server restart required for option changes to take effect")
+                print("   Use: %mcp_restart")
+            else:
+                print("✅ Changes will take effect when server starts")
+
+    @line_magic
     def mcp_restart(self, line):
         """Restart the MCP server to apply mode changes."""
         global _server, _server_task, _desired_mode
@@ -208,8 +320,8 @@ class MCPMagics(Magics):
                     except asyncio.CancelledError:
                         pass
                 
-                # Create completely NEW server with desired mode
-                _server = JupyterMCPServer(ipython, safe_mode=_desired_mode)
+                # Create completely NEW server with desired mode and options
+                _server = JupyterMCPServer(ipython, safe_mode=_desired_mode, enabled_options=_enabled_options)
                 
                 # Start new server
                 _server_task = asyncio.create_task(_start_server_task())
@@ -266,6 +378,7 @@ def load_ipython_extension(ipython):
         magic_instance = MCPMagics(ipython)
         ipython.register_magic_function(magic_instance.mcp_safe, 'line', 'mcp_safe')
         ipython.register_magic_function(magic_instance.mcp_unsafe, 'line', 'mcp_unsafe')
+        ipython.register_magic_function(magic_instance.mcp_option, 'line', 'mcp_option')
         ipython.register_magic_function(magic_instance.mcp_status, 'line', 'mcp_status')
         ipython.register_magic_function(magic_instance.mcp_start, 'line', 'mcp_start')
         ipython.register_magic_function(magic_instance.mcp_close, 'line', 'mcp_close')

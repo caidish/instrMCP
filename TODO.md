@@ -8,25 +8,68 @@ Instead of direct MeasureIt object manipulation, provide intelligent code genera
 ## Phase 1: MeasureIt Code Template Resources (Optional - requires `%mcp_option measureit`)
 
 ### 1.1 Measurement Template Resources
-- [ ] Create `measureit_sweep0d_template` resource with Sweep0D code examples and patterns
-- [ ] Create `measureit_sweep1d_template` resource with Sweep1D code examples
-- [ ] Create `measureit_sweep2d_template` resource with Sweep2D code examples
-- [ ] Create `measureit_simulsweep_template` resource with SimulSweep examples
-- [ ] Create `measureit_sweepqueue_template` resource with SweepQueue patterns
-- [ ] Create `measureit_common_patterns` resource with common measurement workflows
+- [x] Create `measureit_sweep0d_template` resource with Sweep0D code examples and patterns
+- [x] Create `measureit_sweep1d_template` resource with Sweep1D code examples
+- [x] Create `measureit_sweep2d_template` resource with Sweep2D code examples
+- [x] Create `measureit_simulsweep_template` resource with SimulSweep examples
+- [x] Create `measureit_sweepqueue_template` resource with SweepQueue patterns
+- [x] Create `measureit_common_patterns` resource with common measurement workflows
 
 ### 1.2 Dynamic Template Resource
-- [ ] Create `measureit_code_examples` resource that returns ALL available MeasureIt patterns in a structured format
+- [x] Create `measureit_code_examples` resource that returns ALL available MeasureIt patterns in a structured format
 
-## Phase 2: Database Integration (Optional - requires `%mcp_option measureit`)
+## Phase 2: Database Integration
 
 ### 2.1 Database Query Tools
-- [ ] Create `query_measurement_database` tool - search and retrieve past measurements
-- [ ] Create `get_database_info` tool - current database status and configuration
+- [x] Create `list_experiments` tool - List all experiments in current QCodes database
+- [x] Create `query_datasets` tool - Query datasets with optional filters (experiment, sample, date range, run ID)
+- [x] Create `get_dataset_info` tool - Get detailed information about a specific dataset
+- [x] Create `get_database_stats` tool - Get database statistics and health information
+- [x] ~~Create `suggest_database_setup` tool~~ - Deleted (users can write basic database setup code themselves)
+- [x] ~~Create `suggest_measurement_from_history` tool~~ - Deleted (overly complex with limited practical use)
 
 ### 2.2 Database Resources
-- [ ] Create `recent_measurements` resource - list of recent measurement metadata
-- [ ] Create `database_configuration` resource - current database settings and paths
+- [x] Create `database_config` resource - Current QCodes database configuration, path, and connection status
+- [x] Create `recent_measurements` resource - Metadata for recent measurements across all experiments
+- [x] Create `measurement_templates` resource - Common measurement patterns and templates extracted from historical data
+
+### 2.3 Integration Completed
+- [x] Added database integration to mcp_server.py with conditional registration
+- [x] Updated magic commands to support `%mcp_option add database`
+- [x] Updated README.md with database integration documentation
+
+### 2.4 ✅ Database Tools Rewrite - COMPLETED
+**Status**: Database functionality completely rewritten and working
+
+#### Issues Fixed:
+- [x] **Completely Rewritten query_tools.py**: Used proper QCodes API patterns from databaseExample.ipynb
+  - Fixed `list_experiments()` to properly iterate over run IDs and match to experiments
+  - Rewritten `query_datasets()` to use `load_by_id()` and properly extract MeasureIt metadata
+  - Enhanced `get_dataset_info()` to include parameter data and MeasureIt sweep configuration
+  - Improved `get_database_stats()` with measurement type analysis
+
+- [x] **Deleted Unnecessary Code Generators**: Removed overly complex, low-value functions
+  - Deleted entire `code_generators.py` file
+
+- [x] **Simplified db_resources.py**: Kept only useful resources
+  - Kept `get_current_database_config()` - basic database connection info
+  - Enhanced `get_recent_measurements()` with MeasureIt metadata extraction
+  - Deleted `get_measurement_templates()` - overly complex analysis with limited value
+
+#### Streamlined Architecture:
+- [x] **4 Core Query Tools**: `list_experiments`, `query_datasets`, `get_dataset_info`, `get_database_stats`
+- [x] **2 Simple Resources**: `database_config`, `recent_measurements`
+- [x] **Updated __init__.py**: Removed imports for deleted functions
+- [x] **Updated mcp_server.py**: Removed tool registrations for deleted functions
+
+#### Key Improvements:
+- Based on actual QCodes usage patterns from databaseExample.ipynb
+- Proper use of `load_by_id()`, `dataset.get_parameter_data()`, `dataset.metadata['measureit']`
+- Extract MeasureIt sweep configurations (Sweep0D/1D/2D/SimulSweep) from metadata
+- Return limited parameter data to avoid huge responses
+- Focus on direct database queries rather than generic code generation
+
+#### Priority: **COMPLETED** - All database tools now functional and streamlined
 
 ## Phase 3: Enhanced Jupyter Integration (Optional - requires `%mcp_option measureit`)
 
@@ -105,6 +148,63 @@ s.start()
 ## Phase 7: Testing
 
 - [ ] Human will test. No automated tests for AI-generated code.
+
+## Phase 8: Code Architecture Refactoring (Performance & Maintainability)
+
+### 8.1 Problem Identified
+- [x] `mcp_server.py` has grown to **973 lines** - becoming difficult to maintain
+- [x] Mixing concerns: core tools, optional features, resources, server management
+- [x] Difficult to test individual components in isolation
+- [x] Hard to add new features without making the file even larger
+
+### 8.2 Proposed Modular Architecture
+- [ ] **Refactor into modular structure:**
+```
+instrmcp/servers/jupyter_qcodes/
+├── mcp_server.py              # Main server class (simplified ~200 lines)
+├── tools/
+│   ├── __init__.py
+│   ├── core.py               # Core QCodes/Jupyter tools (~250 lines)
+│   ├── unsafe.py             # Unsafe execution tools (~50 lines)
+│   └── database.py           # Database integration tools (~200 lines)
+├── resources/
+│   ├── __init__.py
+│   ├── core.py               # Core resources (~100 lines)
+│   ├── measureit.py          # MeasureIt template resources (~150 lines)
+│   └── database.py           # Database resources (~100 lines)
+└── registrars/
+    ├── __init__.py
+    ├── tool_registrar.py      # Tool registration helper
+    └── resource_registrar.py  # Resource registration helper
+```
+
+### 8.3 Implementation Steps
+- [ ] Create directory structure (`tools/`, `resources/`, `registrars/`)
+- [ ] Move core tools to `tools/core.py` with registration functions
+- [ ] Move unsafe tools to `tools/unsafe.py`
+- [ ] Move database tools to `tools/database.py`
+- [ ] Move core resources to `resources/core.py`
+- [ ] Move MeasureIt resources to `resources/measureit.py`
+- [ ] Move database resources to `resources/database.py`
+- [ ] Create registrar pattern classes for clean tool/resource registration
+- [ ] Simplify main `mcp_server.py` to use registrars (target: ~200-250 lines)
+- [ ] Test each component works correctly
+- [ ] Update imports in other files if needed
+
+### 8.4 Benefits of Refactoring
+- **Better Organization**: Each file has a single responsibility
+- **Easier Testing**: Can test tool/resource modules independently
+- **Improved Maintainability**: Finding and modifying specific tools is straightforward
+- **Scalability**: Adding new optional features doesn't bloat the main file
+- **Clear Dependencies**: Optional imports only when features are enabled
+- **Team Collaboration**: Multiple developers can work on different modules
+
+### 8.5 Success Criteria
+- [ ] `mcp_server.py` reduced to ~200-250 lines
+- [ ] All tools and resources continue to work correctly
+- [ ] Optional features (measureit, database) still properly conditional
+- [ ] Code organization makes it easy to add future features
+- [ ] Individual modules can be tested in isolation
 
 
 ## Key Design Principles:

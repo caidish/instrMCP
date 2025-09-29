@@ -96,6 +96,13 @@ The system uses a proxy pattern where:
 - `execute_editing_cell()` - Execute current cell (unsafe mode only)
 - `server_status()` - Check server mode and status
 
+**Database Integration Tools (Optional - requires `%mcp_option database`):**
+- `list_experiments(database_path)` - List all experiments in the specified QCodes database
+- `get_dataset_info(id, database_path)` - Get detailed information about a specific dataset
+- `get_database_stats(database_path)` - Get database statistics and health information
+
+**Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration.
+
 ### MCP Resources Available
 
 **QCodes Resources:**
@@ -104,6 +111,43 @@ The system uses a proxy pattern where:
 
 **Jupyter Resources:**
 - `notebook_cells` - All notebook cell contents
+
+**MeasureIt Resources (Optional - requires `%mcp_option measureit`):**
+- `measureit_sweep0d_template` - Sweep0D code examples and patterns for time-based monitoring
+- `measureit_sweep1d_template` - Sweep1D code examples and patterns for single parameter sweeps
+- `measureit_sweep2d_template` - Sweep2D code examples and patterns for 2D parameter mapping
+- `measureit_simulsweep_template` - SimulSweep code examples for simultaneous parameter sweeping
+- `measureit_sweepqueue_template` - SweepQueue code examples for sequential measurement workflows
+- `measureit_common_patterns` - Common MeasureIt patterns and best practices
+- `measureit_code_examples` - Complete collection of ALL MeasureIt patterns in structured format
+
+**Database Resources (Optional - requires `%mcp_option database`):**
+- `database_config` - Current QCodes database configuration, path, and connection status
+- `recent_measurements` - Metadata for recent measurements across all experiments
+- `measurement_templates` - Common measurement patterns and templates extracted from historical data
+
+### Optional Features and Magic Commands
+
+The server supports optional features that can be enabled/disabled via magic commands:
+
+**Safe/Unsafe Mode:**
+- `%mcp_safe` - Switch to safe mode (read-only access)
+- `%mcp_unsafe` - Switch to unsafe mode (allows code execution via `execute_editing_cell`)
+
+**Optional Features:**
+- `%mcp_option measureit` - Enable MeasureIt template resources
+- `%mcp_option -measureit` - Disable MeasureIt template resources
+- `%mcp_option database` - Enable database integration tools and resources
+- `%mcp_option -database` - Disable database integration tools and resources
+- `%mcp_option` - Show current option status
+
+**Server Control:**
+- `%mcp_start` - Start the MCP server
+- `%mcp_stop` - Stop the MCP server
+- `%mcp_restart` - Restart server (required after mode/option changes)
+- `%mcp_status` - Show server status and available commands
+
+**Note:** Server restart is required after changing modes or options for changes to take effect.
 
 ## Development Workflow
 

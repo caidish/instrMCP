@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import Optional, List
 
 import httpx
 from fastmcp import FastMCP
@@ -269,6 +269,26 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         result = await proxy.call("server_status")
         info = {"mode": "proxy", "proxy_target": base_url, "jupyter_server_status": result}
         return [TextContent(type="text", text=str(info))]
+
+    # Database integration tools (optional - only if database option enabled)
+    @mcp.tool()
+    async def list_experiments(database_path: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("list_experiments", database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
+
+
+    @mcp.tool()
+    async def get_dataset_info(
+        id: int,
+        database_path: Optional[str] = None
+    ) -> list[TextContent]:
+        result = await proxy.call("get_dataset_info", id=id, database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool()
+    async def get_database_stats(database_path: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("get_database_stats", database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
 
     return mcp
 
