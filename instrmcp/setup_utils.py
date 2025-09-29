@@ -11,44 +11,26 @@ from jupyter_core.paths import jupyter_config_dir
 
 
 def setup_jupyter_extension():
-    """Install JupyterLab extension only."""
+    """Build JupyterLab to include the extension."""
     try:
-        # Get the path to the extension package (not the labextension subdirectory)
-        package_dir = Path(__file__).parent
-        extension_path = package_dir / "extensions" / "jupyterlab"
-        
-        if not extension_path.exists():
-            print(f"❌ Extension not found at: {extension_path}")
-            return False
-        
-        print("🔧 Installing JupyterLab extension...")
-        
-        # Install the extension in development mode
-        result = subprocess.run([
-            "jupyter", "labextension", "develop", str(extension_path), "--overwrite"
+        print("🔧 Extension is automatically installed via pip...")
+        print("🔨 Building JupyterLab with extension...")
+
+        # Build JupyterLab to include the extension
+        # The extension is already installed via pip install, just need to rebuild
+        build_result = subprocess.run([
+            "jupyter", "lab", "build", "--minimize=False"
         ], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            print("✅ JupyterLab extension installed successfully")
-            
-            # Build JupyterLab to include the extension
-            print("🔨 Building JupyterLab with extension...")
-            build_result = subprocess.run([
-                "jupyter", "lab", "build", "--minimize=False"
-            ], capture_output=True, text=True)
-            
-            if build_result.returncode == 0:
-                print("✅ JupyterLab built successfully")
-                return True
-            else:
-                print(f"⚠️  JupyterLab build failed: {build_result.stderr}")
-                return False
+
+        if build_result.returncode == 0:
+            print("✅ JupyterLab built successfully")
+            return True
         else:
-            print(f"❌ Failed to install extension: {result.stderr}")
+            print(f"⚠️  JupyterLab build failed: {build_result.stderr}")
             return False
-            
+
     except Exception as e:
-        print(f"❌ Error installing JupyterLab extension: {e}")
+        print(f"❌ Error building JupyterLab: {e}")
         return False
 
 
