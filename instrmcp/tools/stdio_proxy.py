@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import Optional, List
 
 import httpx
 from fastmcp import FastMCP
@@ -216,71 +216,110 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
     mcp = FastMCP(server_name)
     proxy = HttpMCPProxy(base_url)
 
-    @mcp.tool()
-    async def list_instruments() -> list[TextContent]:
-        result = await proxy.call("list_instruments")
-        return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
+    # QCodes instrument tools
+    @mcp.tool(name="qcodes/instrument_info")
     async def instrument_info(name: str, with_values: bool = False) -> list[TextContent]:
-        result = await proxy.call("instrument_info", name=name, with_values=with_values)
+        result = await proxy.call("qcodes/instrument_info", name=name, with_values=with_values)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def get_parameter_value(instrument: str, parameter: str, fresh: bool = False) -> list[TextContent]:
-        result = await proxy.call("get_parameter_value", instrument=instrument, parameter=parameter, fresh=fresh)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool()
-    async def station_snapshot() -> list[TextContent]:
-        result = await proxy.call("station_snapshot")
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool()
-    async def list_variables(type_filter: Optional[str] = None) -> list[TextContent]:
-        result = await proxy.call("list_variables", type_filter=type_filter)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool()
+    @mcp.tool(name="qcodes/get_parameter_values")
     async def get_parameter_values(queries: str) -> list[TextContent]:
-        result = await proxy.call("get_parameter_values", queries=queries)
+        result = await proxy.call("qcodes/get_parameter_values", queries=queries)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
+    # Jupyter notebook variable tools
+    @mcp.tool(name="notebook/list_variables")
+    async def list_variables(type_filter: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("notebook/list_variables", type_filter=type_filter)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook/get_variable_info")
     async def get_variable_info(name: str) -> list[TextContent]:
-        result = await proxy.call("get_variable_info", name=name)
+        result = await proxy.call("notebook/get_variable_info", name=name)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
-        result = await proxy.call("get_notebook_cells", num_cells=num_cells, include_output=include_output)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool()
+    @mcp.tool(name="notebook/get_editing_cell")
     async def get_editing_cell(fresh_ms: int = 1000) -> list[TextContent]:
-        result = await proxy.call("get_editing_cell", fresh_ms=fresh_ms)
+        result = await proxy.call("notebook/get_editing_cell", fresh_ms=fresh_ms)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
+    @mcp.tool(name="notebook/update_editing_cell")
     async def update_editing_cell(content: str) -> list[TextContent]:
-        result = await proxy.call("update_editing_cell", content=content)
+        result = await proxy.call("notebook/update_editing_cell", content=content)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def suggest_code(description: str, context: str = "") -> list[TextContent]:
-        result = await proxy.call("suggest_code", description=description, context=context)
+    @mcp.tool(name="notebook/get_editing_cell_output")
+    async def get_editing_cell_output() -> list[TextContent]:
+        result = await proxy.call("notebook/get_editing_cell_output")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
-    async def execute_editing_cell() -> list[TextContent]:
-        result = await proxy.call("execute_editing_cell")
+    @mcp.tool(name="notebook/get_notebook_cells")
+    async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
+        result = await proxy.call("notebook/get_notebook_cells", num_cells=num_cells, include_output=include_output)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool()
+    @mcp.tool(name="notebook/server_status")
     async def server_status() -> list[TextContent]:
-        result = await proxy.call("server_status")
+        result = await proxy.call("notebook/server_status")
         info = {"mode": "proxy", "proxy_target": base_url, "jupyter_server_status": result}
         return [TextContent(type="text", text=str(info))]
+
+    # Unsafe notebook tools
+    @mcp.tool(name="notebook/execute_cell")
+    async def execute_editing_cell() -> list[TextContent]:
+        result = await proxy.call("notebook/execute_cell")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook/add_cell")
+    async def add_new_cell(
+        cell_type: str = "code",
+        position: str = "below",
+        content: str = ""
+    ) -> list[TextContent]:
+        result = await proxy.call("notebook/add_cell", cell_type=cell_type, position=position, content=content)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook/delete_cell")
+    async def delete_editing_cell() -> list[TextContent]:
+        result = await proxy.call("notebook/delete_cell")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook/delete_cells")
+    async def delete_cells_by_number(cell_numbers: str) -> list[TextContent]:
+        result = await proxy.call("notebook/delete_cells", cell_numbers=cell_numbers)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook/apply_patch")
+    async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
+        result = await proxy.call("notebook/apply_patch", old_text=old_text, new_text=new_text)
+        return [TextContent(type="text", text=str(result))]
+
+    # MeasureIt integration tools (optional - only if measureit option enabled)
+    @mcp.tool(name="measureit/get_status")
+    async def get_measureit_status() -> list[TextContent]:
+        """Check if any MeasureIt sweep is currently running."""
+        result = await proxy.call("measureit/get_status")
+        return [TextContent(type="text", text=str(result))]
+
+    # Database integration tools (optional - only if database option enabled)
+    @mcp.tool(name="database/list_experiments")
+    async def list_experiments(database_path: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("database/list_experiments", database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="database/get_dataset_info")
+    async def get_dataset_info(
+        id: int,
+        database_path: Optional[str] = None
+    ) -> list[TextContent]:
+        result = await proxy.call("database/get_dataset_info", id=id, database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="database/get_database_stats")
+    async def get_database_stats(database_path: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("database/get_database_stats", database_path=database_path)
+        return [TextContent(type="text", text=str(result))]
 
     return mcp
 

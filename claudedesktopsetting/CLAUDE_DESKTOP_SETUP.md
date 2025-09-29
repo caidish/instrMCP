@@ -146,7 +146,6 @@ The launcher script automatically detects your setup and chooses the best mode:
 - `get_parameter_values(batch)` - Batch parameter reads
 - `get_variable_info(name)` - Detailed variable information
 - `subscribe_parameter(inst, param, interval)` - Monitor parameters
-- `suggest_code(description)` - AI code suggestions
 - `station_snapshot()` - Complete QCoDeS station snapshot
 - `get_cache_stats()` - Parameter cache statistics
 - `get_editing_cell(fresh_ms)` - Get currently editing cell content

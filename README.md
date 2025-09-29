@@ -9,13 +9,26 @@
 ## Features
 
 - **Full QCodes Integration**: Built-in support for all QCodes instrument drivers
-- **JupyterLab Native**: Seamless integration with JupyterLab. 
+- **Database Integration**: Read-only access to QCodes databases with intelligent code generation
+- **MeasureIt Templates**: Comprehensive measurement pattern library and code generation
+- **JupyterLab Native**: Seamless integration with JupyterLab.
 - **Safe mode**: Read-only mode with optional unsafe execution
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI.
 
- 
+## 🚨 Important Note for Claude Users
+
+**When new optional features are added to InstrMCP, Claude's memory of available tools and resources may be outdated.** This is because Claude remembers the API from previous conversations.
+
+**If you've just enabled new options or updated InstrMCP:**
+1. **Start a fresh conversation** with Claude for the most accurate tool/resource list
+2. Or explicitly ask: *"What MCP tools and resources are currently available?"* to refresh Claude's understanding
+3. After running `%mcp_option add database` or `%mcp_option add measureit`, restart the server with `%mcp_restart`
+
+This ensures Claude has access to the latest database integration tools, MeasureIt templates, and other new features.
+
+
 
 https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 
@@ -67,12 +80,17 @@ In a Jupyter notebook cell, load the InstrMCP extension:
 %load_ext instrmcp.extensions
 
 # Now use the magic commands:
-%mcp_start        # Start MCP server
-%mcp_status       # Check server status  
-%mcp_unsafe       # Enable unsafe mode (code execution)
-%mcp_safe         # Return to safe mode
-%mcp_restart      # Restart server
-%mcp_close        # Stop server
+%mcp_start                          # Start MCP server
+%mcp_status                         # Check server status
+%mcp_unsafe                         # Enable unsafe mode (code execution)
+%mcp_safe                           # Return to safe mode
+
+# Optional features (restart required after changes)
+%mcp_option add measureit database  # Enable MeasureIt templates and database integration
+%mcp_option remove measureit        # Disable MeasureIt templates
+%mcp_option list                    # Show enabled optional features
+%mcp_restart                        # Restart server to apply changes
+%mcp_close                          # Stop server
 ```
 
 #### CLI Server Management
@@ -127,16 +145,51 @@ instrmcp/
 - **Professional Drivers**: Full QCodes driver ecosystem support
 
 ### Available MCP Tools
-- `all_instr_health()` - Station-wide instrument status
-- `inst_health(name)` - Single instrument snapshot  
-- `load_instrument(name)` - Load instrument from configuration
-- `station_info()` - General station information
-- `get_editing_cell()` - Current JupyterLab cell content
+
+**QCodes Instrument Tools:**
+- `instrument_info(name, with_values)` - Get instrument details and parameter values
+- `get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
+
+**Jupyter Integration Tools:**
+- `list_variables(type_filter)` - List notebook variables by type
+- `get_variable_info(name)` - Detailed variable information
+- `get_editing_cell_output()` - Get output of the most recently executed cell (detects running cells)
+- `get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
+- `get_editing_cell(fresh_ms)` - Current JupyterLab cell content
+- `update_editing_cell(content)` - Update current cell content
 - `execute_editing_cell()` - Execute current cell (unsafe mode only)
+- `server_status()` - Check server mode and status
+
+**Database Integration Tools** *(Optional - requires `%mcp_option add database`):*
+- `list_experiments()` - List all experiments in the current QCodes database
+- `query_datasets(filters...)` - Query datasets with optional filters (experiment, sample, date range, run ID)
+- `get_dataset_info(identifiers...)` - Get detailed information about a specific dataset
+- `get_database_stats()` - Get database statistics and health information
+- `suggest_database_setup(params...)` - Generate database initialization code
+- `suggest_measurement_from_history(reference...)` - Generate measurement code based on historical data patterns
 
 ### Resources
-- `available_instr` - JSON list of configured instruments
+
+**QCodes Resources:**
+- `available_instruments` - JSON list of available QCodes instruments with hierarchical parameter structure
+- `station_state` - Current QCodes station snapshot without parameter values
+
+**Jupyter Resources:**
 - `notebook_cells` - All notebook cell contents
+
+**MeasureIt Resources** *(Optional - requires `%mcp_option add measureit`):*
+- `measureit_sweep0d_template` - Sweep0D code examples for time-based monitoring
+- `measureit_sweep1d_template` - Sweep1D code examples for single parameter sweeps
+- `measureit_sweep2d_template` - Sweep2D code examples for 2D parameter mapping
+- `measureit_simulsweep_template` - SimulSweep code examples for simultaneous parameter sweeping
+- `measureit_sweepqueue_template` - SweepQueue code examples for sequential measurement workflows
+- `measureit_common_patterns` - Common MeasureIt patterns and best practices
+- `measureit_code_examples` - Complete collection of ALL MeasureIt patterns in structured format
+
+**Database Resources** *(Optional - requires `%mcp_option add database`):*
+- `database_config` - Current QCodes database configuration, path, and connection status
+- `recent_measurements` - Metadata for recent measurements across all experiments
+- `measurement_templates` - Common measurement patterns and templates extracted from historical data
 
 ## 📝 Configuration Example
 

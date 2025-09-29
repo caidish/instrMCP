@@ -372,10 +372,10 @@ class QCodesReadOnlyTools:
         
         return enhanced_snapshot
     
-    async def get_parameter_value(self, instrument_name: str, parameter_name: str, 
-                                fresh: bool = False) -> Dict[str, Any]:
-        """Get parameter value with caching and rate limiting.
-        
+    async def _get_single_parameter_value(self, instrument_name: str, parameter_name: str,
+                                        fresh: bool = False) -> Dict[str, Any]:
+        """Internal method to get a single parameter value with caching and rate limiting.
+
         Args:
             instrument_name: Name of the instrument
             parameter_name: Parameter path (supports hierarchical paths like "ch01.voltage")
@@ -383,10 +383,10 @@ class QCodesReadOnlyTools:
         """
         key = self._make_cache_key(instrument_name, parameter_name)
         now = time.time()
-        
+
         # Check cache first
         cached = await self.cache.get(key)
-        
+
         if not fresh and cached:
             value, timestamp = cached
             return {
@@ -396,7 +396,7 @@ class QCodesReadOnlyTools:
                 "source": "cache",
                 "stale": False
             }
-        
+
         # Check rate limiting
         if cached and not await self.rate_limiter.can_access(instrument_name):
             value, timestamp = cached
@@ -408,18 +408,18 @@ class QCodesReadOnlyTools:
                 "stale": True,
                 "message": f"Rate limited (min interval: {self.min_interval_s}s)"
             }
-        
+
         # Read fresh value from hardware
         try:
             async with self.rate_limiter.get_instrument_lock(instrument_name):
                 await self.rate_limiter.wait_if_needed(instrument_name)
-                
+
                 value = await self._read_parameter_live(instrument_name, parameter_name)
                 read_time = time.time()
-                
+
                 await self.cache.set(key, value, read_time)
                 await self.rate_limiter.record_access(instrument_name)
-                
+
                 return {
                     "value": value,
                     "timestamp": read_time,
@@ -427,10 +427,10 @@ class QCodesReadOnlyTools:
                     "source": "live",
                     "stale": False
                 }
-        
+
         except Exception as e:
             logger.error(f"Error reading {instrument_name}.{parameter_name}: {e}")
-            
+
             # Fall back to cached value if available
             if cached:
                 value, timestamp = cached
@@ -444,28 +444,54 @@ class QCodesReadOnlyTools:
                 }
             else:
                 raise
-    
-    async def get_parameter_values(self, queries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Get multiple parameter values in batch."""
+
+    async def get_parameter_values(self, queries: Union[List[Dict[str, Any]], Dict[str, Any]]) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+        """Get parameter values - supports both single parameter and batch queries.
+
+        Args:
+            queries: Single query dict or list of query dicts
+                    Single: {"instrument": "name", "parameter": "param", "fresh": false}
+                    Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
+
+        Returns:
+            Single result dict or list of result dicts
+        """
+        # Handle single query case
+        if isinstance(queries, dict):
+            try:
+                result = await self._get_single_parameter_value(
+                    queries["instrument"],
+                    queries["parameter"],
+                    queries.get("fresh", False)
+                )
+                result["query"] = queries
+                return result
+            except Exception as e:
+                return {
+                    "query": queries,
+                    "error": str(e),
+                    "source": "error"
+                }
+
+        # Handle batch query case
         results = []
-        
         for query in queries:
             try:
-                result = await self.get_parameter_value(
+                result = await self._get_single_parameter_value(
                     query["instrument"],
                     query["parameter"],
                     query.get("fresh", False)
                 )
                 result["query"] = query
                 results.append(result)
-                
+
             except Exception as e:
                 results.append({
                     "query": query,
                     "error": str(e),
                     "source": "error"
                 })
-        
+
         return results
     
     async def station_snapshot(self) -> Dict[str, Any]:
@@ -694,55 +720,283 @@ class QCodesReadOnlyTools:
                 "source": "error",
                 "warning": "UNSAFE: Attempted to execute code but failed"
             }
+
+    async def add_new_cell(self, cell_type: str = "code", position: str = "below", content: str = "") -> Dict[str, Any]:
+        """Add a new cell in the notebook.
+
+        UNSAFE: This tool adds new cells to the notebook. The cell will be created
+        relative to the currently active cell.
+
+        Args:
+            cell_type: Type of cell to create ("code", "markdown", "raw")
+            position: Position relative to active cell ("above", "below")
+            content: Initial content for the new cell
+
+        Returns:
+            Dictionary with creation status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send add cell request to frontend
+            result = active_cell_bridge.add_new_cell(cell_type, position, content)
+
+            # Add metadata
+            result.update({
+                "source": "add_new_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: New cell was added to the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in add_new_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to add cell but failed"
+            }
+
+    async def delete_editing_cell(self) -> Dict[str, Any]:
+        """Delete the currently editing cell.
+
+        UNSAFE: This tool deletes the currently active cell from the notebook.
+        Use with caution as this action cannot be undone easily.
+
+        Returns:
+            Dictionary with deletion status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send delete cell request to frontend
+            result = active_cell_bridge.delete_editing_cell()
+
+            # Add metadata
+            result.update({
+                "source": "delete_editing_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cell was deleted from the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in delete_editing_cell: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to delete cell but failed"
+            }
+
+    async def apply_patch(self, old_text: str, new_text: str) -> Dict[str, Any]:
+        """Apply a patch to the current cell content.
+
+        UNSAFE: This tool modifies the content of the currently active cell by
+        replacing the first occurrence of old_text with new_text.
+
+        Args:
+            old_text: Text to find and replace
+            new_text: Text to replace with
+
+        Returns:
+            Dictionary with patch status and response details
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send patch request to frontend
+            result = active_cell_bridge.apply_patch(old_text, new_text)
+
+            # Add metadata
+            result.update({
+                "source": "apply_patch",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cell content was modified via patch"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in apply_patch: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "warning": "UNSAFE: Attempted to apply patch but failed"
+            }
+
+    async def delete_cells_by_number(self, cell_numbers: List[int]) -> Dict[str, Any]:
+        """Delete multiple cells by their execution count numbers.
+
+        UNSAFE: This tool deletes cells from the notebook by their execution count.
+        Use with caution as this action cannot be undone easily.
+
+        Args:
+            cell_numbers: List of execution count numbers (e.g., [1, 2, 5])
+
+        Returns:
+            Dictionary with deletion status and detailed results for each cell
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send delete cells by number request to frontend
+            result = active_cell_bridge.delete_cells_by_number(cell_numbers)
+
+            # Add metadata
+            result.update({
+                "source": "delete_cells_by_number",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cells were deleted from the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in delete_cells_by_number: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "cell_numbers_requested": cell_numbers,
+                "warning": "UNSAFE: Attempted to delete cells but failed"
+            }
+
+    # # Subscription tools
     
-    # Subscription tools
-    
-    async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 
-                                interval_s: float = 1.0) -> Dict[str, Any]:
-        """Subscribe to periodic parameter updates."""
-        # Validate parameters
-        self._get_parameter(instrument_name, parameter_name)
+    # async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 
+    #                             interval_s: float = 1.0) -> Dict[str, Any]:
+    #     """Subscribe to periodic parameter updates."""
+    #     # Validate parameters
+    #     self._get_parameter(instrument_name, parameter_name)
         
-        # Create a parameter reader function
-        async def get_param_func(inst_name, param_name):
-            return await self._read_parameter_live(inst_name, param_name)
+    #     # Create a parameter reader function
+    #     async def get_param_func(inst_name, param_name):
+    #         return await self._read_parameter_live(inst_name, param_name)
         
-        await self.poller.subscribe(
-            instrument_name, parameter_name, interval_s, get_param_func
-        )
+    #     await self.poller.subscribe(
+    #         instrument_name, parameter_name, interval_s, get_param_func
+    #     )
         
-        return {
-            "instrument": instrument_name,
-            "parameter": parameter_name,
-            "interval_s": interval_s,
-            "status": "subscribed"
-        }
+    #     return {
+    #         "instrument": instrument_name,
+    #         "parameter": parameter_name,
+    #         "interval_s": interval_s,
+    #         "status": "subscribed"
+    #     }
     
-    async def unsubscribe_parameter(self, instrument_name: str, parameter_name: str) -> Dict[str, Any]:
-        """Unsubscribe from parameter updates."""
-        await self.poller.unsubscribe(instrument_name, parameter_name)
+    # async def unsubscribe_parameter(self, instrument_name: str, parameter_name: str) -> Dict[str, Any]:
+    #     """Unsubscribe from parameter updates."""
+    #     await self.poller.unsubscribe(instrument_name, parameter_name)
         
-        return {
-            "instrument": instrument_name,
-            "parameter": parameter_name,
-            "status": "unsubscribed"
-        }
+    #     return {
+    #         "instrument": instrument_name,
+    #         "parameter": parameter_name,
+    #         "status": "unsubscribed"
+    #     }
     
-    async def list_subscriptions(self) -> Dict[str, Any]:
-        """List current parameter subscriptions."""
-        return self.poller.get_subscriptions()
+    # async def list_subscriptions(self) -> Dict[str, Any]:
+    #     """List current parameter subscriptions."""
+    #     return self.poller.get_subscriptions()
     
-    # System tools
+    # # System tools
     
-    async def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        return await self.cache.get_stats()
+    # async def get_cache_stats(self) -> Dict[str, Any]:
+    #     """Get cache statistics."""
+    #     return await self.cache.get_stats()
     
-    async def clear_cache(self) -> Dict[str, Any]:
-        """Clear the parameter cache."""
-        await self.cache.clear()
-        return {"status": "cache_cleared"}
+    # async def clear_cache(self) -> Dict[str, Any]:
+    #     """Clear the parameter cache."""
+    #     await self.cache.clear()
+    #     return {"status": "cache_cleared"}
     
+    async def get_measureit_status(self) -> Dict[str, Any]:
+        """Check if any MeasureIt sweep is currently running.
+
+        Returns information about active MeasureIt sweeps in the notebook namespace,
+        including sweep type, status, and basic configuration if available.
+
+        Returns:
+            Dict containing:
+                - running: bool - whether any sweep is active
+                - sweeps: List of active sweep information
+                - error: str (if any error occurred)
+        """
+        try:
+            import inspect
+
+            result = {
+                "running": False,
+                "sweeps": [],
+                "checked_variables": []
+            }
+
+            # Look for MeasureIt sweep objects in the namespace
+            for var_name, var_value in self.namespace.items():
+                # Skip private/internal variables
+                if var_name.startswith('_'):
+                    continue
+
+                # Check if this is a MeasureIt sweep object
+                type_name = type(var_value).__name__
+                module_name = type(var_value).__module__ if hasattr(type(var_value), '__module__') else ""
+
+                # Look for MeasureIt sweep types
+                if 'measureit' in module_name.lower() or any(sweep_type in type_name for sweep_type in ['Sweep0D', 'Sweep1D', 'Sweep2D', 'SimulSweep', 'SweepQueue']):
+                    result["checked_variables"].append(var_name)
+
+                    sweep_info = {
+                        "variable_name": var_name,
+                        "type": type_name,
+                        "module": module_name
+                    }
+
+                    # Try to get sweep status/configuration
+                    try:
+                        # Check for common MeasureIt attributes
+                        if hasattr(var_value, 'is_running'):
+                            sweep_info["is_running"] = bool(var_value.is_running)
+                            if var_value.is_running:
+                                result["running"] = True
+
+                        if hasattr(var_value, 'running'):
+                            sweep_info["running"] = bool(var_value.running)
+                            if var_value.running:
+                                result["running"] = True
+
+                        if hasattr(var_value, 'get_status'):
+                            sweep_info["status"] = str(var_value.get_status())
+
+                        # Get sweep configuration if available
+                        if hasattr(var_value, 'num_points'):
+                            sweep_info["num_points"] = var_value.num_points
+
+                        if hasattr(var_value, 'delay'):
+                            sweep_info["delay"] = var_value.delay
+
+                    except Exception as attr_error:
+                        sweep_info["attribute_error"] = str(attr_error)
+
+                    result["sweeps"].append(sweep_info)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error checking MeasureIt status: {e}")
+            return {
+                "running": False,
+                "sweeps": [],
+                "error": str(e)
+            }
+
     async def cleanup(self):
         """Clean up resources."""
         await self.poller.stop_all()
