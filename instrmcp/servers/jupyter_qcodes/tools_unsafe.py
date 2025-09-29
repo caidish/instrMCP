@@ -33,6 +33,7 @@ class UnsafeToolRegistrar:
         self._register_execute_cell()
         self._register_add_cell()
         self._register_delete_cell()
+        self._register_delete_cells()
         self._register_apply_patch()
 
     def _register_execute_cell(self):
@@ -44,6 +45,9 @@ class UnsafeToolRegistrar:
 
             UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
             The code will run in the frontend with output appearing in the notebook.
+
+            After execution, use notebook/get_editing_cell_output to retrieve the execution result,
+            including any output or errors from the cell.
             """
             try:
                 result = await self.tools.execute_editing_cell()
@@ -95,6 +99,54 @@ class UnsafeToolRegistrar:
             except Exception as e:
                 logger.error(f"Error in notebook/delete_cell: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+
+    def _register_delete_cells(self):
+        """Register the notebook/delete_cells tool."""
+
+        @self.mcp.tool(name="notebook/delete_cells")
+        async def delete_cells_by_number(cell_numbers: str) -> List[TextContent]:
+            """Delete multiple cells by their execution count numbers.
+
+            UNSAFE: This tool deletes cells from the notebook by their execution counts.
+            Only available in unsafe mode. Use with caution as this action cannot be undone easily.
+
+            Args:
+                cell_numbers: JSON string containing a list of execution count numbers to delete.
+                             Example: "[1, 2, 5]" to delete cells 1, 2, and 5
+                             Can also be a single number: "3"
+
+            Returns:
+                JSON with deletion status and detailed results for each cell, including:
+                - success: Overall operation success
+                - deleted_count: Number of cells actually deleted
+                - total_requested: Number of cells requested to delete
+                - results: List with status for each cell number
+            """
+            try:
+                # Parse cell_numbers - can be either single int or list
+                import json as json_module
+                try:
+                    parsed = json_module.loads(cell_numbers)
+                    if isinstance(parsed, int):
+                        cell_list = [parsed]
+                    elif isinstance(parsed, list):
+                        cell_list = parsed
+                    else:
+                        return [TextContent(type="text", text=json_module.dumps({
+                            "success": False,
+                            "error": "cell_numbers must be an integer or list of integers"
+                        }, indent=2))]
+                except json_module.JSONDecodeError:
+                    return [TextContent(type="text", text=json_module.dumps({
+                        "success": False,
+                        "error": f"Invalid JSON format: {cell_numbers}"
+                    }, indent=2))]
+
+                result = await self.tools.delete_cells_by_number(cell_list)
+                return [TextContent(type="text", text=json_module.dumps(result, indent=2, default=str))]
+            except Exception as e:
+                logger.error(f"Error in notebook/delete_cells: {e}")
+                return [TextContent(type="text", text=json_module.dumps({"error": str(e)}, indent=2))]
 
     def _register_apply_patch(self):
         """Register the notebook/apply_patch tool."""

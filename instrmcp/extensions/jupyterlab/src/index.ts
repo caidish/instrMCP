@@ -394,6 +394,141 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Handle delete cells by number requests from kernel
+    const handleDeleteCellsByNumber = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const cellNumbers = data.cell_numbers || [];
+
+      try {
+        const panel = notebooks.currentWidget;
+
+        if (!panel) {
+          comm.send({
+            type: 'delete_cells_by_number_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+
+        if (!Array.isArray(cellNumbers) || cellNumbers.length === 0) {
+          comm.send({
+            type: 'delete_cells_by_number_response',
+            request_id: requestId,
+            success: false,
+            message: 'cell_numbers must be a non-empty array'
+          });
+          return;
+        }
+
+        const notebook = panel.content;
+        const cells = notebook.model?.cells;
+
+        if (!cells) {
+          comm.send({
+            type: 'delete_cells_by_number_response',
+            request_id: requestId,
+            success: false,
+            message: 'Cannot access notebook cells'
+          });
+          return;
+        }
+
+        // Map execution counts to cell indices
+        const executionCountToIndex = new Map<number, number>();
+        for (let i = 0; i < cells.length; i++) {
+          const cellModel = cells.get(i);
+          const execCount = (cellModel as any).executionCount;
+          if (execCount != null) {
+            executionCountToIndex.set(execCount, i);
+          }
+        }
+
+        const results: any[] = [];
+        const indicesToDelete: number[] = [];
+
+        // Validate all cell numbers and collect indices
+        for (const cellNum of cellNumbers) {
+          if (!executionCountToIndex.has(cellNum)) {
+            results.push({
+              cell_number: cellNum,
+              success: false,
+              message: `Cell with execution count ${cellNum} not found`
+            });
+          } else {
+            const index = executionCountToIndex.get(cellNum)!;
+            indicesToDelete.push(index);
+            results.push({
+              cell_number: cellNum,
+              index: index,
+              success: true
+            });
+          }
+        }
+
+        // Sort indices in descending order to delete from bottom to top
+        // This prevents index shifting issues
+        indicesToDelete.sort((a, b) => b - a);
+
+        // Delete cells
+        let deletedCount = 0;
+        let clearedCount = 0;
+
+        for (const index of indicesToDelete) {
+          try {
+            // Check if this is the last cell
+            if (cells.length === 1) {
+              // Clear content instead of deleting
+              const cellModel = cells.get(index);
+              if (cellModel) {
+                cellModel.sharedModel.setSource('');
+                const resultIndex = results.findIndex(r => r.index === index);
+                if (resultIndex !== -1) {
+                  results[resultIndex].message = 'Last cell - content cleared instead of deleted';
+                  results[resultIndex].cleared = true;
+                }
+                clearedCount++;
+              }
+            } else {
+              // Use the notebook model's method to remove cells
+              notebook.model?.sharedModel.deleteCell(index);
+              deletedCount++;
+            }
+          } catch (error) {
+            const resultIndex = results.findIndex(r => r.index === index);
+            if (resultIndex !== -1) {
+              results[resultIndex].success = false;
+              results[resultIndex].message = `Failed to delete: ${error}`;
+            }
+          }
+        }
+
+        // Send success response
+        comm.send({
+          type: 'delete_cells_by_number_response',
+          request_id: requestId,
+          success: true,
+          deleted_count: deletedCount,
+          total_requested: cellNumbers.length,
+          results: results,
+          message: `Deleted ${deletedCount} cell(s)`
+        });
+
+        console.log(`MCP Active Cell Bridge: Deleted ${deletedCount} cells by number`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to delete cells by number:', error);
+
+        comm.send({
+          type: 'delete_cells_by_number_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to delete cells: ${error}`
+        });
+      }
+    };
+
     // Ensure comm connection exists for a kernel
     const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
@@ -439,6 +574,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleAddCell(kernel, comm, data);
               } else if (msgType === 'delete_cell') {
                 handleDeleteCell(kernel, comm, data);
+              } else if (msgType === 'delete_cells_by_number') {
+                handleDeleteCellsByNumber(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
               } else {

@@ -832,6 +832,44 @@ class QCodesReadOnlyTools:
                 "warning": "UNSAFE: Attempted to apply patch but failed"
             }
 
+    async def delete_cells_by_number(self, cell_numbers: List[int]) -> Dict[str, Any]:
+        """Delete multiple cells by their execution count numbers.
+
+        UNSAFE: This tool deletes cells from the notebook by their execution count.
+        Use with caution as this action cannot be undone easily.
+
+        Args:
+            cell_numbers: List of execution count numbers (e.g., [1, 2, 5])
+
+        Returns:
+            Dictionary with deletion status and detailed results for each cell
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Send delete cells by number request to frontend
+            result = active_cell_bridge.delete_cells_by_number(cell_numbers)
+
+            # Add metadata
+            result.update({
+                "source": "delete_cells_by_number",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Cells were deleted from the notebook"
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in delete_cells_by_number: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "cell_numbers_requested": cell_numbers,
+                "warning": "UNSAFE: Attempted to delete cells but failed"
+            }
+
     # # Subscription tools
     
     # async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 

@@ -119,12 +119,16 @@ class NotebookToolRegistrar:
 
         @self.mcp.tool(name="notebook/get_editing_cell_output")
         async def get_editing_cell_output() -> List[TextContent]:
-            """Get the output of the most recently executed cell.
+            """Get the output of the most recently executed cell, including errors.
 
             This tool retrieves the output from the last executed cell in the notebook.
             If a cell is currently running, it will indicate that status instead.
+            If a cell raised an error, the error information will be included.
             """
             try:
+                import sys
+                import traceback
+
                 # Use IPython's In/Out cache to get the last executed cell
                 if hasattr(self.ipython, 'user_ns'):
                     In = self.ipython.user_ns.get('In', [])
@@ -146,6 +150,7 @@ class NotebookToolRegistrar:
                                 "status": "running",
                                 "message": "Cell is currently executing - no output available yet",
                                 "has_output": False,
+                                "has_error": False,
                                 "output": None
                             }
                             return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
@@ -161,20 +166,56 @@ class NotebookToolRegistrar:
                                         "input": In[i],
                                         "status": "completed",
                                         "output": str(Out[i]),
-                                        "has_output": True
+                                        "has_output": True,
+                                        "has_error": False
                                     }
                                     return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
                                 elif i < current_execution_count:
                                     # Cell was executed but produced no output
-                                    cell_info = {
-                                        "cell_number": i,
-                                        "execution_count": i,
-                                        "input": In[i],
-                                        "status": "completed_no_output",
-                                        "message": "Cell executed successfully but produced no output",
-                                        "output": None,
-                                        "has_output": False
-                                    }
+                                    # Check if this was due to an error
+                                    has_error = False
+                                    error_info = None
+
+                                    # Check sys.last_* for most recent exception
+                                    if (hasattr(sys, 'last_type') and
+                                        hasattr(sys, 'last_value') and
+                                        hasattr(sys, 'last_traceback') and
+                                        sys.last_type is not None):
+                                        # We can only know if this cell raised the last exception
+                                        # by checking if it's the most recent executed cell
+                                        if i == latest_cell_num:
+                                            has_error = True
+                                            error_info = {
+                                                "type": sys.last_type.__name__,
+                                                "message": str(sys.last_value),
+                                                "traceback": ''.join(traceback.format_exception(
+                                                    sys.last_type, sys.last_value, sys.last_traceback
+                                                ))
+                                            }
+
+                                    if has_error:
+                                        cell_info = {
+                                            "cell_number": i,
+                                            "execution_count": i,
+                                            "input": In[i],
+                                            "status": "error",
+                                            "message": "Cell raised an exception",
+                                            "output": None,
+                                            "has_output": False,
+                                            "has_error": True,
+                                            "error": error_info
+                                        }
+                                    else:
+                                        cell_info = {
+                                            "cell_number": i,
+                                            "execution_count": i,
+                                            "input": In[i],
+                                            "status": "completed_no_output",
+                                            "message": "Cell executed successfully but produced no output",
+                                            "output": None,
+                                            "has_output": False,
+                                            "has_error": False
+                                        }
                                     return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
 
                 # Fallback: no recent executed cells
@@ -182,7 +223,8 @@ class NotebookToolRegistrar:
                     "status": "no_cells",
                     "error": "No recently executed cells found",
                     "message": "Execute a cell first to see its output",
-                    "has_output": False
+                    "has_output": False,
+                    "has_error": False
                 }
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -195,14 +237,33 @@ class NotebookToolRegistrar:
 
         @self.mcp.tool(name="notebook/get_notebook_cells")
         async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> List[TextContent]:
-            """Get recent notebook cells with input and output.
+            """Get recent notebook cells with input, output, and error information.
 
             Args:
                 num_cells: Number of recent cells to retrieve (default: 2 for performance)
-                include_output: Include cell outputs (default: True)
+                include_output: Include cell outputs and errors (default: True)
             """
             try:
+                import sys
+                import traceback
+
                 cells = []
+                current_execution_count = getattr(self.ipython, 'execution_count', 0)
+
+                # Track last error info (only most recent is available)
+                last_error_info = None
+                latest_cell_with_error = None
+                if (hasattr(sys, 'last_type') and
+                    hasattr(sys, 'last_value') and
+                    hasattr(sys, 'last_traceback') and
+                    sys.last_type is not None):
+                    last_error_info = {
+                        "type": sys.last_type.__name__,
+                        "message": str(sys.last_value),
+                        "traceback": ''.join(traceback.format_exception(
+                            sys.last_type, sys.last_value, sys.last_traceback
+                        ))
+                    }
 
                 # Method 1: Use IPython's In/Out cache (fastest for recent cells)
                 if hasattr(self.ipython, 'user_ns'):
@@ -212,18 +273,44 @@ class NotebookToolRegistrar:
                     # Get the last num_cells entries
                     if len(In) > 1:  # In[0] is empty
                         start_idx = max(1, len(In) - num_cells)
+                        latest_executed = len(In) - 1
+
+                        # The most recent error corresponds to the latest executed cell
+                        # that doesn't have output
+                        if last_error_info and latest_executed not in Out and latest_executed < current_execution_count:
+                            latest_cell_with_error = latest_executed
+
                         for i in range(start_idx, len(In)):
                             if i < len(In) and In[i]:  # Skip empty entries
                                 cell_info = {
                                     "cell_number": i,
                                     "execution_count": i,
-                                    "input": In[i]
+                                    "input": In[i],
+                                    "has_error": False
                                 }
-                                if include_output and i in Out:
-                                    cell_info["output"] = str(Out[i])
-                                    cell_info["has_output"] = True
+
+                                if include_output:
+                                    if i in Out:
+                                        # Cell has output
+                                        cell_info["output"] = str(Out[i])
+                                        cell_info["has_output"] = True
+                                    elif i == latest_cell_with_error and last_error_info:
+                                        # Cell raised the most recent error
+                                        cell_info["has_output"] = False
+                                        cell_info["has_error"] = True
+                                        cell_info["error"] = last_error_info
+                                        cell_info["status"] = "error"
+                                    elif i < current_execution_count:
+                                        # Cell executed but has no output (and no known error)
+                                        cell_info["has_output"] = False
+                                        cell_info["status"] = "completed_no_output"
+                                    else:
+                                        # Cell not yet executed
+                                        cell_info["has_output"] = False
+                                        cell_info["status"] = "not_executed"
                                 else:
                                     cell_info["has_output"] = False
+
                                 cells.append(cell_info)
 
                 # Method 2: Fallback to history_manager if In/Out not available
@@ -249,22 +336,29 @@ class NotebookToolRegistrar:
                                     "execution_count": line_num,
                                     "input": input_text,
                                     "output": str(output_text) if output_text else None,
-                                    "has_output": output_text is not None
+                                    "has_output": output_text is not None,
+                                    "has_error": False  # Can't determine from history_manager
                                 })
                             else:
                                 cells.append({
                                     "cell_number": line_num,
                                     "execution_count": line_num,
                                     "input": content,
-                                    "has_output": False
+                                    "has_output": False,
+                                    "has_error": False  # Can't determine from history_manager
                                 })
                     except Exception as hist_error:
                         logger.warning(f"History manager fallback failed: {hist_error}")
 
+                # Count cells with errors
+                error_count = sum(1 for cell in cells if cell.get("has_error", False))
+
                 result = {
                     "cells": cells,
                     "count": len(cells),
-                    "requested": num_cells
+                    "requested": num_cells,
+                    "error_count": error_count,
+                    "note": "Only the most recent error can be captured. Older errors are not available."
                 }
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]

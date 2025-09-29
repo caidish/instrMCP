@@ -8,7 +8,7 @@ the currently editing cell content via Jupyter comm protocol.
 import time
 import threading
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from IPython import get_ipython
 
 logger = logging.getLogger(__name__)
@@ -533,4 +533,75 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
         "warning": "UNSAFE: Cell content was modified via patch"
+    }
+
+
+def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Delete multiple cells by their execution count numbers.
+
+    This function sends a request to the JupyterLab frontend to delete cells
+    identified by their execution counts.
+
+    Args:
+        cell_numbers: List of execution count numbers to delete (e.g., [1, 2, 5])
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with deletion status and detailed results for each cell
+    """
+    import uuid
+
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+
+    if not isinstance(cell_numbers, list) or len(cell_numbers) == 0:
+        return {
+            "success": False,
+            "error": "cell_numbers must be a non-empty list"
+        }
+
+    request_id = str(uuid.uuid4())
+
+    # Send delete cells by number request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send({
+                "type": "delete_cells_by_number",
+                "cell_numbers": cell_numbers,
+                "request_id": request_id
+            })
+            successful_sends += 1
+            logger.debug(f"Sent delete_cells_by_number request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(f"Failed to send delete_cells_by_number request to comm {comm.comm_id}: {e}")
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send delete request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+
+    # Wait for response
+    start_time = time.time()
+    while time.time() - start_time < timeout_s:
+        time.sleep(0.05)  # 50ms polling
+        # Note: responses are handled in the comm message handler
+        pass
+
+    return {
+        "success": True,
+        "message": f"Delete request sent to {successful_sends} frontend(s)",
+        "cell_numbers": cell_numbers,
+        "total_requested": len(cell_numbers),
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
+        "warning": "UNSAFE: Cells deletion requested - check notebook for results"
     }

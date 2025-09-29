@@ -230,3 +230,101 @@ Consider revisiting only if:
 - **Safety**: Think about safe mode vs unsafe mode implications
 - **Long-running**: Consider how to handle long-running measurements
 - **Plotting**: Think about real-time plot integration
+
+## Phase 9: Enhanced Cell Error Handling & Batch Cell Management ✅ COMPLETED
+
+### 9.1 ✅ Error Tracking for Notebook Tools - COMPLETED
+
+**Status**: Implemented error capture using Python's sys.last_* exception tracking
+
+**Changes Made**:
+- [x] Enhanced `notebook/get_editing_cell_output` to capture exceptions
+  - Now detects cells that raised errors vs cells with no output
+  - Returns error type, message, and full traceback
+  - New status types: `"error"`, `"completed"`, `"completed_no_output"`, `"running"`
+  - Includes `has_error` boolean and `error` object with details
+
+- [x] Enhanced `notebook/get_notebook_cells` to detect error cells
+  - Checks sys.last_* to identify most recent error
+  - Adds `has_error` field to each cell
+  - Includes `error_count` in response metadata
+  - Note: Only most recent error trackable due to Python limitations
+
+**Implementation Details**:
+- Uses `sys.last_type`, `sys.last_value`, `sys.last_traceback` for error detection
+- Falls back gracefully when error information unavailable
+- Compatible with both In/Out cache and history_manager methods
+- Error information formatted as JSON with type, message, and traceback
+
+**Benefits**:
+- AI can now see which cells failed and why
+- Better debugging assistance with full error context
+- Complete notebook history including successes and failures
+
+### 9.2 ✅ Batch Cell Deletion Tool - COMPLETED
+
+**Status**: Implemented `notebook/delete_cells` tool for deleting multiple cells by execution count
+
+**New Tool**: `notebook/delete_cells(cell_numbers: str)`
+- **Type**: UNSAFE - only available in unsafe mode
+- **Input**: JSON string with list of execution counts: `"[1, 2, 5]"` or single number: `"3"`
+- **Output**: Detailed deletion results for each cell
+
+**Implementation Stack**:
+1. **JupyterLab Extension** (`index.ts`):
+   - Added `handleDeleteCellsByNumber()` handler
+   - Maps execution counts to cell indices
+   - Validates all cells before deletion
+   - Deletes in descending order (prevents index shifts)
+   - Clears last cell instead of deleting it
+   - Returns per-cell results
+
+2. **Python Bridge** (`active_cell_bridge.py`):
+   - Added `delete_cells_by_number()` function
+   - Sends requests via comm protocol
+   - Handles timeout and error cases
+
+3. **Tools Layer** (`tools.py`):
+   - Added `delete_cells_by_number()` method
+   - Wraps bridge function with metadata
+
+4. **MCP Registrar** (`tools_unsafe.py`):
+   - Added `_register_delete_cells()` method
+   - Handles JSON parsing (supports both int and list)
+   - Registered as `notebook/delete_cells` tool
+
+5. **STDIO Proxy** (`stdio_proxy.py`):
+   - Added proxy for Claude Desktop/Code integration
+
+**Safety Features**:
+- UNSAFE mode required
+- Validates cell numbers exist
+- Won't delete if it's the last cell (clears content instead)
+- Returns detailed status for each deletion attempt
+- Clear warnings in all responses
+
+### 9.3 ✅ Documentation Updates - COMPLETED
+
+- [x] Updated `notebook/execute_cell` docstring to reference `get_editing_cell_output`
+- [x] Added Phase 9 to TODO.md with full implementation details
+- [ ] Update CLAUDE.md with new tool and enhanced capabilities
+
+**Files Modified**:
+1. `instrmcp/servers/jupyter_qcodes/registrars/notebook_tools.py` - Error tracking
+2. `instrmcp/servers/jupyter_qcodes/tools_unsafe.py` - Delete cells registrar
+3. `instrmcp/servers/jupyter_qcodes/tools.py` - Delete cells method
+4. `instrmcp/servers/jupyter_qcodes/active_cell_bridge.py` - Bridge function
+5. `instrmcp/extensions/jupyterlab/src/index.ts` - Frontend handler
+6. `instrmcp/tools/stdio_proxy.py` - Proxy for delete_cells
+7. `agent_TODO_histrory/TODO.md` - Phase 9 documentation
+
+**Testing Checklist**:
+- [ ] Test error capture with cells that raise exceptions
+- [ ] Test error capture with cells that have no output
+- [ ] Test delete_cells with single cell number
+- [ ] Test delete_cells with list of cell numbers
+- [ ] Test delete_cells with invalid cell numbers
+- [ ] Test delete_cells with last cell (should clear, not delete)
+- [ ] Verify execute_cell → get_editing_cell_output workflow
+
+**Summary**: Phase 9 significantly enhances the notebook integration by adding error tracking and batch cell management. The error tracking provides complete visibility into cell execution status, while batch deletion enables efficient notebook cleanup operations.

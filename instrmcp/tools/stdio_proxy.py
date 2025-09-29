@@ -285,6 +285,11 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         result = await proxy.call("notebook/delete_cell")
         return [TextContent(type="text", text=str(result))]
 
+    @mcp.tool(name="notebook/delete_cells")
+    async def delete_cells_by_number(cell_numbers: str) -> list[TextContent]:
+        result = await proxy.call("notebook/delete_cells", cell_numbers=cell_numbers)
+        return [TextContent(type="text", text=str(result))]
+
     @mcp.tool(name="notebook/apply_patch")
     async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
         result = await proxy.call("notebook/apply_patch", old_text=old_text, new_text=new_text)
