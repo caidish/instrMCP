@@ -56,12 +56,19 @@ def _on_comm_open(comm, open_msg):
             # Response to our ping request
             logger.debug("Received pong from frontend")
 
-        elif msg_type in ["update_response", "execute_response", "add_cell_response", "delete_cell_response", "apply_patch_response"]:
+        elif msg_type in ["update_response", "execute_response", "add_cell_response", "delete_cell_response", "apply_patch_response", "move_cursor_response"]:
             # Response from frontend for our requests
             request_id = data.get("request_id")
             success = data.get("success", False)
             message = data.get("message", "")
-            logger.info(f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}")
+
+            # Log additional info for move_cursor_response
+            if msg_type == "move_cursor_response" and success:
+                old_index = data.get("old_index")
+                new_index = data.get("new_index")
+                logger.info(f"✅ CURSOR MOVED: {old_index} → {new_index}")
+            else:
+                logger.info(f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}")
             # Note: For now we just log the response, but we could store it for the waiting functions
 
         else:
@@ -209,18 +216,7 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
             "error": "Failed to send update request to any frontend",
             "active_comms": len(_ACTIVE_COMMS)
         }
-    
-    # Wait for response
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.05)  # 50ms polling
-        
-        # Check if we received any responses
-        # Note: responses are handled in the comm message handler
-        # For now, we'll wait for the timeout and return success
-        # A more sophisticated implementation could track responses
-        pass
-    
+
     return {
         "success": True,
         "message": f"Update request sent to {successful_sends} frontend(s)",
@@ -272,17 +268,6 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
             "active_comms": len(_ACTIVE_COMMS)
         }
 
-    # Wait for execution to complete
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.1)  # 100ms polling
-
-        # Check if execution is complete
-        # Note: responses are handled in the comm message handler
-        # For now, we'll wait for the timeout and return success
-        # A more sophisticated implementation could track execution responses
-        pass
-
     return {
         "success": True,
         "message": f"Execution request sent to {successful_sends} frontend(s)",
@@ -318,11 +303,6 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
             "error": "No active comm connections to frontend",
             "active_comms": 0
         }
-
-    # Add small delay to ensure comms are fully ready
-    import time
-    time.sleep(0.1)
-    logger.info("⏱️ Added small delay for comm readiness")
 
     # Validate parameters
     valid_types = {"code", "markdown", "raw"}
@@ -375,16 +355,6 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
             "error": "Failed to send add cell request to any frontend",
             "active_comms": len(_ACTIVE_COMMS)
         }
-
-    # Wait for response
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.05)  # 50ms polling
-
-        # Check if cell was added
-        # Note: responses are handled in the comm message handler
-        # For now, we'll wait for the timeout and return success
-        pass
 
     return {
         "success": True,
@@ -439,16 +409,6 @@ def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
             "error": "Failed to send delete cell request to any frontend",
             "active_comms": len(_ACTIVE_COMMS)
         }
-
-    # Wait for response
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.05)  # 50ms polling
-
-        # Check if cell was deleted
-        # Note: responses are handled in the comm message handler
-        # For now, we'll wait for the timeout and return success
-        pass
 
     return {
         "success": True,
@@ -514,16 +474,6 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
             "active_comms": len(_ACTIVE_COMMS)
         }
 
-    # Wait for response
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.05)  # 50ms polling
-
-        # Check if patch was applied
-        # Note: responses are handled in the comm message handler
-        # For now, we'll wait for the timeout and return success
-        pass
-
     return {
         "success": True,
         "message": f"Patch request sent to {successful_sends} frontend(s)",
@@ -588,13 +538,6 @@ def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> D
             "active_comms": len(_ACTIVE_COMMS)
         }
 
-    # Wait for response
-    start_time = time.time()
-    while time.time() - start_time < timeout_s:
-        time.sleep(0.05)  # 50ms polling
-        # Note: responses are handled in the comm message handler
-        pass
-
     return {
         "success": True,
         "message": f"Delete request sent to {successful_sends} frontend(s)",
@@ -604,4 +547,73 @@ def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> D
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
         "warning": "UNSAFE: Cells deletion requested - check notebook for results"
+    }
+
+
+def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Move cursor to a different cell in the notebook.
+
+    Changes which cell is currently active (selected) in JupyterLab.
+
+    Args:
+        target: Where to move the cursor:
+               - "above": Move to cell above current
+               - "below": Move to cell below current
+               - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with operation status, old index, and new index
+    """
+    import uuid
+
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0
+        }
+
+    # Validate target
+    valid_targets = ["above", "below"]
+    if target not in valid_targets:
+        try:
+            int(target)  # Check if it's a number
+        except ValueError:
+            return {
+                "success": False,
+                "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number"
+            }
+
+    request_id = str(uuid.uuid4())
+
+    # Send move cursor request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send({
+                "type": "move_cursor",
+                "target": str(target),
+                "request_id": request_id
+            })
+            successful_sends += 1
+            logger.debug(f"Sent move_cursor request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(f"Failed to send move_cursor request to comm {comm.comm_id}: {e}")
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send move cursor request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS)
+        }
+
+    return {
+        "success": True,
+        "message": f"Move cursor request sent: {target}",
+        "target": target,
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends
     }

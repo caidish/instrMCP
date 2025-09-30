@@ -1,6 +1,6 @@
 {
   "name": "mcp-active-cell-bridge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "JupyterLab extension to bridge active cell content to MCP server",
   "keywords": [
     "jupyter",
@@ -10,7 +10,8 @@
   "homepage": "https://github.com/caijiaqi/instrMCP",
   "license": "MIT",
   "author": {
-    "name": "InstrMCP Contributors"
+    "name": "Jiaqi Cai",
+    "email": "caidish1234@gmail.com"
   },
   "files": [
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -51,7 +52,7 @@
   "jupyterlab": {
     "extension": true,
     "_build": {
-      "load": "static/remoteEntry.c0c8f310a3ed143b1de5.js",
+      "load": "static/remoteEntry.2d22fa1bf62c43fcd6ee.js",
       "extension": "./extension",
       "style": "./style"
     }

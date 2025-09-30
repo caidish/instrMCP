@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instrmcp"
-version = "0.3.0"
+version = "1.0.0"
 description = "MCP server suite for physics laboratory instrumentation control"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "InstrMCP Team", email = "support@instrmcp.dev"}
+    {name = "Jiaqi Cai", email = "caidish1234@gmail.com"}
 ]
 maintainers = [
-    {name = "InstrMCP Team", email = "support@instrmcp.dev"}
+    {name = "Jiaqi Cai", email = "caidish1234@gmail.com"}
 ]
 keywords = [
     "mcp",

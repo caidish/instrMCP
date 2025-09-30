@@ -394,6 +394,116 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Handle move cursor requests from kernel
+    const handleMoveCursor = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const target = data.target; // "above", "below", or cell execution count number
+
+      try {
+        const panel = notebooks.currentWidget;
+        const notebook = panel?.content;
+
+        if (!panel || !notebook) {
+          comm.send({
+            type: 'move_cursor_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+
+        const cells = notebook.model?.cells;
+        if (!cells || cells.length === 0) {
+          comm.send({
+            type: 'move_cursor_response',
+            request_id: requestId,
+            success: false,
+            message: 'No cells in notebook'
+          });
+          return;
+        }
+
+        const currentIndex = notebook.activeCellIndex;
+        let targetIndex: number;
+
+        // Calculate target index based on input
+        if (target === 'above') {
+          targetIndex = currentIndex - 1;
+        } else if (target === 'below') {
+          targetIndex = currentIndex + 1;
+        } else {
+          // target is a cell execution count number
+          const targetCellNum = parseInt(target);
+          if (isNaN(targetCellNum)) {
+            comm.send({
+              type: 'move_cursor_response',
+              request_id: requestId,
+              success: false,
+              message: `Invalid target '${target}'. Must be 'above', 'below', or a cell number`
+            });
+            return;
+          }
+
+          // Map execution count to cell index
+          let found = false;
+          for (let i = 0; i < cells.length; i++) {
+            const cellModel = cells.get(i);
+            const execCount = (cellModel as any).executionCount;
+            if (execCount === targetCellNum) {
+              targetIndex = i;
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            comm.send({
+              type: 'move_cursor_response',
+              request_id: requestId,
+              success: false,
+              message: `Cell with execution count ${targetCellNum} not found`
+            });
+            return;
+          }
+        }
+
+        // Clamp target index to valid range
+        targetIndex = Math.max(0, Math.min(targetIndex, cells.length - 1));
+
+        // Set active cell
+        notebook.activeCellIndex = targetIndex;
+
+        // Scroll to the new active cell
+        const newActiveCell = notebook.activeCell;
+        if (newActiveCell) {
+          notebook.scrollToCell(newActiveCell);
+        }
+
+        // Send success response
+        comm.send({
+          type: 'move_cursor_response',
+          request_id: requestId,
+          success: true,
+          old_index: currentIndex,
+          new_index: targetIndex,
+          message: `Cursor moved from index ${currentIndex} to ${targetIndex}`
+        });
+
+        console.log(`MCP Active Cell Bridge: Moved cursor from ${currentIndex} to ${targetIndex}`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to move cursor:', error);
+
+        comm.send({
+          type: 'move_cursor_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to move cursor: ${error}`
+        });
+      }
+    };
+
     // Handle delete cells by number requests from kernel
     const handleDeleteCellsByNumber = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
@@ -576,6 +686,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleDeleteCell(kernel, comm, data);
               } else if (msgType === 'delete_cells_by_number') {
                 handleDeleteCellsByNumber(kernel, comm, data);
+              } else if (msgType === 'move_cursor') {
+                handleMoveCursor(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
               } else {

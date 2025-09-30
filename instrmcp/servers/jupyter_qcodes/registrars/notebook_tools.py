@@ -37,6 +37,7 @@ class NotebookToolRegistrar:
         self._register_update_editing_cell()
         self._register_get_editing_cell_output()
         self._register_get_notebook_cells()
+        self._register_move_cursor()
         self._register_server_status()
 
     def _register_list_variables(self):
@@ -365,6 +366,37 @@ class NotebookToolRegistrar:
 
             except Exception as e:
                 logger.error(f"Error in get_notebook_cells: {e}")
+                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+
+    def _register_move_cursor(self):
+        """Register the notebook/move_cursor tool."""
+
+        @self.mcp.tool(name="notebook/move_cursor")
+        async def move_cursor(target: str) -> List[TextContent]:
+            """Move cursor to a different cell in the notebook.
+
+            Changes which cell is currently active (selected) in JupyterLab.
+            This is a SAFE operation as it only changes selection without modifying content.
+
+            Args:
+                target: Where to move the cursor:
+                       - "above": Move to cell above current
+                       - "below": Move to cell below current
+                       - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+
+            Returns:
+                JSON with operation status, old index, and new index
+
+            Example usage:
+                move_cursor("below")   # Move to next cell
+                move_cursor("above")   # Move to previous cell
+                move_cursor("5")       # Move to cell [5]
+            """
+            try:
+                result = await self.tools.move_cursor(target)
+                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+            except Exception as e:
+                logger.error(f"Error in notebook/move_cursor: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
 
     def _register_server_status(self):

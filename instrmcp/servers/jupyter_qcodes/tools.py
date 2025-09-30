@@ -870,6 +870,57 @@ class QCodesReadOnlyTools:
                 "warning": "UNSAFE: Attempted to delete cells but failed"
             }
 
+    async def move_cursor(self, target: str) -> Dict[str, Any]:
+        """Move cursor to a different cell in the notebook.
+
+        Changes which cell is currently active (selected) in JupyterLab.
+        This is a SAFE operation as it only changes selection without modifying content.
+
+        Args:
+            target: Where to move the cursor:
+                   - "above": Move to cell above current
+                   - "below": Move to cell below current
+                   - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+
+        Returns:
+            Dictionary with operation status, old index, and new index
+        """
+        try:
+            # Import the bridge module
+            from . import active_cell_bridge
+
+            # Validate target
+            valid_targets = ["above", "below"]
+            if target not in valid_targets:
+                try:
+                    int(target)  # Check if it's a number
+                except ValueError:
+                    return {
+                        "success": False,
+                        "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number",
+                        "source": "validation_error"
+                    }
+
+            # Send move cursor request to frontend
+            result = active_cell_bridge.move_cursor(target)
+
+            # Add metadata
+            result.update({
+                "source": "move_cursor",
+                "bridge_status": active_cell_bridge.get_bridge_status()
+            })
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in move_cursor: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "target_requested": target
+            }
+
     # # Subscription tools
     
     # async def subscribe_parameter(self, instrument_name: str, parameter_name: str, 

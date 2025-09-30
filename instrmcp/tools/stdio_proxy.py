@@ -295,6 +295,11 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         result = await proxy.call("notebook/apply_patch", old_text=old_text, new_text=new_text)
         return [TextContent(type="text", text=str(result))]
 
+    @mcp.tool(name="notebook/move_cursor")
+    async def move_cursor(target: str) -> list[TextContent]:
+        result = await proxy.call("notebook/move_cursor", target=target)
+        return [TextContent(type="text", text=str(result))]
+
     # MeasureIt integration tools (optional - only if measureit option enabled)
     @mcp.tool(name="measureit/get_status")
     async def get_measureit_status() -> list[TextContent]:
