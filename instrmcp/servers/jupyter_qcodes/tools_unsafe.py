@@ -39,7 +39,7 @@ class UnsafeToolRegistrar:
     def _register_execute_cell(self):
         """Register the notebook/execute_cell tool."""
 
-        @self.mcp.tool(name="notebook/execute_cell")
+        @self.mcp.tool(name="notebook_execute_cell")
         async def execute_editing_cell() -> List[TextContent]:
             """Execute the currently editing cell in the JupyterLab frontend.
 
@@ -59,7 +59,7 @@ class UnsafeToolRegistrar:
     def _register_add_cell(self):
         """Register the notebook/add_cell tool."""
 
-        @self.mcp.tool(name="notebook/add_cell")
+        @self.mcp.tool(name="notebook_add_cell")
         async def add_new_cell(
             cell_type: str = "code",
             position: str = "below",
@@ -85,7 +85,7 @@ class UnsafeToolRegistrar:
     def _register_delete_cell(self):
         """Register the notebook/delete_cell tool."""
 
-        @self.mcp.tool(name="notebook/delete_cell")
+        @self.mcp.tool(name="notebook_delete_cell")
         async def delete_editing_cell() -> List[TextContent]:
             """Delete the currently editing cell.
 
@@ -103,7 +103,7 @@ class UnsafeToolRegistrar:
     def _register_delete_cells(self):
         """Register the notebook/delete_cells tool."""
 
-        @self.mcp.tool(name="notebook/delete_cells")
+        @self.mcp.tool(name="notebook_delete_cells")
         async def delete_cells_by_number(cell_numbers: str) -> List[TextContent]:
             """Delete multiple cells by their execution count numbers.
 
@@ -151,7 +151,7 @@ class UnsafeToolRegistrar:
     def _register_apply_patch(self):
         """Register the notebook/apply_patch tool."""
 
-        @self.mcp.tool(name="notebook/apply_patch")
+        @self.mcp.tool(name="notebook_apply_patch")
         async def apply_patch(old_text: str, new_text: str) -> List[TextContent]:
             """Apply a patch to the current cell content.
 

@@ -33,9 +33,9 @@ class QCodesToolRegistrar:
         self._register_get_parameter_values()
 
     def _register_instrument_info(self):
-        """Register the qcodes/instrument_info tool."""
+        """Register the qcodes_instrument_info tool."""
 
-        @self.mcp.tool(name="qcodes/instrument_info")
+        @self.mcp.tool(name="qcodes_instrument_info")
         async def instrument_info(name: str, with_values: bool = False) -> List[TextContent]:
             """Get detailed information about a QCodes instrument.
 
@@ -47,13 +47,13 @@ class QCodesToolRegistrar:
                 info = await self.tools.instrument_info(name, with_values)
                 return [TextContent(type="text", text=json.dumps(info, indent=2, default=str))]
             except Exception as e:
-                logger.error(f"Error in qcodes/instrument_info: {e}")
+                logger.error(f"Error in qcodes_instrument_info: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
 
     def _register_get_parameter_values(self):
-        """Register the qcodes/get_parameter_values tool."""
+        """Register the qcodes_get_parameter_values tool."""
 
-        @self.mcp.tool(name="qcodes/get_parameter_values")
+        @self.mcp.tool(name="qcodes_get_parameter_values")
         async def get_parameter_values(queries: str) -> List[TextContent]:
             """Get QCodes parameter values - supports both single parameter and batch queries.
 
@@ -67,5 +67,5 @@ class QCodesToolRegistrar:
                 results = await self.tools.get_parameter_values(queries_data)
                 return [TextContent(type="text", text=json.dumps(results, indent=2, default=str))]
             except Exception as e:
-                logger.error(f"Error in qcodes/get_parameter_values: {e}")
+                logger.error(f"Error in qcodes_get_parameter_values: {e}")
                 return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]

@@ -152,7 +152,7 @@ The server supports optional features that can be enabled/disabled via magic com
   - `content`: Initial cell content (default: empty)
 - `notebook/delete_cell()` - Delete the active cell (clears content if last cell)
 - `notebook/apply_patch(old_text, new_text)` - Replace text in active cell
-  - More efficient than `notebook/update_editing_cell` for small changes
+  - More efficient than `notebook_update_editing_cell` for small changes
   - Replaces first occurrence of `old_text` with `new_text`
 
 **Optional Features:**

@@ -34,7 +34,7 @@ class MeasureItToolRegistrar:
     def _register_get_status(self):
         """Register the measureit/get_status tool."""
 
-        @self.mcp.tool(name="measureit/get_status")
+        @self.mcp.tool(name="measureit_get_status")
         async def get_measureit_status() -> List[TextContent]:
             """Check if any MeasureIt sweep is currently running.
 

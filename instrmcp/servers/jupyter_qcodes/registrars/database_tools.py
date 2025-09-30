@@ -36,7 +36,7 @@ class DatabaseToolRegistrar:
     def _register_list_experiments(self):
         """Register the database/list_experiments tool."""
 
-        @self.mcp.tool(name="database/list_experiments")
+        @self.mcp.tool(name="database_list_experiments")
         async def list_experiments(database_path: Optional[str] = None) -> List[TextContent]:
             """List all experiments in the specified QCodes database.
 
@@ -56,7 +56,7 @@ class DatabaseToolRegistrar:
     def _register_get_dataset_info(self):
         """Register the database/get_dataset_info tool."""
 
-        @self.mcp.tool(name="database/get_dataset_info")
+        @self.mcp.tool(name="database_get_dataset_info")
         async def get_dataset_info(
             id: int,
             database_path: Optional[str] = None
@@ -80,7 +80,7 @@ class DatabaseToolRegistrar:
     def _register_get_database_stats(self):
         """Register the database/get_database_stats tool."""
 
-        @self.mcp.tool(name="database/get_database_stats")
+        @self.mcp.tool(name="database_get_database_stats")
         async def get_database_stats(database_path: Optional[str] = None) -> List[TextContent]:
             """Get database statistics and health information.
 
