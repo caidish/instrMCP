@@ -174,11 +174,7 @@ ignore_missing_imports = true
 minversion = "7.0"
 addopts = [
     "--strict-markers",
-    "--strict-config",
-    "--cov=instrMCP",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml"
+    "--strict-config"
 ]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
@@ -189,10 +185,9 @@ markers = [
     "integration: marks tests as integration tests",
     "hardware: marks tests that require hardware"
 ]
-asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["servers", "tools"]
+source = ["instrmcp"]
 omit = [
     "*/tests/*",
     "*/test_*",

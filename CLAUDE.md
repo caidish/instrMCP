@@ -83,34 +83,36 @@ The system uses a proxy pattern where:
 
 ### MCP Tools Available
 
-All tools now use hierarchical naming with `/` separator for better organization.
+All tools use underscore naming convention for better compatibility.
 
-**QCodes Instrument Tools (`qcodes/*`):**
-- `qcodes/instrument_info(name, with_values)` - Get instrument details and parameter values
-- `qcodes/get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
+**QCodes Instrument Tools:**
+- `qcodes_instrument_info(name, with_values)` - Get instrument details and parameter values
+- `qcodes_get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
 
-**Jupyter Notebook Tools (`notebook/*`):**
-- `notebook/list_variables(type_filter)` - List notebook variables by type
-- `notebook/get_variable_info(name)` - Detailed variable information
-- `notebook/get_editing_cell(fresh_ms)` - Current JupyterLab cell content
-- `notebook/update_editing_cell(content)` - Update current cell content
-- `notebook/get_editing_cell_output()` - Get output of most recently executed cell
-- `notebook/get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
-- `notebook/server_status()` - Check server mode and status
+**Jupyter Notebook Tools:**
+- `notebook_list_variables(type_filter)` - List notebook variables by type
+- `notebook_get_variable_info(name)` - Detailed variable information
+- `notebook_get_editing_cell(fresh_ms)` - Current JupyterLab cell content
+- `notebook_update_editing_cell(content)` - Update current cell content
+- `notebook_get_editing_cell_output()` - Get output of most recently executed cell
+- `notebook_get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
+- `notebook_server_status()` - Check server mode and status
+- `notebook_move_cursor(target)` - Move cursor to specified cell (use "next", "previous", "first", "last", or cell number)
 
-**Unsafe Notebook Tools (`notebook/*` - unsafe mode only):**
-- `notebook/execute_cell()` - Execute current cell
-- `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
-- `notebook/delete_cell()` - Delete the currently active cell
-- `notebook/apply_patch(old_text, new_text)` - Apply text replacement patch to active cell
+**Unsafe Notebook Tools (unsafe mode only):**
+- `notebook_execute_cell()` - Execute current cell
+- `notebook_add_cell(cell_type, position, content)` - Add new cell relative to active cell
+- `notebook_delete_cell()` - Delete the currently active cell
+- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (comma-separated string)
+- `notebook_apply_patch(old_text, new_text)` - Apply text replacement patch to active cell
 
-**MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`):**
-- `measureit/get_status()` - Check if any MeasureIt sweep is currently running, returns sweep status and configuration
+**MeasureIt Integration Tools (requires `%mcp_option measureit`):**
+- `measureit_get_status()` - Check if any MeasureIt sweep is currently running, returns sweep status and configuration
 
-**Database Integration Tools (`database/*` - requires `%mcp_option database`):**
-- `database/list_experiments(database_path)` - List all experiments in the specified QCodes database
-- `database/get_dataset_info(id, database_path)` - Get detailed information about a specific dataset
-- `database/get_database_stats(database_path)` - Get database statistics and health information
+**Database Integration Tools (requires `%mcp_option database`):**
+- `database_list_experiments(database_path)` - List all experiments in the specified QCodes database
+- `database_get_dataset_info(id, database_path)` - Get detailed information about a specific dataset
+- `database_get_database_stats(database_path)` - Get database statistics and health information
 
 **Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration.
 
@@ -145,13 +147,14 @@ The server supports optional features that can be enabled/disabled via magic com
 - `%mcp_unsafe` - Switch to unsafe mode (allows cell manipulation and code execution)
 
 **Unsafe Mode Tools (Only available when `%mcp_unsafe` is active):**
-- `notebook/execute_cell()` - Execute code in the active cell
-- `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook
+- `notebook_execute_cell()` - Execute code in the active cell
+- `notebook_add_cell(cell_type, position, content)` - Add new cells to the notebook
   - `cell_type`: "code", "markdown", or "raw" (default: "code")
   - `position`: "above" or "below" active cell (default: "below")
   - `content`: Initial cell content (default: empty)
-- `notebook/delete_cell()` - Delete the active cell (clears content if last cell)
-- `notebook/apply_patch(old_text, new_text)` - Replace text in active cell
+- `notebook_delete_cell()` - Delete the active cell (clears content if last cell)
+- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (comma-separated string)
+- `notebook_apply_patch(old_text, new_text)` - Replace text in active cell
   - More efficient than `notebook_update_editing_cell` for small changes
   - Replaces first occurrence of `old_text` with `new_text`
 
@@ -191,10 +194,16 @@ This is controlled via the `safe_mode` parameter in server initialization and th
 ### Testing
 
 - **Always use conda environment instrMCPdev for testing**
-- Use `pytest` for running tests
-- Test files are in `qdevbench/tests/`
-- Mock instruments available for testing without hardware
-- Coverage reports generated with `pytest --cov=instrmcp`
+- **Comprehensive test suite**: 380+ tests covering all major components
+- **Test structure**: `tests/` directory with unit tests, integration tests (planned), and fixtures
+- **Run tests**: `pytest` (all tests) or `pytest --cov=instrmcp --cov-report=html` (with coverage)
+- **Test organization**:
+  - Unit tests in `tests/unit/` - isolated component tests
+  - Integration tests in `tests/integration/` - end-to-end workflows (planned)
+  - Fixtures in `tests/fixtures/` - mock instruments, IPython, notebooks, databases
+- **Mock-based testing**: All tests use mocks (no physical hardware required)
+- **Coverage target**: 80%+ for core modules
+- **See `tests/README.md`** for detailed testing guide and best practices
 
 ### JupyterLab Extension
 
