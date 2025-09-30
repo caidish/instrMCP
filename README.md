@@ -1,9 +1,10 @@
 # InstrMCP: Instrumentation Control MCP Server
 
+[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](https://github.com/caidish/instrMCP/releases)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
-[![Documentation](https://img.shields.io/badge/docs-ReadTheDocs-blue.svg)](https://instrmcp.readthedocs.io/en/latest/)
+[![Documentation Status](https://readthedocs.org/projects/instrmcp/badge/?version=latest)](https://instrmcp.readthedocs.io/en/latest/?badge=latest)
 
  MCP server suite for quantum device physics laboratory's instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
@@ -46,9 +47,13 @@ source ~/.zshrc
 **That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
 
 **What gets installed:**
-- 📦 **instrmcp** Python package with MCP servers
-- 🧪 **QCodes** for instrument control
-- 🐍 **JupyterLab** for interactive development
+- **instrmcp** Python package with MCP servers
+- **QCodes** for instrument control
+- **JupyterLab** for interactive development
+
+### Extension MeasureIt
+
+To install MeasureIt, visit https://github.com/nanophys/MeasureIt and follow the installation instructions. 
 
 ### Usage
 
