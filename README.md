@@ -3,10 +3,11 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
+[![Documentation](https://img.shields.io/badge/docs-ReadTheDocs-blue.svg)](https://instrmcp.readthedocs.io/en/latest/)
 
  MCP server suite for quantum device physics laboratory's instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
-## Features
+## V1.0.0 Features
 
 - **Full QCodes Integration**: Built-in support for all QCodes instrument drivers
 - **Database Integration**: Read-only access to QCodes databases with intelligent code generation
@@ -33,7 +34,7 @@ This ensures Claude has access to the latest database integration tools, Measure
 https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 
 
-## Plan
+## V2.0.0 Plan
 - Support RedPitaya. 
 - Support Raspberry Pi for outdated instruments. 
 - Integrating lab wiki knowledge base for safety rails
@@ -191,7 +192,7 @@ instrmcp/
 - `recent_measurements` - Metadata for recent measurements across all experiments
 - `measurement_templates` - Common measurement patterns and templates extracted from historical data
 
-## 📝 Configuration Example
+## Configuration Example
 
 Station configuration uses standard YAML format:
 
@@ -204,7 +205,7 @@ instruments:
     enable: true
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Installation Issues
 
@@ -274,7 +275,7 @@ jupyter labextension list | grep mcp-active-cell-bridge
 # Should show: mcp-active-cell-bridge v0.1.0 enabled OK
 ```
 
-## 👨‍💻 Development
+## Development
 
 ```bash
 # Install development dependencies
@@ -292,7 +293,7 @@ cd instrMCP
 pip install -e .
 ```
 
-## 📦 Optional Dependencies
+## Optional Dependencies
 
 ```bash
 # Install specific features
