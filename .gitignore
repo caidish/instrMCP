@@ -116,6 +116,10 @@ tmp/
 temp/
 *.tmp
 
+# Sphinx documentation
+docs/build/
+docs/source/_build/
+
 # QDevBench simulation data
 qdevbench/
 
