@@ -18,19 +18,6 @@
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI.
 
-## 🚨 Important Note for Claude Users
-
-**When new optional features are added to InstrMCP, Claude's memory of available tools and resources may be outdated.** This is because Claude remembers the API from previous conversations.
-
-**If you've just enabled new options or updated InstrMCP:**
-1. **Start a fresh conversation** with Claude for the most accurate tool/resource list
-2. Or explicitly ask: *"What MCP tools and resources are currently available?"* to refresh Claude's understanding
-3. After running `%mcp_option add database` or `%mcp_option add measureit`, restart the server with `%mcp_restart`
-
-This ensures Claude has access to the latest database integration tools, MeasureIt templates, and other new features.
-
-
-
 https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 
 
