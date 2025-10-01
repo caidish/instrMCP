@@ -248,74 +248,176 @@ Phase 1 implementation is complete with all core infrastructure in place:
    - Verify the updated version executes with new behavior
    - Old compiled version should be replaced
 
-#### Backend: Consent Integration (TODO)
-- [ ] Update `dynamic_registrar.py` to integrate consent workflow
-  - [ ] Send consent request before registration via comm channel `mcp:capcall`
-  - [ ] Wait for consent response (timeout: 5 min)
-  - [ ] Check "always allow" permissions before showing consent UI
-  - [ ] On approval: complete registration
-  - [ ] On decline: cleanup and return error
-  - [ ] Store "always allow" decisions in `~/.instrmcp/consents/always_allow.json`
+#### Backend: Consent Integration ✅ COMPLETE
+- [x] Create `ConsentManager` class in `instrmcp/servers/jupyter_qcodes/security/consent.py`
+  - [x] Implement `request_consent()` method with comm channel integration
+  - [x] Implement "always allow" permission storage in `~/.instrmcp/consents/always_allow.json`
+  - [x] Implement bypass mode via `INSTRMCP_CONSENT_BYPASS=1` environment variable
+  - [x] Add timeout handling (5 minutes)
+- [x] Integrate consent into `dynamic_registrar.py`
+  - [x] Send consent request before registration via comm channel `mcp:capcall`
+  - [x] Wait for consent response (timeout: 5 min)
+  - [x] Check "always allow" permissions before showing consent UI
+  - [x] On approval: complete registration
+  - [x] On decline: cleanup and return error
+  - [x] Store "always allow" decisions automatically
+- [x] Add consent integration to `dynamic_update_tool`
+- [x] Testing (26 tests, all passing)
+  - [x] Test always_allow storage and persistence
+  - [x] Test bypass mode
+  - [x] Test consent request workflow (approval, decline, timeout)
+  - [x] Test edge cases and error handling
+- [x] Update documentation (CLAUDE.md)
 
-#### Frontend: Consent UI (JupyterLab Extension)
-- [ ] Create comm channel `mcp:capcall` in TypeScript extension
-  - [ ] Update `instrmcp/extensions/jupyterlab/src/index.ts`
-  - [ ] Add comm handler for `mcp:capcall` messages
-  - [ ] Message types: `consent_request`, `consent_response`
-- [ ] Build consent dialog components
-  - [ ] `ConsentDialog.tsx` - Main modal dialog
-    - [ ] Display tool name, description, author, version
-    - [ ] Syntax-highlighted source code viewer (CodeMirror)
-    - [ ] Action buttons: [Allow], [Always Allow], [Decline]
-  - [ ] `CapabilityList.tsx` - Capability checklist
-    - [ ] Icons and descriptions for each capability
-    - [ ] Warning badges for dangerous capabilities (write operations)
-  - [ ] `DiffViewer.tsx` (optional, for tool updates)
-    - [ ] Side-by-side diff view
-    - [ ] Highlight capability changes
-- [ ] Implement consent workflow logic
-  - [ ] Handle consent_request messages from backend
-  - [ ] Show ConsentDialog with tool details
-  - [ ] Send consent_response back to backend
-  - [ ] Handle timeout (5 min) with auto-decline
-- [ ] Build and test
-  - [ ] Build extension: `jlpm run build`
-  - [ ] Test consent workflow end-to-end
-  - [ ] Test "always allow" functionality
+#### Frontend: Consent UI (JupyterLab Extension) ✅ COMPLETE
+- [x] Create comm channel `mcp:capcall` in TypeScript extension
+  - [x] Update `instrmcp/extensions/jupyterlab/src/index.ts`
+  - [x] Add comm handler for `mcp:capcall` messages
+  - [x] Message types: `consent_request`, `consent_response`
+- [x] Build consent dialog using JupyterLab Dialog API
+  - [x] Display tool name, description, author, version
+  - [x] Display capabilities list
+  - [x] Monospace source code viewer with scrolling (300px max-height)
+  - [x] Action buttons: [Decline], [Allow], [Always Allow]
+- [x] Implement consent workflow logic
+  - [x] Handle consent_request messages from backend
+  - [x] Show consent dialog with tool details
+  - [x] Send consent_response back to backend with approved/always_allow flags
+  - [x] Three-button system (Decline/Allow/Always Allow)
+- [x] Build extension
+  - [x] Add @jupyterlab/apputils dependency
+  - [x] Add @lumino/widgets dependency
+  - [x] Build extension: `jlpm run build`
+  - [x] Reinstall package: `pip install -e . --force-reinstall --no-deps`
 
-#### Human Testing Checklist (Phase 2 - Consent UI - When Complete):
+**Implementation Notes:**
+- Used JupyterLab's `showDialog` API instead of custom React components (simpler, better integration)
+- Source code displayed in styled `<pre>` tag with scrolling
+- Consent comm channel (`mcp:capcall`) initialized alongside active cell comm channel
+- Both registration and update operations trigger consent dialog
+- **Requires human testing** - automated UI testing is complex for JupyterLab extensions
+
+#### Human Testing Checklist (Phase 2 - Consent UI):
+**REQUIRES HUMAN TESTING - This is a critical test-heavy phase**
+
 **Setup:**
-1. Start Jupyter with MCP server: `instrmcp jupyter --unsafe --port 3000`
-2. Open JupyterLab in browser
-3. Open MCP Inspector
+1. Start Jupyter with MCP server:
+   ```bash
+   instrmcp jupyter --unsafe --port 3000
+   ```
+2. Open JupyterLab in browser: `http://localhost:8888`
+3. Load the MCP extension in a notebook cell:
+   ```python
+   %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
+   %mcp_start
+   ```
+4. Open MCP Inspector to test tool registration
 
-**Test Consent Workflow:**
-1. **Register a new tool via MCP Inspector**:
-   - Call `dynamic_register_tool` with a simple tool
-   - Consent dialog should appear in JupyterLab
-   - Verify dialog shows: tool name, description, author, source code, capabilities
-   - Click "Allow" → tool should register successfully
+**Test 1: Basic Consent Dialog (Register)**
+1. In MCP Inspector, call `dynamic_register_tool` with:
+   ```json
+   {
+     "name": "test_multiply",
+     "version": "1.0.0",
+     "description": "Multiply a number by two",
+     "author": "test_user",
+     "capabilities": ["cap:python"],
+     "parameters": [{"name": "x", "type": "number", "description": "Input number", "required": true}],
+     "returns": {"type": "number", "description": "Result"},
+     "source_code": "def test_multiply(x):\n    return x * 2"
+   }
+   ```
+2. **✅ VERIFY**: Consent dialog appears in JupyterLab
+3. **✅ VERIFY**: Dialog shows:
+   - Operation: register
+   - Tool: test_multiply
+   - Author: test_user
+   - Version: 1.0.0
+   - Description: "Multiply a number by two"
+   - Capabilities: cap:python
+   - Source code in monospace with scroll
+4. **✅ VERIFY**: Three buttons: "Decline", "Allow", "Always Allow"
+5. Click "Allow"
+6. **✅ VERIFY**: Tool registers successfully (response: `{"status": "success", ...}`)
+7. **✅ VERIFY**: Tool is callable via `test_multiply` with `x: 5` → returns 10
 
-2. **Test "Always Allow"**:
-   - Register another tool
-   - Click "Always Allow" in consent dialog
-   - Verify tool registers
-   - Register a third tool from same author
-   - Should NOT show dialog (auto-approved from always allow)
+**Test 2: Always Allow**
+1. Register another tool with same author:
+   ```json
+   {
+     "name": "test_add",
+     "author": "test_user",
+     "source_code": "def test_add(x, y):\n    return x + y"
+   }
+   ```
+2. Click "Always Allow" in consent dialog
+3. **✅ VERIFY**: Tool registers successfully
+4. Check always_allow file:
+   ```bash
+   cat ~/.instrmcp/consents/always_allow.json
+   ```
+5. **✅ VERIFY**: Contains `{"test_user": ["register"]}`
+6. Register a third tool with author "test_user"
+7. **✅ VERIFY**: NO dialog appears (auto-approved)
+8. **✅ VERIFY**: Tool registers successfully
 
-3. **Test "Decline"**:
-   - Register a tool
-   - Click "Decline" in consent dialog
-   - Verify tool is NOT registered (check with `dynamic_list_tools`)
+**Test 3: Decline**
+1. Register a tool with new author "another_user"
+2. Click "Decline" in consent dialog
+3. **✅ VERIFY**: Registration fails with error message
+4. Call `dynamic_list_tools`
+5. **✅ VERIFY**: Tool is NOT in the list
 
-4. **Test timeout**:
-   - Register a tool
-   - Wait 5 minutes without responding
-   - Should auto-decline and show timeout message
+**Test 4: Tool Update Consent**
+1. Update existing tool `test_multiply` to version 2.0.0 via `dynamic_update_tool`
+2. **✅ VERIFY**: Consent dialog appears
+3. **✅ VERIFY**: Dialog shows operation="update" and old_version in details
+4. Click "Allow"
+5. **✅ VERIFY**: Tool updates successfully
 
-5. **Verify always allow persistence**:
-   - Check file: `cat ~/.instrmcp/consents/always_allow.json`
-   - Should contain author/permission entries
+**Test 5: Bypass Mode (Testing)**
+1. Stop Jupyter server
+2. Start with bypass mode:
+   ```bash
+   export INSTRMCP_CONSENT_BYPASS=1
+   instrmcp jupyter --unsafe --port 3000
+   ```
+3. Register a tool with new author
+4. **✅ VERIFY**: NO dialog appears
+5. **✅ VERIFY**: Tool registers automatically
+6. Check logs: Should see "Consent bypassed" message
+
+**Test 6: Console Logging**
+1. Open browser DevTools Console
+2. Register a tool
+3. **✅ VERIFY**: Console shows:
+   - "MCP Consent: Comm channel opened successfully"
+   - "MCP Consent: Received consent request for register of tool 'xxx' by 'yyy'"
+   - "MCP Consent: Sent response - approved: true, always_allow: false"
+
+**Test 7: Error Handling**
+1. Close JupyterLab tab while consent dialog is open
+2. **✅ VERIFY**: Backend times out after 5 minutes
+3. **✅ VERIFY**: Tool registration fails with timeout message
+
+**Test 8: No IPython/Comm Available**
+1. In Python outside Jupyter:
+   ```python
+   from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
+   import asyncio
+   manager = ConsentManager(ipython=None)
+   result = asyncio.run(manager.request_consent("register", "test", "author", {}))
+   print(result)  # Should show: {"approved": False, "reason": "No IPython instance..."}
+   ```
+
+**Post-Testing Cleanup:**
+```bash
+# Clear always_allow permissions
+rm -f ~/.instrmcp/consents/always_allow.json
+
+# Unset bypass mode
+unset INSTRMCP_CONSENT_BYPASS
+```
 
 ### Phase 3: Capability System (Optional Enhancement)
 - [ ] Create `instrmcp/servers/jupyter_qcodes/security/capabilities.py`

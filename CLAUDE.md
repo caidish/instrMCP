@@ -178,6 +178,20 @@ When `auto_correct_json` is enabled, the server uses MCP sampling to automatical
 - **Safety**: Only fixes structural JSON errors, never modifies logic or values
 - **Default**: Disabled (explicit errors preferred for transparency)
 
+**Consent System (Phase 2):**
+The server requires user consent for dynamic tool registration and updates:
+- **Consent workflow**: User must approve tool registration/updates via consent dialog (when frontend is available)
+- **Always allow**: Users can grant permanent permission to specific authors
+- **Storage**: Permissions stored in `~/.instrmcp/consents/always_allow.json`
+- **Bypass mode**: Set `INSTRMCP_CONSENT_BYPASS=1` environment variable to auto-approve all operations (for testing)
+- **Timeout**: 5 minutes (300 seconds) - requests timeout if no response
+- **Operations requiring consent**:
+  - `dynamic_register_tool` - Register new dynamic tool
+  - `dynamic_update_tool` - Update existing dynamic tool
+- **Operations NOT requiring consent**:
+  - `dynamic_revoke_tool` - Revoke/delete tool (always allowed)
+  - Dynamic tool execution - Once registered with consent, tools can execute freely
+
 **Server Control:**
 - `%mcp_start` - Start the MCP server
 - `%mcp_stop` - Stop the MCP server

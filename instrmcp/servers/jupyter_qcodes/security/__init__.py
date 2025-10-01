@@ -6,10 +6,12 @@ from .audit import (
     log_tool_update,
     log_tool_revocation,
 )
+from .consent import ConsentManager
 
 __all__ = [
     "AuditLogger",
     "log_tool_registration",
     "log_tool_update",
     "log_tool_revocation",
+    "ConsentManager",
 ]

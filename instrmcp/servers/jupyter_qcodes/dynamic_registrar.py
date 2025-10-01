@@ -19,6 +19,7 @@ from instrmcp.servers.jupyter_qcodes.security.audit import (
     log_tool_revocation,
     log_tool_error,
 )
+from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
 from .dynamic_runtime import DynamicToolRuntime
 
 logger = logging.getLogger(__name__)
@@ -27,19 +28,30 @@ logger = logging.getLogger(__name__)
 class DynamicToolRegistrar:
     """Registrar for dynamic tool meta-tools."""
 
-    def __init__(self, mcp: FastMCP, ipython, auto_correct_json: bool = False):
+    def __init__(
+        self,
+        mcp: FastMCP,
+        ipython,
+        auto_correct_json: bool = False,
+        require_consent: bool = True,
+    ):
         """Initialize the dynamic tool registrar.
 
         Args:
             mcp: FastMCP server instance
             ipython: IPython instance for tool execution
             auto_correct_json: Enable automatic JSON correction via LLM sampling (default: False)
+            require_consent: Require user consent for tool operations (default: True)
         """
         self.mcp = mcp
         self.ipython = ipython
         self.registry = ToolRegistry()
         self.runtime = DynamicToolRuntime(ipython)
         self.auto_correct_json = auto_correct_json
+        self.require_consent = require_consent
+
+        # Initialize consent manager
+        self.consent_manager = ConsentManager(ipython) if require_consent else None
 
         # Track dynamically registered tools for execution
         self._dynamic_tools: Dict[str, ToolSpec] = {}
@@ -125,6 +137,46 @@ class DynamicToolRegistrar:
             def create_wrapper():
                 async def wrapper(*args, **kwargs):
                     """Wrapper for dynamically created tool."""
+                    # Check for execute consent if required
+                    if self.require_consent and self.consent_manager:
+                        try:
+                            consent_result = await self.consent_manager.request_consent(
+                                operation="execute",
+                                tool_name=spec.name,
+                                author=spec.author,
+                                details={
+                                    "source_code": spec.source_code,
+                                    "capabilities": spec.capabilities or [],
+                                    "version": spec.version,
+                                    "description": spec.description,
+                                    "arguments": dict(kwargs),
+                                },
+                            )
+
+                            if not consent_result["approved"]:
+                                reason = consent_result.get("reason", "User declined")
+                                logger.warning(
+                                    f"Tool execution declined: {spec.name} - {reason}"
+                                )
+                                return json.dumps(
+                                    {
+                                        "status": "error",
+                                        "message": f"Execution declined: {reason}",
+                                    }
+                                )
+                            else:
+                                logger.info(f"✅ Tool execution approved: {spec.name}")
+                        except TimeoutError:
+                            logger.error(
+                                f"Consent request timed out for tool execution '{spec.name}'"
+                            )
+                            return json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": "Consent request timed out",
+                                }
+                            )
+
                     try:
                         # Bind arguments to parameters
                         bound = sig.bind(*args, **kwargs)
@@ -147,6 +199,45 @@ class DynamicToolRegistrar:
             # No parameters - create a simple wrapper
             async def dynamic_tool_wrapper():
                 """Wrapper for dynamically created tool."""
+                # Check for execute consent if required
+                if self.require_consent and self.consent_manager:
+                    try:
+                        consent_result = await self.consent_manager.request_consent(
+                            operation="execute",
+                            tool_name=spec.name,
+                            author=spec.author,
+                            details={
+                                "source_code": spec.source_code,
+                                "capabilities": spec.capabilities or [],
+                                "version": spec.version,
+                                "description": spec.description,
+                            },
+                        )
+
+                        if not consent_result["approved"]:
+                            reason = consent_result.get("reason", "User declined")
+                            logger.warning(
+                                f"Tool execution declined: {spec.name} - {reason}"
+                            )
+                            return json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": f"Execution declined: {reason}",
+                                }
+                            )
+                        else:
+                            logger.info(f"✅ Tool execution approved: {spec.name}")
+                    except TimeoutError:
+                        logger.error(
+                            f"Consent request timed out for tool execution '{spec.name}'"
+                        )
+                        return json.dumps(
+                            {
+                                "status": "error",
+                                "message": "Consent request timed out",
+                            }
+                        )
+
                 try:
                     result = self.runtime.execute_tool(spec.name)
                     return json.dumps(
@@ -381,6 +472,69 @@ Corrected JSON:"""
                     tags=tags_list,
                 )
 
+                # Request consent if required
+                if self.require_consent and self.consent_manager:
+                    consent_details = {
+                        "source_code": source_code,
+                        "capabilities": capabilities_list or [],
+                        "version": spec.version,
+                        "description": spec.description,
+                        "parameters": parameters_list or [],
+                        "returns": returns_dict,
+                    }
+
+                    try:
+                        consent_result = await self.consent_manager.request_consent(
+                            operation="register",
+                            tool_name=name,
+                            author=spec.author,
+                            details=consent_details,
+                        )
+
+                        if not consent_result["approved"]:
+                            reason = consent_result.get("reason", "User declined")
+                            logger.warning(
+                                f"Tool registration declined: {name} by {spec.author} - {reason}"
+                            )
+                            log_tool_error(
+                                "registration_declined",
+                                name,
+                                f"Consent denied: {reason}",
+                            )
+                            return json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": f"Tool registration declined: {reason}",
+                                    "tool_name": name,
+                                }
+                            )
+                        else:
+                            # Consent granted - log approval
+                            always_allow_status = (
+                                " (always allow granted)"
+                                if consent_result.get("always_allow")
+                                else ""
+                            )
+                            logger.info(
+                                f"✅ Tool registration approved: {name} by {spec.author}{always_allow_status}"
+                            )
+                            print(
+                                f"✅ Consent granted for tool '{name}' by '{spec.author}'{always_allow_status}"
+                            )
+
+                    except TimeoutError:
+                        logger.error(f"Consent request timed out for tool '{name}'")
+                        log_tool_error(
+                            "registration_timeout", name, "Consent request timed out"
+                        )
+                        return json.dumps(
+                            {
+                                "status": "error",
+                                "message": "Consent request timed out (5 minutes)",
+                                "tool_name": name,
+                            }
+                        )
+
                 # Register with FastMCP and compile for execution FIRST
                 # If this fails, we don't want the tool in the registry
                 self._register_tool_with_fastmcp(spec)
@@ -502,6 +656,70 @@ Corrected JSON:"""
                     ),
                     tags=json.loads(tags) if tags else existing_spec.tags,
                 )
+
+                # Request consent if required
+                if self.require_consent and self.consent_manager:
+                    consent_details = {
+                        "source_code": updated_spec.source_code,
+                        "capabilities": updated_spec.capabilities or [],
+                        "version": version,
+                        "description": updated_spec.description,
+                        "parameters": [p.to_dict() for p in updated_spec.parameters],
+                        "returns": updated_spec.returns,
+                        "old_version": old_version,
+                    }
+
+                    try:
+                        consent_result = await self.consent_manager.request_consent(
+                            operation="update",
+                            tool_name=name,
+                            author=existing_spec.author,
+                            details=consent_details,
+                        )
+
+                        if not consent_result["approved"]:
+                            reason = consent_result.get("reason", "User declined")
+                            logger.warning(
+                                f"Tool update declined: {name} by {existing_spec.author} - {reason}"
+                            )
+                            log_tool_error(
+                                "update_declined", name, f"Consent denied: {reason}"
+                            )
+                            return json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": f"Tool update declined: {reason}",
+                                    "tool_name": name,
+                                }
+                            )
+                        else:
+                            # Consent granted - log approval
+                            always_allow_status = (
+                                " (always allow granted)"
+                                if consent_result.get("always_allow")
+                                else ""
+                            )
+                            logger.info(
+                                f"✅ Tool update approved: {name} v{old_version}→v{version} by {existing_spec.author}{always_allow_status}"
+                            )
+                            print(
+                                f"✅ Consent granted for tool update '{name}' v{old_version}→v{version}{always_allow_status}"
+                            )
+
+                    except TimeoutError:
+                        logger.error(
+                            f"Consent request timed out for tool update '{name}'"
+                        )
+                        log_tool_error(
+                            "update_timeout", name, "Consent request timed out"
+                        )
+                        return json.dumps(
+                            {
+                                "status": "error",
+                                "message": "Consent request timed out",
+                                "tool_name": name,
+                            }
+                        )
 
                 # Unregister old version and register new version with FastMCP FIRST
                 # If registration fails, we'll roll back by re-registering the old version
