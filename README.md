@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
 [![Documentation Status](https://readthedocs.org/projects/instrmcp/badge/?version=latest)](https://instrmcp.readthedocs.io/en/latest/?badge=latest)
-[![Tests](https://github.com/caijiaqi/instrMCP/actions/workflows/tests.yml/badge.svg)](https://github.com/caijiaqi/instrMCP/actions/workflows/tests.yml)
-[![Lint](https://github.com/caijiaqi/instrMCP/actions/workflows/lint.yml/badge.svg)](https://github.com/caijiaqi/instrMCP/actions/workflows/lint.yml)
+[![Tests](https://github.com/caidish/instrMCP/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/caidish/instrMCP/actions/workflows/tests.yml)
+[![Lint](https://github.com/caidish/instrMCP/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/caidish/instrMCP/actions/workflows/lint.yml)
 
  MCP server suite for quantum device physics laboratory's instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
