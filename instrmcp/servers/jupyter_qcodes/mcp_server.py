@@ -21,6 +21,7 @@ from .registrars import (
     DatabaseToolRegistrar,
     ResourceRegistrar,
 )
+from .dynamic_registrar import DynamicToolRegistrar
 
 # MeasureIt integration (optional)
 try:
@@ -117,6 +118,15 @@ class JupyterMCPServer:
         if DATABASE_AVAILABLE and "database" in self.enabled_options:
             database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
             database_registrar.register_all()
+
+        # Dynamic tool creation (meta-tools)
+        # Only available in unsafe mode
+        if not self.safe_mode:
+            auto_correct_json = "auto_correct_json" in self.enabled_options
+            dynamic_registrar = DynamicToolRegistrar(
+                self.mcp, self.ipython, auto_correct_json=auto_correct_json
+            )
+            dynamic_registrar.register_all()
 
         # Commented out: Parameter subscription tools (future feature)
         # @self.mcp.tool()

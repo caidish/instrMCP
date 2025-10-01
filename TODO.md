@@ -4,120 +4,320 @@
 
 Enable LLMs to create dynamic MCP tools at runtime with comprehensive security controls through consent UI, capability-based permissions, and sandboxed execution.
 
-**Status**: Planning Phase
+**Status**: Phase 1 Complete ✅
 **Target Version**: 2.0.0
 **Estimated Timeline**: one week
 **Last Updated**: 2025-10-01
+
+### ✅ Phase 1 Summary (Completed 2025-10-01)
+
+Phase 1 implementation is complete with all core infrastructure in place:
+
+**Files Created:**
+- `instrmcp/tools/dynamic/tool_spec.py` - Tool specification system with validation
+- `instrmcp/tools/dynamic/tool_registry.py` - Registry with file-based persistence
+- `instrmcp/servers/jupyter_qcodes/security/audit.py` - Simple audit logging
+- `instrmcp/servers/jupyter_qcodes/dynamic_registrar.py` - 6 meta-tools for LLM interaction
+- `tests/unit/servers/test_dynamic_tools.py` - 28 unit tests (all passing)
+
+**Files Modified:**
+- `instrmcp/servers/jupyter_qcodes/mcp_server.py` - Integrated DynamicToolRegistrar (unsafe mode)
+- `instrmcp/tools/stdio_proxy.py` - Added proxies for 6 meta-tools
+- `tests/unit/test_stdio_proxy.py` - Updated tool count (19→25)
+
+**Meta-tools Available:**
+1. `dynamic_register_tool` - Register new tools with validation
+2. `dynamic_update_tool` - Update existing tools
+3. `dynamic_revoke_tool` - Delete tools
+4. `dynamic_list_tools` - List tools with filtering
+5. `dynamic_inspect_tool` - Inspect full tool specs
+6. `dynamic_registry_stats` - Get registry statistics
+
+**Test Results:** 318 tests passing (28 new + 290 existing)
+
+**Human Testing (Phase 1 COMPLETED✅-caidish):**
+1. Start JupyterLab with MCP server in unsafe mode: `instrmcp jupyter --unsafe`
+2. Open MCP Inspector to verify 6 new meta-tools are available:
+   - `dynamic_register_tool`
+   - `dynamic_update_tool`
+   - `dynamic_revoke_tool`
+   - `dynamic_list_tools`
+   - `dynamic_inspect_tool`
+   - `dynamic_registry_stats`
+3. Test `dynamic_list_tools` - should return empty list initially
+4. Test `dynamic_registry_stats` - should show 0 tools
+5. Verify registry directory created: `ls ~/.instrmcp/registry/`
+6. Verify audit log created: `ls ~/.instrmcp/audit/tool_audit.log`
+
+**Next:** Phase 2 will add consent UI and dynamic tool execution.
 
 ---
 
 ## 🎯 Implementation Phases
 
-### Phase 1: Core Infrastructure 
-- [ ] Design tool spec JSON schema
-  - [ ] Define required fields (name, version, description, hash, signature)
-  - [ ] Define capability strings taxonomy
-  - [ ] Define resource limit constraints
-  - [ ] Define parameter schema format
-- [ ] Create `instrmcp/tools/tool_spec.py`
-  - [ ] ToolSpec dataclass with validation
-  - [ ] JSON schema validator
-  - [ ] Hash computation (SHA-256)
-  - [ ] Signature verification (HMAC-SHA256)
-- [ ] Implement registry storage at `~/.instrmcp/registry/`
-  - [ ] Create directory structure on first run
-  - [ ] Implement atomic file writes with backup
-  - [ ] Add manifest.json index management
-  - [ ] Set proper file permissions (0600)
-- [ ] Create `instrmcp/servers/jupyter_qcodes/registrars/dynamic_tools.py`
-  - [ ] DynamicToolRegistrar class
-  - [ ] Registry persistence layer
-  - [ ] Tool loading on server start
-- [ ] Add crypto utilities in `instrmcp/servers/jupyter_qcodes/security/crypto.py`
-  - [ ] SHA-256 hashing for tool specs
-  - [ ] HMAC-SHA256 signing/verification
-  - [ ] Nonce generation
-  - [ ] Constant-time comparison
-- [ ] Create audit logging system in `instrmcp/servers/jupyter_qcodes/security/audit.py`
-  - [ ] Structured logging to `~/.instrmcp/audit/tool_audit.log`
-  - [ ] Log: registrations, updates, revocations, executions, denials
-  - [ ] Log rotation (max 10MB per file, keep 5 files)
+### Phase 1: Core Infrastructure ✅ COMPLETE
+- [x] Design tool spec JSON schema
+  - [x] Define required fields (name, version, description)
+  - [x] Define capability strings taxonomy
+  - [x] Define parameter schema format
+- [x] Create `instrmcp/tools/dynamic/tool_spec.py`
+  - [x] ToolSpec and ToolParameter dataclasses with validation
+  - [x] JSON schema validator
+  - [x] create_tool_spec() helper function
+  - [x] Comprehensive validation (name, version, description, capabilities, parameters, source code syntax)
+- [x] Implement registry storage at `~/.instrmcp/registry/`
+  - [x] Create directory structure on first run
+  - [x] Simple JSON file storage (one file per tool)
+  - [x] In-memory cache with disk persistence
+- [x] Create `instrmcp/servers/jupyter_qcodes/dynamic_registrar.py`
+  - [x] DynamicToolRegistrar class
+  - [x] Registry persistence layer (ToolRegistry)
+  - [x] Tool loading on server start
+  - [x] 6 meta-tools: register, update, revoke, list, inspect, registry_stats
+- [x] Create simple logging in `instrmcp/servers/jupyter_qcodes/security/audit.py`
+  - [x] Basic logging to `~/.instrmcp/audit/tool_audit.log`
+  - [x] Log: registrations, updates, revocations (not every execution)
+  - [x] JSON-formatted log entries with timestamps
+- [x] Integration
+  - [x] Integrated with mcp_server.py (unsafe mode only)
+  - [x] Added stdio_proxy.py proxies for all 6 meta-tools
+- [x] Unit tests (28 tests, all passing)
+  - [x] ToolParameter tests
+  - [x] ToolSpec tests
+  - [x] Validation tests
+  - [x] ToolRegistry tests (register, update, revoke, list, filtering, persistence)
+  - [x] AuditLogger tests
 
-### Phase 2: Backend Meta-Tools
-- [ ] Implement `tool.register(toolSpec)` in DynamicToolRegistrar
-  - [ ] Validate toolSpec schema
-  - [ ] Check name conflicts (reject if exists without update flag)
-  - [ ] Compute hash and verify signature
-  - [ ] Send consent request to frontend via `mcp:capcall`
+#### Human Testing Checklist (Phase 1,done):
+**Setup:**
+1. Start Jupyter with MCP server: `instrmcp jupyter --unsafe --port 3000`
+2. Open MCP Inspector in browser or use Claude Desktop
+3. Verify 25 tools available (19 original + 6 dynamic meta-tools)
+
+**Test Meta-Tools:**
+1. **Test `dynamic_list_tools`**:
+   - Call with no parameters → should return `{"status": "success", "count": 0, "tools": []}`
+
+2. **Test `dynamic_registry_stats`**:
+   - Call with no parameters → should return stats with `total_tools: 0`
+
+3. **Test `dynamic_register_tool`** (create a simple tool):
+
+   **Minimal version (for zero-argument functions):**
+   ```
+   name: "get_timestamp"
+   source_code: "import time\n\ndef get_timestamp():\n    return time.time()"
+   ```
+   This works because the function takes no arguments.
+
+   **For functions with arguments (PARAMETERS REQUIRED):**
+   ```
+   name: "test_add"
+   source_code: "def test_add(a, b):\n    return a + b"
+   parameters: [
+     {"name": "a", "type": "number", "description": "First number", "required": true},
+     {"name": "b", "type": "number", "description": "Second number", "required": true}
+   ]
+   ```
+   **Important:** If your function has arguments, you MUST specify the parameters, otherwise FastMCP will register it as a zero-argument function and it won't work.
+
+   **Full version (all optional fields):**
+   ```
+   name: "test_add"
+   source_code: "def test_add(a, b):\n    return a + b"
+   parameters: [
+     {"name": "a", "type": "number", "description": "First number", "required": true},
+     {"name": "b", "type": "number", "description": "Second number", "required": true}
+   ]
+   version: "1.0.0"
+   description: "Add two numbers together for testing"
+   author: "test_user"
+   capabilities: ["cap:python.builtin"]
+   returns: {"type": "number", "description": "Sum of a and b"}
+   ```
+
+   **Note:** When using MCP Inspector, JSON fields (capabilities, parameters, returns) should be entered as JSON objects/arrays, NOT as quoted strings.
+
+   - Should return: `{"status": "success", "message": "Tool 'test_add' registered successfully", ...}`
+
+4. **Test `dynamic_list_tools` again**:
+   - Should now show 1 tool
+
+5. **Test `dynamic_inspect_tool`**:
+   - Call with `name: "test_add"`
+   - Should return full tool specification
+
+6. **Test `dynamic_update_tool`**:
+   - Update version to "1.1.0" and change description
+   - Should succeed
+
+7. **Test `dynamic_revoke_tool`**:
+   - Call with `name: "test_add"`
+   - Should return success
+   - Verify tool removed with `dynamic_list_tools`
+
+**Verify File System:**
+1. Check registry: `ls ~/.instrmcp/registry/` → should show tool JSON files during registration
+2. Check audit log: `tail ~/.instrmcp/audit/tool_audit.log` → should show JSON log entries
+3. Verify tool persistence: Restart server and check if tools are reloaded
+
+### Phase 2: Consent UI and Dynamic Execution
+
+#### Backend: Tool Execution (COMPLETED ✅)
+- [x] Create `instrmcp/servers/jupyter_qcodes/dynamic_runtime.py`
+  - [x] DynamicToolRuntime class
+  - [x] Execute tool source code directly in Jupyter kernel context
+  - [x] Basic exception handling
+  - [x] Tool compilation and execution methods
+  - [x] Tool unregistration support
+- [x] Update `dynamic_registrar.py` for dynamic tool execution
+  - [x] Register tools with FastMCP on creation
+  - [x] Re-register tools on server start from registry
+  - [x] Unregister tools from FastMCP on revoke (using `mcp.remove_tool()` since v2.9.1)
+  - [x] Integrate DynamicToolRuntime for execution
+  - [x] Fix registration order: FastMCP before registry (prevents faulty tools in registry)
+  - [x] Add rollback logic for failed updates
+- [x] Tests for dynamic runtime (11 tests, all passing)
+  - [x] Test tool compilation
+  - [x] Test tool execution with various inputs
+  - [x] Test namespace access
+  - [x] Test error handling
+- [x] Integration tests for dynamic registrar (8 tests, all passing)
+  - [x] Test `mcp.remove_tool()` is called on tool revocation
+  - [x] Test exception handling when `remove_tool()` fails
+  - [x] Test `remove_tool()` is called during tool updates
+  - [x] Test FastMCP registration happens before registry storage
+  - [x] Test registry not updated when compilation fails
+  - [x] Test update rollback on registration failure
+  - [x] Test tool visibility (only valid tools in list)
+  - [x] Test revoked tools removed from runtime
+
+#### Human Testing Checklist (Phase 2 - Backend Execution, COMPLETED✅-caidish):
+**Setup:**
+1. Start Jupyter with MCP server: `instrmcp jupyter --unsafe --port 3000`
+2. Open JupyterLab and create a notebook with some variables:
+   ```python
+   import numpy as np
+   test_array = np.array([1, 2, 3, 4, 5])
+   multiplier = 10
+   ```
+
+**Test Dynamic Tool Execution:**
+1. **Register a tool that uses NumPy**:
+   ```json
+   name: "multiply_by_two"
+   version: "1.0.0"
+   description: "Multiply array by two using NumPy"
+   author: "test_user"
+   capabilities: '["cap:python.numpy"]'
+   parameters: '[{"name": "arr", "type": "array", "description": "Input array", "required": true}]'
+   returns: '{"type": "array", "description": "Multiplied array"}'
+   source_code: "import numpy as np\n\ndef multiply_by_two(arr):\n    return (np.array(arr) * 2).tolist()"
+   ```
+   - Should register successfully AND be immediately callable
+
+2. **Execute the new tool**:
+   - Use MCP Inspector to call `multiply_by_two` with `arr: [1, 2, 3]`
+   - Should return: `{"status": "success", "result": [2, 4, 6]}`
+
+3. **Register tool that accesses notebook namespace**:
+   ```json
+   name: "use_notebook_var"
+   version: "1.0.0"
+   description: "Use variable from notebook namespace"
+   author: "test_user"
+   capabilities: '["cap:notebook.read"]'
+   parameters: '[{"name": "value", "type": "number", "description": "Input value", "required": true}]'
+   returns: '{"type": "number", "description": "Result"}'
+   source_code: "def use_notebook_var(value):\n    return value * multiplier"
+   ```
+   - Execute with `value: 5` → should return `{"status": "success", "result": 50}`
+
+4. **Test tool persistence**:
+   - Restart MCP server
+   - Verify registered tools are automatically reloaded
+   - Call `multiply_by_two` again → should still work
+
+5. **Test tool revocation**:
+   - Revoke `multiply_by_two` using `dynamic_revoke_tool`
+   - Try to call the tool → should fail (not available)
+   - Verify it's removed from tool list
+
+6. **Test tool update**:
+   - Register a tool, then update it to version 2.0.0 with modified code
+   - Verify the updated version executes with new behavior
+   - Old compiled version should be replaced
+
+#### Backend: Consent Integration (TODO)
+- [ ] Update `dynamic_registrar.py` to integrate consent workflow
+  - [ ] Send consent request before registration via comm channel `mcp:capcall`
   - [ ] Wait for consent response (timeout: 5 min)
-  - [ ] On approval: persist to registry + register with FastMCP
+  - [ ] Check "always allow" permissions before showing consent UI
+  - [ ] On approval: complete registration
   - [ ] On decline: cleanup and return error
-  - [ ] Audit log entry
-- [ ] Implement `tool.update(name, toolSpec)`
-  - [ ] Load existing tool spec
-  - [ ] Compute diff (source code, capabilities, limits)
-  - [ ] Send diff in consent request
-  - [ ] Require re-consent
-  - [ ] Update registry atomically
-  - [ ] Re-register with FastMCP
-- [ ] Implement `tool.revoke(name)`
-  - [ ] Remove from registry
-  - [ ] Unregister from FastMCP
-  - [ ] Remove "always allow" permissions if present
-  - [ ] Audit log entry
-- [ ] Implement `tool.list()`
-  - [ ] Query registry manifest
-  - [ ] Return: name, version, description, capabilities, created_at
-  - [ ] Filter by capability (optional parameter)
-- [ ] Implement `tool.inspect(name)`
-  - [ ] Load full tool spec from registry
-  - [ ] Return: full spec + approval history + invocation stats
-  - [ ] Support diff mode: compare with previous version
-- [ ] Register all meta-tools with FastMCP (only in unsafe mode)
-- [ ] Add unit tests for each meta-tool
+  - [ ] Store "always allow" decisions in `~/.instrmcp/consents/always_allow.json`
 
-### Phase 3: Frontend Consent UI
-- [ ] Create new comm channel `mcp:capcall` in TypeScript extension
+#### Frontend: Consent UI (JupyterLab Extension)
+- [ ] Create comm channel `mcp:capcall` in TypeScript extension
   - [ ] Update `instrmcp/extensions/jupyterlab/src/index.ts`
   - [ ] Add comm handler for `mcp:capcall` messages
   - [ ] Message types: `consent_request`, `consent_response`
-- [ ] Build React consent dialog component
-  - [ ] Create `instrmcp/extensions/jupyterlab/src/consent/ConsentDialog.tsx`
-    - [ ] Modal dialog using JupyterLab Dialog
-    - [ ] Display tool name, description, author
+- [ ] Build consent dialog components
+  - [ ] `ConsentDialog.tsx` - Main modal dialog
+    - [ ] Display tool name, description, author, version
     - [ ] Syntax-highlighted source code viewer (CodeMirror)
-    - [ ] SHA-256 hash display with copy button
     - [ ] Action buttons: [Allow], [Always Allow], [Decline]
-  - [ ] Create `instrmcp/extensions/jupyterlab/src/consent/CapabilityList.tsx`
-    - [ ] Checklist of requested capabilities
-    - [ ] Icons and descriptions for each capability type
-    - [ ] Warning badges for dangerous capabilities
-  - [ ] Create `instrmcp/extensions/jupyterlab/src/consent/DiffViewer.tsx`
-    - [ ] Side-by-side diff for tool updates
+  - [ ] `CapabilityList.tsx` - Capability checklist
+    - [ ] Icons and descriptions for each capability
+    - [ ] Warning badges for dangerous capabilities (write operations)
+  - [ ] `DiffViewer.tsx` (optional, for tool updates)
+    - [ ] Side-by-side diff view
     - [ ] Highlight capability changes
-    - [ ] Highlight resource limit changes
-  - [ ] Create `instrmcp/extensions/jupyterlab/src/consent/ResourceLimits.tsx`
-    - [ ] Display: timeout, memory limit, rate limit
-    - [ ] Visual indicators (progress bars, badges)
-- [ ] Implement user preferences storage
-  - [ ] Store "always allow" decisions in `~/.instrmcp/registry/consents/always_allow.json`
-  - [ ] UI to view and revoke "always allow" permissions
-- [ ] Add consent workflow logic
+- [ ] Implement consent workflow logic
   - [ ] Handle consent_request messages from backend
-  - [ ] Show ConsentDialog
+  - [ ] Show ConsentDialog with tool details
   - [ ] Send consent_response back to backend
   - [ ] Handle timeout (5 min) with auto-decline
-- [ ] Build extension with `jlpm run build`
-- [ ] Test consent UI manually
+- [ ] Build and test
+  - [ ] Build extension: `jlpm run build`
+  - [ ] Test consent workflow end-to-end
+  - [ ] Test "always allow" functionality
 
-### Phase 4: Security & Sandboxing
-- [ ] Add RestrictedPython dependency to `pyproject.toml`
-- [ ] Create `instrmcp/servers/jupyter_qcodes/security/sandbox.py`
-  - [ ] RestrictedPython execution wrapper
-  - [ ] Whitelist safe builtins (len, range, str, int, float, list, dict, etc.)
-  - [ ] Blacklist dangerous builtins (eval, exec, __import__, open, etc.)
-  - [ ] AST inspection to detect dangerous patterns
-  - [ ] Custom `__builtins__` with limited functions
+#### Human Testing Checklist (Phase 2 - Consent UI - When Complete):
+**Setup:**
+1. Start Jupyter with MCP server: `instrmcp jupyter --unsafe --port 3000`
+2. Open JupyterLab in browser
+3. Open MCP Inspector
+
+**Test Consent Workflow:**
+1. **Register a new tool via MCP Inspector**:
+   - Call `dynamic_register_tool` with a simple tool
+   - Consent dialog should appear in JupyterLab
+   - Verify dialog shows: tool name, description, author, source code, capabilities
+   - Click "Allow" → tool should register successfully
+
+2. **Test "Always Allow"**:
+   - Register another tool
+   - Click "Always Allow" in consent dialog
+   - Verify tool registers
+   - Register a third tool from same author
+   - Should NOT show dialog (auto-approved from always allow)
+
+3. **Test "Decline"**:
+   - Register a tool
+   - Click "Decline" in consent dialog
+   - Verify tool is NOT registered (check with `dynamic_list_tools`)
+
+4. **Test timeout**:
+   - Register a tool
+   - Wait 5 minutes without responding
+   - Should auto-decline and show timeout message
+
+5. **Verify always allow persistence**:
+   - Check file: `cat ~/.instrmcp/consents/always_allow.json`
+   - Should contain author/permission entries
+
+### Phase 3: Capability System (Optional Enhancement)
 - [ ] Create `instrmcp/servers/jupyter_qcodes/security/capabilities.py`
   - [ ] Define capability taxonomy:
     - `cap:qcodes.read` - Read QCodes instruments
@@ -126,96 +326,112 @@ Enable LLMs to create dynamic MCP tools at runtime with comprehensive security c
     - `cap:notebook.write` - Modify notebook cells
     - `cap:database.read` - Read measurement database
     - `cap:database.write` - Write to database
-    - `cap:network.egress` - External network calls
-    - `cap:file.read` - Read files
-    - `cap:file.write` - Write files
     - `cap:numpy` - Use NumPy
     - `cap:scipy` - Use SciPy
     - `cap:matplotlib` - Use Matplotlib
-  - [ ] Capability enforcement at runtime
-  - [ ] Capability dependency resolution (e.g., scipy requires numpy)
+  - [ ] Basic capability checking (for documentation/tracking)
   - [ ] Mode-based capability restrictions (safe mode blocks write caps)
-- [ ] Create `instrmcp/servers/jupyter_qcodes/security/resource_limits.py`
-  - [ ] Execution timeout enforcement (signal.alarm or threading.Timer)
-  - [ ] Memory limit enforcement (resource.setrlimit on Unix)
-  - [ ] Rate limiting (token bucket algorithm)
-  - [ ] Invocation counter per tool
-- [ ] Create `instrmcp/servers/jupyter_qcodes/dynamic_runtime.py`
-  - [ ] DynamicToolRuntime class
-  - [ ] Execute tool in sandbox with capabilities + limits
-  - [ ] Catch and sanitize exceptions
-  - [ ] Log all executions
-- [ ] Integration with DynamicToolRegistrar
-  - [ ] Runtime execution on tool invocation
-  - [ ] Audit logging
-- [ ] Add security unit tests
-  - [ ] Test sandbox escapes (should fail)
-  - [ ] Test capability violations (should fail)
-  - [ ] Test resource limit violations (should timeout/fail)
+
+### Phase 4: Agentic Error Correction with MCP Sampling ✅ COMPLETE
+**Goal**: Demonstrate MCP sampling framework by implementing safe, automatic JSON error correction
+
+#### Implementation
+- [x] Add sampling support to `dynamic_registrar.py`
+  - [x] Add `Context` parameter to meta-tools (via `ctx` parameter)
+  - [x] Create `_attempt_json_correction()` helper method
+  - [x] Integrate correction into error handling flow
+  - [x] Add retry limit (max 1 correction attempt)
+- [x] Error correction logic
+  - [x] Detect JSON parsing errors (JSONDecodeError)
+  - [x] Call `ctx.sample()` with correction prompt
+  - [x] Parse corrected JSON
+  - [x] Retry registration with corrected values
+  - [x] Return transparent result showing what was corrected
+- [x] Safety & transparency
+  - [x] Log all correction attempts to audit trail
+  - [x] Return both original and corrected values in success response
+  - [x] Add `auto_correct_json` option (opt-in via `%mcp_option`)
+  - [x] Default: disabled (explicit errors preferred)
+  - [x] Add to valid options in jupyter_mcp_extension.py
+- [x] Testing (20 tests, all passing)
+  - [x] Unit tests for `_attempt_json_correction()` with mock Context
+  - [x] Test with malformed JSON in parameters, capabilities, returns, examples, tags
+  - [x] Test retry limits (single attempt only)
+  - [x] Test opt-in/opt-out behavior (default disabled)
+  - [x] Mock `ctx.sample()` to avoid real LLM calls in tests
+  - [x] Test correction prompt format and temperature
+  - [x] Test validation of corrected JSON
+  - [x] Test exception handling
+  - [x] Test audit logging
+  - [x] Test edge cases (empty JSON, special characters, long strings)
+
+#### Human Testing Checklist (Phase 4):
+**Setup:**
+1. Start Jupyter with MCP server: `instrmcp jupyter --unsafe --port 3000`
+2. Enable auto-correction: Run in notebook: `%mcp_option auto_correct_json`
+3. Restart server: `%mcp_restart`
+
+**Test Cases:**
+1. **Test malformed JSON in parameters field**:
+   - Register tool with broken JSON: `parameters: "[{name: test}]"` (missing quotes)
+   - Should auto-correct and return: `{"status": "success_corrected", "corrected_field": "parameters", ...}`
+   - Verify tool is registered correctly
+
+2. **Test malformed JSON in capabilities field**:
+   - Register tool with: `capabilities: "['cap:python.numpy']"` (wrong quotes)
+   - Should auto-correct to proper JSON array
+   - Verify correction in response
+
+3. **Test disabled auto-correction (default)**:
+   - Without `%mcp_option auto_correct_json`
+   - Register tool with malformed JSON
+   - Should return: `{"status": "error", "message": "Invalid JSON..."}`
+   - No correction attempt
+
+4. **Test correction failure**:
+   - Provide severely broken JSON that LLM can't fix
+   - Should fail after 1 attempt and return error
 
 ### Phase 5: Testing & Documentation
-- [ ] Unit tests
-  - [ ] `tests/unit/test_tool_spec.py` - Schema validation
-  - [ ] `tests/unit/test_dynamic_tools.py` - Meta-tool logic
-  - [ ] `tests/unit/test_sandbox.py` - Sandbox escapes
-  - [ ] `tests/unit/test_capabilities.py` - Permission checks
-  - [ ] `tests/unit/test_resource_limits.py` - Limit enforcement
-  - [ ] `tests/unit/test_crypto.py` - Hash/signature validation
+- [x] Unit tests (Phase 1 - completed)
+  - [x] `tests/unit/servers/test_dynamic_tools.py` - 28 tests covering tool_spec, registry, audit
+- [ ] Additional unit tests
+  - [ ] Test consent workflow integration
+  - [ ] Test dynamic runtime execution
+  - [ ] Test "always allow" permissions
+  - [ ] Test JSON auto-correction (Phase 4)
 - [ ] Integration tests
   - [ ] `tests/integration/test_dynamic_tool_workflow.py`
     - [ ] Full workflow: register → consent → execute → revoke
     - [ ] Test "always allow" persistence
     - [ ] Test tool updates with diff
-- [ ] Security penetration testing
-  - [ ] Attempt sandbox escapes
-  - [ ] Attempt privilege escalation
-  - [ ] Attempt data exfiltration
-  - [ ] Attempt resource exhaustion
-  - [ ] Attempt registry poisoning
+    - [ ] Test JSON correction workflow
 - [ ] Update documentation
   - [ ] Update `README.md` with dynamic tools feature
   - [ ] Create `docs/DYNAMIC_TOOLS.md`
     - [ ] User guide for LLMs to create tools
-    - [ ] Capability reference
-    - [ ] Security model explanation
+    - [ ] Capability reference (for documentation)
     - [ ] Examples
-  - [ ] Update `CLAUDE.md` with meta-tool descriptions
-  - [ ] Update `docs/ARCHITECTURE.md` with new components
-- [ ] Add migration guide
-  - [ ] No migration needed (new feature)
-  - [ ] Document how to enable/disable feature
+    - [ ] Auto-correction feature documentation
+  - [ ] Update `CLAUDE.md` with meta-tool descriptions and sampling feature
 
 ---
 
-## 🔒 Security Analysis: Identified Loopholes & Mitigations
+## 🔒 Security Analysis: Identified Risks & Mitigations (Simplified)
 
 ### 🔴 CRITICAL RISKS (P0)
 
 #### 1. Arbitrary Code Execution
-- **Risk**: Dynamic tools run in kernel context with full Python access
+- **Risk**: Dynamic tools run with full Jupyter kernel access
 - **Attack Vector**: Malicious LLM or compromised tool spec executing harmful code
 - **Impact**: Data theft, system compromise, instrument damage
 - **Mitigation**:
-  - ✅ RestrictedPython sandbox with whitelist-only builtins
-  - ✅ Capability-based permissions enforced at runtime
-  - ✅ AST inspection blocking dangerous patterns (`eval`, `exec`, `__import__`)
-  - ✅ Separate execution context with limited globals
-  - ✅ No access to `__builtins__` or `sys` modules
+  - ✅ User consent UI showing full source code
+  - ✅ Basic capability declaration (for transparency)
+  - ✅ Mode-based restrictions (safe mode blocks write capabilities)
 - **Status**: [ ] Not implemented yet
 
-#### 2. Data Exfiltration
-- **Risk**: Tools accessing sensitive notebook data, instrument settings, or database
-- **Attack Vector**: Tool declaring minimal capabilities but accessing more via side channels
-- **Impact**: Leakage of experimental data, proprietary information
-- **Mitigation**:
-  - ✅ Explicit capability declaration required (e.g., `cap:notebook.read`)
-  - ✅ Variable access whitelist (tools declare needed variables)
-  - ✅ Network egress capability required and logged
-  - ✅ Audit trail of all data access
-  - ✅ No implicit capability escalation
-- **Status**: [ ] Not implemented yet
-
-#### 3. Privilege Escalation
+#### 2. Privilege Escalation
 - **Risk**: Safe mode tools gaining unsafe privileges
 - **Attack Vector**: Tool exploiting capability system to bypass mode boundaries
 - **Impact**: Unauthorized instrument writes, cell modifications
@@ -229,114 +445,35 @@ Enable LLMs to create dynamic MCP tools at runtime with comprehensive security c
 
 ### 🟡 HIGH RISKS (P1)
 
-#### 4. Tool Spec Tampering
-- **Risk**: Modified tool specs after user approval
-- **Attack Vector**: Direct file modification of registry JSON files
-- **Impact**: Executing unapproved code under approved tool name
-- **Mitigation**:
-  - ✅ SHA-256 hash verification before each execution
-  - ✅ HMAC-SHA256 cryptographic signatures
-  - ✅ Version tracking with timestamps
-  - ✅ Re-consent required on any spec change (hash mismatch)
-  - ✅ File permissions 0600 on registry files
-- **Status**: [ ] Not implemented yet
-
-#### 5. Registry Poisoning
-- **Risk**: Malicious modification of `~/.instrmcp/registry/*.json`
-- **Attack Vector**: Attacker with file system access editing registry
-- **Impact**: Arbitrary code execution under trusted tool names
-- **Mitigation**:
-  - ✅ File permissions (0600) on registry directory and files
-  - ✅ JSON schema validation on every load
-  - ✅ Integrity checksums for entire registry (manifest.json)
-  - ✅ Atomic writes with backup/rollback
-  - ✅ Detect tampering and refuse to load corrupted registry
-- **Status**: [ ] Not implemented yet
-
-#### 6. Resource Exhaustion (DoS)
-- **Risk**: Infinite loops, memory bombs, disk filling
+#### 3. Resource Exhaustion (DoS)
+- **Risk**: Infinite loops, memory bombs
 - **Attack Vector**: Tool with malicious resource-intensive code
-- **Impact**: Kernel crash, Jupyter hang, disk full
+- **Impact**: Kernel crash, Jupyter hang
 - **Mitigation**:
-  - ✅ Execution timeout (default 5s, max 60s)
-  - ✅ Memory limits enforced via `resource.setrlimit()`
+  - ✅ User review of source code before approval
   - ✅ Registry size limits (max 100 tools, 10MB total)
-  - ✅ Tool invocation rate limiting (default 10/min)
-  - ✅ Disk quota for tool storage
 - **Status**: [ ] Not implemented yet
 
 ### 🟢 MEDIUM RISKS (P2)
 
-#### 7. Consent UI Bypassing
-- **Risk**: Frontend bypass or race conditions allowing unapproved execution
-- **Attack Vector**: Direct backend API calls, WebSocket message injection
-- **Impact**: Executing tools without user consent
+#### 4. Consent UI Bypassing
+- **Risk**: Executing tools without user consent
+- **Attack Vector**: Direct backend API calls
+- **Impact**: Unauthorized tool execution
 - **Mitigation**:
-  - ✅ Backend double-checks all consents (never trust frontend)
+  - ✅ Backend validates consent tokens
   - ✅ Consent tokens with expiration (5 min)
-  - ✅ Audit log of all approval decisions with timestamps
-  - ✅ No backend execution without valid consent token
-  - ✅ One-time-use consent tokens (nonce)
+  - ✅ Simple audit log of approval decisions
 - **Status**: [ ] Not implemented yet
 
-#### 8. Replay Attacks
-- **Risk**: Reusing old signed tool specs
-- **Attack Vector**: Replaying previously approved tool spec with different backend state
-- **Impact**: Executing outdated/vulnerable tool versions
-- **Mitigation**:
-  - ✅ Nonce generation per registration (UUID v4)
-  - ✅ Timestamp validation (reject specs >1 hour old)
-  - ✅ Version monotonicity checks (version must increase)
-  - ✅ Revoked tool blacklist (never allow re-registration)
-  - ✅ Consent token single-use enforcement
-- **Status**: [ ] Not implemented yet
-
-#### 9. Tool Name Conflicts
+#### 5. Tool Name Conflicts
 - **Risk**: Overwriting system tools or other dynamic tools
 - **Attack Vector**: Registering tool with existing name
-- **Impact**: Breaking system functionality, tool hijacking
+- **Impact**: Breaking system functionality
 - **Mitigation**:
-  - ✅ Reserved namespace prefix for system tools (`system:*`, `qcodes:*`, `notebook:*`)
-  - ✅ Unique name validation (reject exact conflicts)
-  - ✅ Namespacing: `dynamic:toolname` prefix for all dynamic tools
-  - ✅ Update-only mode for existing tools (explicit flag required)
-  - ✅ Case-insensitive name comparison
-- **Status**: [ ] Not implemented yet
-
-#### 10. Side Channel Attacks
-- **Risk**: Information leakage via timing, errors, exceptions
-- **Attack Vector**: Analyzing tool execution time or error messages
-- **Impact**: Inferring sensitive data from timing patterns
-- **Mitigation**:
-  - ✅ Constant-time hash comparisons (secrets.compare_digest)
-  - ✅ Sanitized error messages (no internal paths, no stack traces to user)
-  - ✅ Timing jitter on sensitive operations (random delay)
-  - ✅ Rate limiting to prevent timing analysis
-  - ✅ Generic error responses for security failures
-- **Status**: [ ] Not implemented yet
-
-#### 11. Tool Chaining Exploits
-- **Risk**: Dynamic tool calling other dynamic tools recursively
-- **Attack Vector**: Tool A calls Tool B calls Tool C, capability escalation
-- **Impact**: Bypassing capability limits through composition
-- **Mitigation**:
-  - ✅ Call stack depth limit (max 3 levels)
-  - ✅ Capability propagation rules (no elevation, only intersection)
-  - ✅ Cross-tool invocation logging (audit trail)
-  - ✅ Circular dependency detection
-  - ✅ Total execution time limit across call chain
-- **Status**: [ ] Not implemented yet
-
-#### 12. Persistence Attacks
-- **Risk**: "Always allow" enabling permanent backdoors
-- **Attack Vector**: Getting user to click "Always Allow" once
-- **Impact**: Long-term unauthorized access
-- **Mitigation**:
-  - ✅ Periodic re-consent (30 days for critical capabilities)
-  - ✅ Revocation UI (`tool.revoke_permissions(name)`)
-  - ✅ Capability expiration timestamps
-  - ✅ Audit dashboard for reviewing "always allow" grants
-  - ✅ Warning on "Always Allow" for dangerous capabilities
+  - ✅ Reserved namespace for system tools
+  - ✅ Unique name validation
+  - ✅ `dynamic:` prefix for all dynamic tools
 - **Status**: [ ] Not implemented yet
 
 ---
@@ -352,11 +489,8 @@ instrmcp/
 │   │   └── ...
 │   ├── security/                      # [ ] New directory
 │   │   ├── __init__.py
-│   │   ├── sandbox.py                # [ ] RestrictedPython wrapper
-│   │   ├── capabilities.py           # [ ] Permission system
-│   │   ├── crypto.py                 # [ ] Hash/sign utilities
-│   │   ├── resource_limits.py        # [ ] CPU/mem enforcement
-│   │   └── audit.py                  # [ ] Audit logging
+│   │   ├── capabilities.py           # [ ] Capability definitions
+│   │   └── audit.py                  # [ ] Simple audit logging
 │   └── dynamic_runtime.py            # [ ] Tool execution engine
 ├── extensions/jupyterlab/src/
 │   ├── consent/                       # [ ] New directory
@@ -372,33 +506,33 @@ instrmcp/
     └── tool_spec.py                  # [ ] ToolSpec schema & validation
 
 ~/.instrmcp/
-├── registry/                          # [ ] Create on first run
-│   ├── manifest.json                 # [ ] Tool registry index
-│   ├── tools/                         # [ ] Tool specs
-│   │   ├── {tool_name_hash}.json    # [ ] Individual tool specs
-│   │   └── ...
-│   └── consents/                      # [ ] User preferences
-│       └── always_allow.json         # [ ] "Always allow" decisions
-└── audit/                             # [ ] Audit logs
-    └── tool_audit.log                # [ ] Security audit trail
+├── registry/                          # [x] Created on first use
+│   ├── {tool_name}.json              # [x] Individual tool specs (one file per tool)
+│   └── ...
+├── consents/                          # [ ] User preferences (future)
+│   └── always_allow.json             # [ ] "Always allow" decisions
+└── audit/                             # [x] Audit logs
+    └── tool_audit.log                # [x] Simple audit trail (registrations, updates, revocations)
 ```
 
 ---
 
 ## 🔧 Tool Spec Contract
 
-### JSON Schema
+### JSON Schema (Simplified - As Implemented)
 
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["name", "version", "description", "author", "capabilities", "resource_limits", "source_code"],
+  "required": ["name", "version", "description", "author", "capabilities", "parameters", "returns", "source_code"],
   "properties": {
     "name": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_]{2,63}$",
-      "description": "Tool name (lowercase, alphanumeric + underscore, 3-64 chars)"
+      "pattern": "^[a-z_][a-z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Tool name (snake_case, max 64 chars)"
     },
     "version": {
       "type": "string",
@@ -407,13 +541,15 @@ instrmcp/
     },
     "description": {
       "type": "string",
+      "minLength": 10,
       "maxLength": 500,
-      "description": "Human-readable description"
+      "description": "Tool description (10-500 chars)"
     },
     "author": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 100,
-      "description": "Tool author (usually 'claude')"
+      "description": "Tool author identifier"
     },
     "created_at": {
       "type": "string",
@@ -425,58 +561,59 @@ instrmcp/
       "format": "date-time",
       "description": "ISO 8601 timestamp"
     },
-    "hash": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "SHA-256 hash of source_code"
-    },
-    "signature": {
-      "type": "string",
-      "pattern": "^hmac-sha256:[a-f0-9]{64}$",
-      "description": "HMAC-SHA256 signature"
-    },
-    "nonce": {
-      "type": "string",
-      "description": "Unique identifier (UUID v4)"
-    },
     "capabilities": {
       "type": "array",
       "items": {
         "type": "string",
         "pattern": "^cap:[a-z]+\\.[a-z]+$"
       },
-      "description": "Required capabilities (e.g., 'cap:notebook.read')"
-    },
-    "resource_limits": {
-      "type": "object",
-      "properties": {
-        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
-        "memory_mb": {"type": "integer", "minimum": 10, "maximum": 500},
-        "rate_limit_per_minute": {"type": "integer", "minimum": 1, "maximum": 100}
-      },
-      "required": ["timeout_seconds", "memory_mb", "rate_limit_per_minute"]
+      "minItems": 1,
+      "description": "Required capabilities (e.g., cap:qcodes.read)"
     },
     "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "description"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z_][a-z0-9_]*$"},
+          "type": {"type": "string", "enum": ["string", "number", "boolean", "array", "object"]},
+          "description": {"type": "string", "minLength": 1},
+          "required": {"type": "boolean"},
+          "default": {},
+          "enum": {"type": "array"}
+        }
+      }
+    },
+    "returns": {
       "type": "object",
-      "description": "Parameter schema (JSON Schema format)"
+      "required": ["type", "description"],
+      "properties": {
+        "type": {"type": "string"},
+        "description": {"type": "string", "minLength": 1}
+      }
     },
     "source_code": {
       "type": "string",
-      "maxLength": 50000,
-      "description": "Python function source code"
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "Python function source code (max 10KB)"
     },
-    "metadata": {
-      "type": "object",
-      "properties": {
-        "consent_token": {"type": "string"},
-        "consent_expires_at": {"type": "string", "format": "date-time"}
-      }
+    "examples": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Usage examples"
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Searchable tags"
     }
   }
 }
 ```
 
-### Example Tool Spec
+### Example Tool Spec (Simplified - As Implemented)
 
 ```json
 {
@@ -486,45 +623,33 @@ instrmcp/
   "author": "claude",
   "created_at": "2025-10-01T12:00:00Z",
   "updated_at": "2025-10-01T12:00:00Z",
-  "hash": "sha256:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
-  "signature": "hmac-sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-  "nonce": "550e8400-e29b-41d4-a716-446655440000",
-
   "capabilities": [
-    "cap:notebook.read",
     "cap:numpy",
     "cap:scipy"
   ],
-
-  "resource_limits": {
-    "timeout_seconds": 5,
-    "memory_mb": 100,
-    "rate_limit_per_minute": 10
-  },
-
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "frequencies": {
-        "type": "array",
-        "items": {"type": "number"},
-        "description": "Frequency sweep data (Hz)"
-      },
-      "amplitudes": {
-        "type": "array",
-        "items": {"type": "number"},
-        "description": "Amplitude response data"
-      }
+  "parameters": [
+    {
+      "name": "frequencies",
+      "type": "array",
+      "description": "Frequency sweep data in Hz",
+      "required": true
     },
-    "required": ["frequencies", "amplitudes"]
+    {
+      "name": "amplitudes",
+      "type": "array",
+      "description": "Amplitude response data",
+      "required": true
+    }
+  ],
+  "returns": {
+    "type": "object",
+    "description": "Analysis results with f0, Q-factor, and amplitude"
   },
-
   "source_code": "import numpy as np\nfrom scipy.optimize import curve_fit\n\ndef analyze_resonator(frequencies, amplitudes):\n    \"\"\"Fit Lorentzian to extract Q-factor.\"\"\"\n    def lorentzian(f, f0, Q, A):\n        return A / (1 + 4*Q**2*((f-f0)/f0)**2)\n    \n    popt, _ = curve_fit(lorentzian, frequencies, amplitudes)\n    f0, Q, A = popt\n    return {'f0': f0, 'Q': Q, 'amplitude': A}",
-
-  "metadata": {
-    "consent_token": "temp-1a2b3c4d-5e6f-7890-abcd-ef1234567890",
-    "consent_expires_at": "2025-10-01T12:05:00Z"
-  }
+  "examples": [
+    "analyze_resonator(frequencies=[1e9, 1.1e9, 1.2e9], amplitudes=[0.5, 1.0, 0.5])"
+  ],
+  "tags": ["analysis", "resonator", "qfactor"]
 }
 ```
 
@@ -543,18 +668,16 @@ instrmcp/
 │  ┌──────────────────────────────────────┐  │
 │  │  2. Validate schema                  │  │
 │  │  3. Check name conflicts             │  │
-│  │  4. Compute hash (SHA-256)           │  │
-│  │  5. Generate consent token           │  │
+│  │  4. Generate consent token           │  │
 │  └──────────────────────────────────────┘  │
 └────┬───────────────────────────────────────┘
-     │ 6. Send consent_request via mcp:capcall
+     │ 5. Send consent_request via mcp:capcall
      ▼
 ┌────────────────────────────────────────────┐
 │       Frontend (JupyterLab)                │
 │  ┌──────────────────────────────────────┐  │
-│  │  7. Show ConsentDialog               │  │
+│  │  6. Show ConsentDialog               │  │
 │  │     • Source code (highlighted)      │  │
-│  │     • Hash: sha256:1a2b3c...         │  │
 │  │     • Capabilities:                  │  │
 │  │       ☑ notebook.read                │  │
 │  │       ☑ numpy                        │  │
@@ -564,43 +687,37 @@ instrmcp/
 │  │  [Allow] [Always Allow] [Decline]    │  │
 │  └──────────────────────────────────────┘  │
 └────┬───────────────────────────────────────┘
-     │ 8. User clicks: [Allow] or [Always Allow] or [Decline]
-     │ 9. Send consent_response via mcp:capcall
+     │ 7. User clicks: [Allow] or [Always Allow] or [Decline]
+     │ 8. Send consent_response via mcp:capcall
      ▼
 ┌────────────────────────────────────────────┐
 │         Backend (MCP Server)               │
 │  ┌──────────────────────────────────────┐  │
-│  │ 10. Validate consent token           │  │
-│  │ 11. Check token not expired          │  │
-│  │ 12. Persist to registry:             │  │
+│  │  9. Validate consent token           │  │
+│  │ 10. Check token not expired          │  │
+│  │ 11. Persist to registry:             │  │
 │  │     ~/.instrmcp/registry/tools/      │  │
-│  │     {hash}.json                      │  │
-│  │ 13. Update manifest.json             │  │
-│  │ 14. Register with FastMCP:           │  │
+│  │     {toolname}.json                  │  │
+│  │ 12. Update manifest.json             │  │
+│  │ 13. Register with FastMCP:           │  │
 │  │     @mcp.tool(name="dynamic:...")    │  │
-│  │ 15. Audit log entry                  │  │
+│  │ 14. Simple audit log entry           │  │
 │  └──────────────────────────────────────┘  │
 └────┬───────────────────────────────────────┘
-     │ 16. Return success to LLM
+     │ 15. Return success to LLM
      ▼
 ┌─────────┐
 │   LLM   │  Tool now available for invocation
 └────┬────┘
-     │ 17. Invoke: analyze_resonator(freqs, amps)
+     │ 16. Invoke: analyze_resonator(freqs, amps)
      ▼
 ┌────────────────────────────────────────────┐
-│    Dynamic Runtime (Sandboxed Execution)   │
+│      Dynamic Runtime (Direct Execution)    │
 │  ┌──────────────────────────────────────┐  │
-│  │ 18. Load tool spec from registry     │  │
-│  │ 19. Verify hash (detect tampering)   │  │
-│  │ 20. Check capabilities               │  │
-│  │ 21. Apply resource limits            │  │
-│  │ 22. Execute in RestrictedPython:     │  │
-│  │     • Limited builtins               │  │
-│  │     • Capability-controlled globals  │  │
-│  │     • Timeout enforcement            │  │
-│  │ 23. Return result                    │  │
-│  │ 24. Audit log entry                  │  │
+│  │ 17. Load tool spec from registry     │  │
+│  │ 18. Check mode-based restrictions    │  │
+│  │ 19. Execute in Jupyter kernel        │  │
+│  │ 20. Return result                    │  │
 │  └──────────────────────────────────────┘  │
 └────────────────────────────────────────────┘
 ```
@@ -622,7 +739,6 @@ Register a new dynamic tool.
 {
   "success": true,
   "tool_name": "analyze_resonator",
-  "hash": "sha256:1a2b3c...",
   "message": "Tool registered successfully"
 }
 ```
@@ -647,8 +763,6 @@ Update an existing dynamic tool.
 {
   "success": true,
   "tool_name": "analyze_resonator",
-  "old_hash": "sha256:1a2b3c...",
-  "new_hash": "sha256:fedcba...",
   "diff": {
     "source_code_changed": true,
     "capabilities_added": ["cap:matplotlib"],
@@ -727,7 +841,6 @@ Inspect a dynamic tool's details.
   "author": "claude",
   "created_at": "2025-10-01T12:00:00Z",
   "updated_at": "2025-10-01T12:00:00Z",
-  "hash": "sha256:1a2b3c...",
   "capabilities": ["cap:notebook.read", "cap:numpy", "cap:scipy"],
   "resource_limits": {
     "timeout_seconds": 5,
@@ -759,10 +872,7 @@ Inspect a dynamic tool's details.
 **`tests/unit/test_tool_spec.py`**
 - [ ] Valid tool spec passes validation
 - [ ] Invalid schemas rejected
-- [ ] Hash computation correct (SHA-256)
-- [ ] Signature verification correct (HMAC-SHA256)
-- [ ] Nonce uniqueness
-- [ ] Timestamp validation (reject old specs)
+- [ ] Timestamp validation
 
 **`tests/unit/test_dynamic_tools.py`**
 - [ ] tool.register() with valid spec succeeds
@@ -773,34 +883,10 @@ Inspect a dynamic tool's details.
 - [ ] tool.list() returns all tools
 - [ ] tool.inspect() returns full details
 
-**`tests/unit/test_sandbox.py`**
-- [ ] Restricted builtins only accessible
-- [ ] eval() blocked
-- [ ] exec() blocked
-- [ ] __import__() blocked
-- [ ] open() blocked
-- [ ] os module blocked
-- [ ] sys module blocked
-- [ ] Dangerous AST patterns detected
-
 **`tests/unit/test_capabilities.py`**
-- [ ] Capability enforcement works
-- [ ] Missing capability blocks execution
+- [ ] Basic capability checking works
 - [ ] Mode restrictions enforced (safe vs unsafe)
-- [ ] Capability dependency resolution
-- [ ] No implicit escalation
-
-**`tests/unit/test_resource_limits.py`**
-- [ ] Timeout enforced (infinite loop killed)
-- [ ] Memory limit enforced (memory bomb prevented)
-- [ ] Rate limiting works (reject after threshold)
 - [ ] Registry size limits enforced
-
-**`tests/unit/test_crypto.py`**
-- [ ] Hash computation deterministic
-- [ ] Signature verification correct
-- [ ] Constant-time comparison (timing attack resistant)
-- [ ] Nonce collision probability negligible
 
 ### Integration Tests
 
@@ -808,34 +894,21 @@ Inspect a dynamic tool's details.
 - [ ] Full workflow: register → consent UI → execute → revoke
 - [ ] "Always allow" persists across server restarts
 - [ ] Tool updates trigger re-consent
-- [ ] Hash mismatch detected and rejected
-- [ ] Registry corruption detected
-- [ ] Audit log entries created
+- [ ] Simple audit log entries created
 
-### Security Penetration Testing
-
-**`tests/security/test_penetration.py`**
-- [ ] Attempt sandbox escape via `__builtins__` manipulation
-- [ ] Attempt privilege escalation via capability bypass
-- [ ] Attempt data exfiltration via side channel
-- [ ] Attempt resource exhaustion (CPU, memory, disk)
-- [ ] Attempt registry poisoning via file manipulation
-- [ ] Attempt replay attack with old spec
-- [ ] Attempt consent bypass via direct API call
 
 ---
 
 ## 📖 Documentation Updates
 
 - [ ] **README.md**: Add "Dynamic Tools" section
-- [ ] **docs/DYNAMIC_TOOLS.md**: Comprehensive guide
-  - [ ] User guide for LLMs
-  - [ ] Capability reference table
-  - [ ] Security model explanation
+- [ ] **docs/DYNAMIC_TOOLS.md**: User guide
+  - [ ] How LLMs can create tools
+  - [ ] Capability reference (for documentation purposes)
+  - [ ] Simple security model explanation
   - [ ] Example tool specs
   - [ ] Best practices
 - [ ] **CLAUDE.md**: Add meta-tool descriptions
-- [ ] **docs/ARCHITECTURE.md**: Update with new components
 - [ ] **CHANGELOG.md**: Document v2.0.0 changes
 
 ---
@@ -866,42 +939,70 @@ Inspect a dynamic tool's details.
 
 ## ⚠️ Open Questions
 
-1. **Signature Key Management**: Where to store HMAC secret key?
-   - Option A: User-specific key in `~/.instrmcp/secret.key`
-   - Option B: System-wide key (less secure)
-   - Option C: Per-tool key derivation
-
-2. **Cross-Notebook Tool Sharing**: Should tools registered in one notebook be available in all notebooks?
+1. **Cross-Notebook Tool Sharing**: Should tools registered in one notebook be available in all notebooks?
    - Option A: Global registry (current design)
    - Option B: Per-notebook registry
    - Option C: Hybrid with explicit sharing
 
-3. **Tool Versioning**: How to handle multiple versions of same tool?
+2. **Tool Versioning**: How to handle multiple versions of same tool?
    - Option A: Only latest version (current design)
    - Option B: Side-by-side versions (complexity)
    - Option C: Version pinning in invocations
 
-4. **Network Capability Granularity**: Should `cap:network.egress` be more fine-grained?
-   - Option A: Single capability (simpler)
-   - Option B: Per-domain whitelist (more secure)
-   - Option C: Per-protocol (HTTP, WebSocket, etc.)
+---
 
-5. **Capability Inheritance**: Should tools be able to grant capabilities to called tools?
-   - Option A: No inheritance (current design)
-   - Option B: Explicit delegation
-   - Option C: Automatic subset
+## 🧪 Quick Start: Human Testing Guide
+
+### Current Status: Phase 2 Backend Complete ✅
+
+**What You Can Test Now:**
+1. **Phase 1 Meta-Tools** - Register, update, list, inspect, revoke tools
+2. **Phase 2 Execution** - Create and execute dynamic tools in Jupyter
+
+**Quick Test (5 minutes):**
+
+```bash
+# 1. Start MCP server in unsafe mode
+instrmcp jupyter --unsafe --port 3000
+
+# 2. Open JupyterLab, create notebook with:
+import numpy as np
+multiplier = 10
+
+# 3. Use MCP Inspector to register a tool:
+# Tool: dynamic_register_tool
+# Enter these parameters (JSON fields are objects, not strings):
+name: "quick_test"
+source_code: "import numpy as np\n\ndef quick_test(x):\n    return x * multiplier"
+parameters: [{"name": "x", "type": "number", "description": "Input", "required": true}]
+# Optional: Add these for more detail
+capabilities: ["cap:python.numpy"]
+returns: {"type": "number", "description": "Result"}
+
+# NOTE: parameters field is REQUIRED if your function has arguments!
+
+# 4. Execute the tool via MCP Inspector:
+# Tool: quick_test, Parameters: {"x": 5}
+# Expected: {"status": "success", "result": 50}
+
+# 5. Verify persistence:
+ls ~/.instrmcp/registry/quick_test.json
+tail ~/.instrmcp/audit/tool_audit.log
+```
+
+**See detailed testing checklists in each phase section above.**
 
 ---
 
 ## 📝 Notes
 
-- This is a major feature requiring careful security review at each phase
+- This is a major feature enabling LLM-driven tool creation
 - User education critical: consent UI must be clear and informative
-- Performance impact should be minimal (sandbox overhead <10ms)
+- Simplified security model: rely on user review and mode-based restrictions
 - Backward compatibility maintained (existing tools unaffected)
 - Feature can be disabled via server configuration if needed
 
 ---
 
 **Last Updated**: 2025-10-01
-**Next Review**: After Phase 1 completion
+**Next Review**: After Phase 2 consent UI completion

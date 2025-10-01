@@ -163,7 +163,20 @@ The server supports optional features that can be enabled/disabled via magic com
 - `%mcp_option -measureit` - Disable MeasureIt template resources
 - `%mcp_option database` - Enable database integration tools and resources
 - `%mcp_option -database` - Disable database integration tools and resources
+- `%mcp_option auto_correct_json` - Enable automatic JSON error correction via LLM sampling (Phase 4 feature)
+- `%mcp_option -auto_correct_json` - Disable automatic JSON correction (default)
 - `%mcp_option` - Show current option status
+
+**Auto-Correction Feature (Experimental - Phase 4):**
+When `auto_correct_json` is enabled, the server uses MCP sampling to automatically fix malformed JSON in tool registration:
+- Applies to: `capabilities`, `parameters`, `returns`, `examples`, `tags` fields
+- Uses client's LLM to correct syntax errors (missing quotes, wrong brackets, etc.)
+- Returns transparent results showing original and corrected JSON
+- Max 1 correction attempt per registration
+- All corrections logged to audit trail
+- **Timeout**: 60 seconds (server-level default) - if LLM sampling takes longer, returns original error
+- **Safety**: Only fixes structural JSON errors, never modifies logic or values
+- **Default**: Disabled (explicit errors preferred for transparency)
 
 **Server Control:**
 - `%mcp_start` - Start the MCP server
