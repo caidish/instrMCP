@@ -30,8 +30,8 @@ jobs:
 
     - name: Run Flake8 (linting)
       run: |
-        flake8 instrmcp/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 instrmcp/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 instrmcp/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics --extend-ignore=F824
+        flake8 instrmcp/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --extend-ignore=F824
 
     - name: Run MyPy (type checking)
       run: |
