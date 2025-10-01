@@ -99,15 +99,20 @@ def main():
         # Check MeasureIt using importlib to avoid full import crash
         import importlib.util
         import subprocess
+
         measureit_spec = importlib.util.find_spec("MeasureIt")
         if measureit_spec is not None:
             # Try to import in subprocess to avoid crashing main process
             try:
                 result = subprocess.run(
-                    [sys.executable, "-c", "import MeasureIt; print(getattr(MeasureIt, '__version__', 'unknown'))"],
+                    [
+                        sys.executable,
+                        "-c",
+                        "import MeasureIt; print(getattr(MeasureIt, '__version__', 'unknown'))",
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=1  # Reduced timeout since imports should be fast
+                    timeout=1,  # Reduced timeout since imports should be fast
                 )
                 if result.returncode == 0:
                     measureit_version = result.stdout.strip()
@@ -115,7 +120,11 @@ def main():
                 else:
                     print(f"  ⚠️  MeasureIt: Installed but failed to import")
                     # Extract first meaningful error line
-                    errors = [line for line in result.stderr.split('\n') if line.strip() and not line.startswith(' ')]
+                    errors = [
+                        line
+                        for line in result.stderr.split("\n")
+                        if line.strip() and not line.startswith(" ")
+                    ]
                     error_msg = errors[-1] if errors else "Unknown error"
                     if len(error_msg) > 70:
                         error_msg = error_msg[:70] + "..."
