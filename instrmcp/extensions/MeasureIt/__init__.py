@@ -11,7 +11,7 @@ from .measureit_templates import (
     get_simulsweep_template,
     get_sweepqueue_template,
     get_common_patterns_template,
-    get_measureit_code_examples
+    get_measureit_code_examples,
 )
 
 __all__ = [
@@ -21,5 +21,5 @@ __all__ = [
     "get_simulsweep_template",
     "get_sweepqueue_template",
     "get_common_patterns_template",
-    "get_measureit_code_examples"
+    "get_measureit_code_examples",
 ]

@@ -95,11 +95,17 @@ class HttpMCPProxy:
                 },
             )
             if resp.status_code == 200:
-                self.session_id = resp.headers.get("mcp-session-id") or "default-session"
+                self.session_id = (
+                    resp.headers.get("mcp-session-id") or "default-session"
+                )
                 # Send initialized notification
                 await self.client.post(
                     endpoint,
-                    json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "notifications/initialized",
+                        "params": {},
+                    },
                     headers={
                         "Content-Type": "application/json",
                         "Accept": "application/json, text/event-stream",
@@ -185,7 +191,11 @@ async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bo
 
             await client.post(
                 endpoint,
-                json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized",
+                    "params": {},
+                },
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",
@@ -195,7 +205,12 @@ async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bo
 
             test_resp = await client.post(
                 endpoint,
-                json={"jsonrpc": "2.0", "id": "test-tools", "method": "tools/list", "params": {}},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "test-tools",
+                    "method": "tools/list",
+                    "params": {},
+                },
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",
@@ -206,21 +221,30 @@ async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bo
                 return False
 
             text = test_resp.text
-            payload = json.loads(text.split("data: ")[1].strip()) if "data: " in text else test_resp.json()
+            payload = (
+                json.loads(text.split("data: ")[1].strip())
+                if "data: " in text
+                else test_resp.json()
+            )
             return "jsonrpc" in payload and ("result" in payload or "error" in payload)
     except Exception:
         return False
 
 
-def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy") -> FastMCP:
+def create_stdio_proxy_server(
+    base_url: str, server_name: str = "InstrMCP Proxy"
+) -> FastMCP:
     mcp = FastMCP(server_name)
     proxy = HttpMCPProxy(base_url)
 
-
     # QCodes instrument tools
     @mcp.tool(name="qcodes_instrument_info")
-    async def instrument_info(name: str, with_values: bool = False) -> list[TextContent]:
-        result = await proxy.call("qcodes_instrument_info", name=name, with_values=with_values)
+    async def instrument_info(
+        name: str, with_values: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "qcodes_instrument_info", name=name, with_values=with_values
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="qcodes_get_parameter_values")
@@ -255,14 +279,24 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_get_notebook_cells")
-    async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> list[TextContent]:
-        result = await proxy.call("notebook_get_notebook_cells", num_cells=num_cells, include_output=include_output)
+    async def get_notebook_cells(
+        num_cells: int = 2, include_output: bool = True
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_get_notebook_cells",
+            num_cells=num_cells,
+            include_output=include_output,
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_server_status")
     async def server_status() -> list[TextContent]:
         result = await proxy.call("notebook_server_status")
-        info = {"mode": "proxy", "proxy_target": base_url, "jupyter_server_status": result}
+        info = {
+            "mode": "proxy",
+            "proxy_target": base_url,
+            "jupyter_server_status": result,
+        }
         return [TextContent(type="text", text=str(info))]
 
     # Unsafe notebook tools
@@ -273,11 +307,11 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
 
     @mcp.tool(name="notebook_add_cell")
     async def add_new_cell(
-        cell_type: str = "code",
-        position: str = "below",
-        content: str = ""
+        cell_type: str = "code", position: str = "below", content: str = ""
     ) -> list[TextContent]:
-        result = await proxy.call("notebook_add_cell", cell_type=cell_type, position=position, content=content)
+        result = await proxy.call(
+            "notebook_add_cell", cell_type=cell_type, position=position, content=content
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_delete_cell")
@@ -292,7 +326,9 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
 
     @mcp.tool(name="notebook_apply_patch")
     async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
-        result = await proxy.call("notebook_apply_patch", old_text=old_text, new_text=new_text)
+        result = await proxy.call(
+            "notebook_apply_patch", old_text=old_text, new_text=new_text
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_move_cursor")
@@ -309,22 +345,30 @@ def create_stdio_proxy_server(base_url: str, server_name: str = "InstrMCP Proxy"
 
     # Database integration tools (optional - only if database option enabled)
     @mcp.tool(name="database_list_experiments")
-    async def list_experiments(database_path: Optional[str] = None) -> list[TextContent]:
-        result = await proxy.call("database_list_experiments", database_path=database_path)
+    async def list_experiments(
+        database_path: Optional[str] = None,
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "database_list_experiments", database_path=database_path
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="database_get_dataset_info")
     async def get_dataset_info(
-        id: int,
-        database_path: Optional[str] = None
+        id: int, database_path: Optional[str] = None
     ) -> list[TextContent]:
-        result = await proxy.call("database_get_dataset_info", id=id, database_path=database_path)
+        result = await proxy.call(
+            "database_get_dataset_info", id=id, database_path=database_path
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="database_get_database_stats")
-    async def get_database_stats(database_path: Optional[str] = None) -> list[TextContent]:
-        result = await proxy.call("database_get_database_stats", database_path=database_path)
+    async def get_database_stats(
+        database_path: Optional[str] = None,
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "database_get_database_stats", database_path=database_path
+        )
         return [TextContent(type="text", text=str(result))]
 
     return mcp
-

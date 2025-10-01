@@ -14,7 +14,7 @@ from instrmcp.extensions.MeasureIt.measureit_templates import (
     get_simulsweep_template,
     get_sweepqueue_template,
     get_common_patterns_template,
-    get_measureit_code_examples
+    get_measureit_code_examples,
 )
 
 
@@ -129,8 +129,12 @@ class TestSweep1DTemplate:
         assert isinstance(advanced, dict)
         assert len(advanced) > 0
         # Check for specific advanced patterns
-        assert any("fast" in key.lower() or "temperature" in key.lower() or "continual" in key.lower()
-                   for key in advanced.keys())
+        assert any(
+            "fast" in key.lower()
+            or "temperature" in key.lower()
+            or "continual" in key.lower()
+            for key in advanced.keys()
+        )
 
     def test_sweep1d_common_parameters(self):
         """Test Sweep1D includes key parameters."""
@@ -306,7 +310,10 @@ class TestSweepQueueTemplate:
         """Test SweepQueue has correct description."""
         template = json.loads(get_sweepqueue_template())
         assert "sweepqueue" in template["description"].lower()
-        assert "chain" in template["description"].lower() or "sequential" in template["description"].lower()
+        assert (
+            "chain" in template["description"].lower()
+            or "sequential" in template["description"].lower()
+        )
 
     def test_sweepqueue_basic_pattern_is_code(self):
         """Test SweepQueue basic pattern contains executable code."""
@@ -530,7 +537,7 @@ class TestTemplateIntegration:
             get_simulsweep_template(),
             get_sweepqueue_template(),
             get_common_patterns_template(),
-            get_measureit_code_examples()
+            get_measureit_code_examples(),
         ]
         for template in templates:
             parsed = json.loads(template)
@@ -544,7 +551,7 @@ class TestTemplateIntegration:
             get_sweep2d_template(),
             get_simulsweep_template(),
             get_sweepqueue_template(),
-            get_common_patterns_template()
+            get_common_patterns_template(),
         ]
         for template_str in templates:
             template = json.loads(template_str)
@@ -559,7 +566,7 @@ class TestTemplateIntegration:
             get_sweep1d_template(),
             get_sweep2d_template(),
             get_simulsweep_template(),
-            get_sweepqueue_template()
+            get_sweepqueue_template(),
         ]
         for template_str in templates:
             template = json.loads(template_str)
@@ -575,10 +582,14 @@ class TestTemplateIntegration:
 
         # Verify individual templates match categories
         sweep0d = json.loads(get_sweep0d_template())
-        assert categories["sweep0d"]["template"]["description"] == sweep0d["description"]
+        assert (
+            categories["sweep0d"]["template"]["description"] == sweep0d["description"]
+        )
 
         sweep1d = json.loads(get_sweep1d_template())
-        assert categories["sweep1d"]["template"]["description"] == sweep1d["description"]
+        assert (
+            categories["sweep1d"]["template"]["description"] == sweep1d["description"]
+        )
 
     def test_no_template_contains_placeholder_text(self):
         """Test templates don't contain obvious placeholder text."""
@@ -589,10 +600,12 @@ class TestTemplateIntegration:
             get_simulsweep_template(),
             get_sweepqueue_template(),
             get_common_patterns_template(),
-            get_measureit_code_examples()
+            get_measureit_code_examples(),
         ]
         forbidden_terms = ["TODO", "FIXME", "placeholder", "XXX", "TBD"]
         for template_str in templates:
             template_lower = template_str.lower()
             for term in forbidden_terms:
-                assert term.lower() not in template_lower, f"Found placeholder '{term}' in template"
+                assert (
+                    term.lower() not in template_lower
+                ), f"Found placeholder '{term}' in template"

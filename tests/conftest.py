@@ -34,10 +34,10 @@ def temp_dir():
 def mock_ipython_namespace():
     """Create a mock IPython user namespace with common test variables."""
     return {
-        'test_var': 42,
-        'test_array': [1, 2, 3, 4, 5],
-        'test_dict': {'key1': 'value1', 'key2': 'value2'},
-        'test_string': 'Hello, InstrMCP!',
+        "test_var": 42,
+        "test_array": [1, 2, 3, 4, 5],
+        "test_dict": {"key1": "value1", "key2": "value2"},
+        "test_string": "Hello, InstrMCP!",
     }
 
 
@@ -83,18 +83,15 @@ def mock_qcodes_station(mock_qcodes_instrument):
     """Create a mock QCodes station for testing."""
     station = MagicMock()
     station.components = {"mock_instrument": mock_qcodes_instrument}
-    station.snapshot = MagicMock(return_value={
-        "instruments": {
-            "mock_instrument": {
-                "parameters": {
-                    "test_parameter": {
-                        "value": 3.14,
-                        "unit": "V"
-                    }
+    station.snapshot = MagicMock(
+        return_value={
+            "instruments": {
+                "mock_instrument": {
+                    "parameters": {"test_parameter": {"value": 3.14, "unit": "V"}}
                 }
             }
         }
-    })
+    )
     return station
 
 
@@ -116,24 +113,24 @@ def sample_notebook_cells():
             "cell_type": "code",
             "execution_count": 1,
             "source": "import qcodes as qc\nimport numpy as np",
-            "outputs": []
+            "outputs": [],
         },
         {
             "cell_type": "code",
             "execution_count": 2,
             "source": "# Initialize mock DAC\nmock_dac = qc.instrument.MockDAC('mock_dac')",
-            "outputs": [{"output_type": "stream", "text": "Connected to: MockDAC"}]
+            "outputs": [{"output_type": "stream", "text": "Connected to: MockDAC"}],
         },
         {
             "cell_type": "markdown",
-            "source": "## Test Section\nThis is a test markdown cell."
+            "source": "## Test Section\nThis is a test markdown cell.",
         },
         {
             "cell_type": "code",
             "execution_count": 3,
             "source": "# Read voltage\nvoltage = mock_dac.ch01.voltage()\nprint(f'Voltage: {voltage} V')",
-            "outputs": [{"output_type": "stream", "text": "Voltage: 0.0 V"}]
-        }
+            "outputs": [{"output_type": "stream", "text": "Voltage: 0.0 V"}],
+        },
     ]
 
 
@@ -152,7 +149,7 @@ def sample_experiment_data():
         "name": "test_experiment",
         "sample_name": "test_sample",
         "start_time": 1234567890,
-        "format_string": "{}-{}-{}"
+        "format_string": "{}-{}-{}",
     }
 
 
@@ -166,7 +163,7 @@ def sample_dataset_data():
         "exp_id": 1,
         "run_timestamp": "2024-01-01 12:00:00",
         "completed_timestamp": "2024-01-01 12:05:00",
-        "metadata": {"temperature": 300, "gate_voltage": 0.5}
+        "metadata": {"temperature": 300, "gate_voltage": 0.5},
     }
 
 
@@ -181,7 +178,7 @@ def mock_measureit_sweep():
         "parameter": "gate_voltage",
         "start": 0,
         "stop": 1,
-        "num_points": 100
+        "num_points": 100,
     }
     return sweep
 
@@ -197,9 +194,5 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "hardware: marks tests that require hardware"
-    )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "hardware: marks tests that require hardware")

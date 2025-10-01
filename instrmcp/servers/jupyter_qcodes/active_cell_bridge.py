@@ -30,7 +30,7 @@ def _on_comm_open(comm, open_msg):
         """Handle incoming messages from frontend."""
         data = msg.get("content", {}).get("data", {})
         msg_type = data.get("type")
-        
+
         if msg_type == "snapshot":
             # Store the cell snapshot
             snapshot = {
@@ -44,19 +44,28 @@ def _on_comm_open(comm, open_msg):
                 "client_id": data.get("client_id"),
                 "ts_ms": data.get("ts_ms", int(time.time() * 1000)),
             }
-            
+
             with _STATE_LOCK:
                 global _LAST_SNAPSHOT, _LAST_TS
                 _LAST_SNAPSHOT = snapshot
                 _LAST_TS = time.time()
-                
-            logger.debug(f"Received cell snapshot: {len(snapshot.get('text', ''))} chars")
-            
+
+            logger.debug(
+                f"Received cell snapshot: {len(snapshot.get('text', ''))} chars"
+            )
+
         elif msg_type == "pong":
             # Response to our ping request
             logger.debug("Received pong from frontend")
 
-        elif msg_type in ["update_response", "execute_response", "add_cell_response", "delete_cell_response", "apply_patch_response", "move_cursor_response"]:
+        elif msg_type in [
+            "update_response",
+            "execute_response",
+            "add_cell_response",
+            "delete_cell_response",
+            "apply_patch_response",
+            "move_cursor_response",
+        ]:
             # Response from frontend for our requests
             request_id = data.get("request_id")
             success = data.get("success", False)
@@ -68,7 +77,9 @@ def _on_comm_open(comm, open_msg):
                 new_index = data.get("new_index")
                 logger.info(f"✅ CURSOR MOVED: {old_index} → {new_index}")
             else:
-                logger.info(f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}")
+                logger.info(
+                    f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}"
+                )
             # Note: For now we just log the response, but we could store it for the waiting functions
 
         else:
@@ -90,7 +101,7 @@ def register_comm_target():
     if not ip or not hasattr(ip, "kernel"):
         logger.warning("No IPython kernel found, cannot register comm target")
         return
-    
+
     try:
         ip.kernel.comm_manager.register_target("mcp:active_cell", _on_comm_open)
         logger.info("Registered comm target 'mcp:active_cell'")
@@ -108,26 +119,28 @@ def request_frontend_snapshot():
             logger.debug(f"Failed to send request to comm {comm.comm_id}: {e}")
 
 
-def get_active_cell(fresh_ms: Optional[int] = None, timeout_s: float = 0.3) -> Optional[Dict[str, Any]]:
+def get_active_cell(
+    fresh_ms: Optional[int] = None, timeout_s: float = 0.3
+) -> Optional[Dict[str, Any]]:
     """
     Get the most recent active cell snapshot.
-    
+
     Args:
         fresh_ms: If provided, require snapshot to be no older than this many milliseconds.
                  If snapshot is too old, will request fresh data from frontend.
         timeout_s: How long to wait for fresh data from frontend (default 0.3s)
-    
+
     Returns:
         Dictionary with cell information or None if no data available
     """
     now = time.time()
-    
+
     with _STATE_LOCK:
         if _LAST_SNAPSHOT is None:
             # No snapshot yet, try requesting from frontend
             pass
         else:
-            age_ms = (now - _LAST_TS) * 1000 if _LAST_TS else float('inf')
+            age_ms = (now - _LAST_TS) * 1000 if _LAST_TS else float("inf")
             if fresh_ms is None or age_ms <= fresh_ms:
                 # Snapshot is fresh enough
                 return _LAST_SNAPSHOT.copy()
@@ -140,18 +153,18 @@ def get_active_cell(fresh_ms: Optional[int] = None, timeout_s: float = 0.3) -> O
 
     # Request fresh data
     request_frontend_snapshot()
-    
+
     # Wait for update with timeout
     start_time = time.time()
     while time.time() - start_time < timeout_s:
         time.sleep(0.05)  # 50ms polling
-        
+
         with _STATE_LOCK:
             if _LAST_SNAPSHOT is not None:
-                age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else float('inf')
+                age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else float("inf")
                 if fresh_ms is None or age_ms <= fresh_ms:
                     return _LAST_SNAPSHOT.copy()
-    
+
     # Timeout - return what we have
     with _STATE_LOCK:
         return _LAST_SNAPSHOT.copy() if _LAST_SNAPSHOT else None
@@ -165,56 +178,64 @@ def get_bridge_status() -> Dict[str, Any]:
             "active_comms": len(_ACTIVE_COMMS),
             "has_snapshot": _LAST_SNAPSHOT is not None,
             "last_snapshot_age_s": time.time() - _LAST_TS if _LAST_TS else None,
-            "snapshot_summary": {
-                "cell_type": _LAST_SNAPSHOT.get("cell_type") if _LAST_SNAPSHOT else None,
-                "text_length": len(_LAST_SNAPSHOT.get("text", "")) if _LAST_SNAPSHOT else 0,
-                "notebook_path": _LAST_SNAPSHOT.get("notebook_path") if _LAST_SNAPSHOT else None
-            } if _LAST_SNAPSHOT else None
+            "snapshot_summary": (
+                {
+                    "cell_type": (
+                        _LAST_SNAPSHOT.get("cell_type") if _LAST_SNAPSHOT else None
+                    ),
+                    "text_length": (
+                        len(_LAST_SNAPSHOT.get("text", "")) if _LAST_SNAPSHOT else 0
+                    ),
+                    "notebook_path": (
+                        _LAST_SNAPSHOT.get("notebook_path") if _LAST_SNAPSHOT else None
+                    ),
+                }
+                if _LAST_SNAPSHOT
+                else None
+            ),
         }
 
 
 def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Update the content of the currently active cell in JupyterLab frontend.
-    
+
     Args:
         content: New content to set in the active cell
         timeout_s: How long to wait for response from frontend (default 2.0s)
-        
+
     Returns:
         Dictionary with update status and response details
     """
     import uuid
-    
+
     if not _ACTIVE_COMMS:
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
-    
+
     request_id = str(uuid.uuid4())
     responses = {}
-    
+
     # Send update request to all active comms
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "update_cell",
-                "content": content,
-                "request_id": request_id
-            })
+            comm.send(
+                {"type": "update_cell", "content": content, "request_id": request_id}
+            )
             successful_sends += 1
             logger.debug(f"Sent update_cell request to comm {comm.comm_id}")
         except Exception as e:
             logger.debug(f"Failed to send update request to comm {comm.comm_id}: {e}")
-    
+
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send update request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -223,7 +244,7 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         "content_length": len(content),
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends
+        "successful_sends": successful_sends,
     }
 
 
@@ -243,7 +264,7 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     request_id = str(uuid.uuid4())
@@ -252,20 +273,19 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "execute_cell",
-                "request_id": request_id
-            })
+            comm.send({"type": "execute_cell", "request_id": request_id})
             successful_sends += 1
             logger.debug(f"Sent execute_cell request to comm {comm.comm_id}")
         except Exception as e:
-            logger.debug(f"Failed to send execution request to comm {comm.comm_id}: {e}")
+            logger.debug(
+                f"Failed to send execution request to comm {comm.comm_id}: {e}"
+            )
 
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send execution request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -274,11 +294,16 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
-        "warning": "UNSAFE: Code execution was requested in active cell"
+        "warning": "UNSAFE: Code execution was requested in active cell",
     }
 
 
-def add_new_cell(cell_type: str = "code", position: str = "below", content: str = "", timeout_s: float = 2.0) -> Dict[str, Any]:
+def add_new_cell(
+    cell_type: str = "code",
+    position: str = "below",
+    content: str = "",
+    timeout_s: float = 2.0,
+) -> Dict[str, Any]:
     """
     Add a new cell relative to the currently active cell in JupyterLab frontend.
 
@@ -293,7 +318,9 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
     """
     import uuid
 
-    logger.info(f"🚀 ADD_NEW_CELL called: type={cell_type}, position={position}, content_len={len(content)}")
+    logger.info(
+        f"🚀 ADD_NEW_CELL called: type={cell_type}, position={position}, content_len={len(content)}"
+    )
     logger.info(f"📊 Active comms available: {len(_ACTIVE_COMMS)}")
 
     if not _ACTIVE_COMMS:
@@ -301,7 +328,7 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     # Validate parameters
@@ -311,13 +338,13 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
     if cell_type not in valid_types:
         return {
             "success": False,
-            "error": f"Invalid cell_type '{cell_type}'. Must be one of: {', '.join(valid_types)}"
+            "error": f"Invalid cell_type '{cell_type}'. Must be one of: {', '.join(valid_types)}",
         }
 
     if position not in valid_positions:
         return {
             "success": False,
-            "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}"
+            "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}",
         }
 
     request_id = str(uuid.uuid4())
@@ -329,23 +356,27 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
     for comm in list(_ACTIVE_COMMS):
         try:
             # Check if comm is still valid
-            if hasattr(comm, 'comm_id') and hasattr(comm, 'send'):
+            if hasattr(comm, "comm_id") and hasattr(comm, "send"):
                 message = {
                     "type": "add_cell",
                     "cell_type": cell_type,
                     "position": position,
                     "content": content,
-                    "request_id": request_id
+                    "request_id": request_id,
                 }
                 logger.info(f"📤 Sending to comm {comm.comm_id}: {message}")
                 comm.send(message)
                 successful_sends += 1
-                logger.info(f"✅ Successfully sent add_cell request to comm {comm.comm_id}")
+                logger.info(
+                    f"✅ Successfully sent add_cell request to comm {comm.comm_id}"
+                )
             else:
                 logger.warning(f"⚠️ Comm appears invalid, removing from active list")
                 _ACTIVE_COMMS.discard(comm)
         except Exception as e:
-            logger.error(f"❌ Failed to send add cell request to comm {comm.comm_id}: {e}")
+            logger.error(
+                f"❌ Failed to send add cell request to comm {comm.comm_id}: {e}"
+            )
             # Remove failed comm from active list
             _ACTIVE_COMMS.discard(comm)
 
@@ -353,7 +384,7 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
         return {
             "success": False,
             "error": "Failed to send add cell request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -365,7 +396,7 @@ def add_new_cell(cell_type: str = "code", position: str = "below", content: str 
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
-        "warning": "UNSAFE: New cell was added to notebook"
+        "warning": "UNSAFE: New cell was added to notebook",
     }
 
 
@@ -385,7 +416,7 @@ def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     request_id = str(uuid.uuid4())
@@ -394,20 +425,19 @@ def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "delete_cell",
-                "request_id": request_id
-            })
+            comm.send({"type": "delete_cell", "request_id": request_id})
             successful_sends += 1
             logger.debug(f"Sent delete_cell request to comm {comm.comm_id}")
         except Exception as e:
-            logger.debug(f"Failed to send delete cell request to comm {comm.comm_id}: {e}")
+            logger.debug(
+                f"Failed to send delete cell request to comm {comm.comm_id}: {e}"
+            )
 
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send delete cell request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -416,7 +446,7 @@ def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cell was deleted from notebook"
+        "warning": "UNSAFE: Cell was deleted from notebook",
     }
 
 
@@ -441,14 +471,11 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     if not old_text:
-        return {
-            "success": False,
-            "error": "old_text parameter cannot be empty"
-        }
+        return {"success": False, "error": "old_text parameter cannot be empty"}
 
     request_id = str(uuid.uuid4())
 
@@ -456,12 +483,14 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "apply_patch",
-                "old_text": old_text,
-                "new_text": new_text,
-                "request_id": request_id
-            })
+            comm.send(
+                {
+                    "type": "apply_patch",
+                    "old_text": old_text,
+                    "new_text": new_text,
+                    "request_id": request_id,
+                }
+            )
             successful_sends += 1
             logger.debug(f"Sent apply_patch request to comm {comm.comm_id}")
         except Exception as e:
@@ -471,7 +500,7 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
         return {
             "success": False,
             "error": "Failed to send patch request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -482,11 +511,13 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cell content was modified via patch"
+        "warning": "UNSAFE: Cell content was modified via patch",
     }
 
 
-def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[str, Any]:
+def delete_cells_by_number(
+    cell_numbers: List[int], timeout_s: float = 2.0
+) -> Dict[str, Any]:
     """
     Delete multiple cells by their execution count numbers.
 
@@ -506,14 +537,11 @@ def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> D
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     if not isinstance(cell_numbers, list) or len(cell_numbers) == 0:
-        return {
-            "success": False,
-            "error": "cell_numbers must be a non-empty list"
-        }
+        return {"success": False, "error": "cell_numbers must be a non-empty list"}
 
     request_id = str(uuid.uuid4())
 
@@ -521,21 +549,25 @@ def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> D
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "delete_cells_by_number",
-                "cell_numbers": cell_numbers,
-                "request_id": request_id
-            })
+            comm.send(
+                {
+                    "type": "delete_cells_by_number",
+                    "cell_numbers": cell_numbers,
+                    "request_id": request_id,
+                }
+            )
             successful_sends += 1
             logger.debug(f"Sent delete_cells_by_number request to comm {comm.comm_id}")
         except Exception as e:
-            logger.debug(f"Failed to send delete_cells_by_number request to comm {comm.comm_id}: {e}")
+            logger.debug(
+                f"Failed to send delete_cells_by_number request to comm {comm.comm_id}: {e}"
+            )
 
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send delete request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -546,7 +578,7 @@ def delete_cells_by_number(cell_numbers: List[int], timeout_s: float = 2.0) -> D
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cells deletion requested - check notebook for results"
+        "warning": "UNSAFE: Cells deletion requested - check notebook for results",
     }
 
 
@@ -572,7 +604,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         return {
             "success": False,
             "error": "No active comm connections to frontend",
-            "active_comms": 0
+            "active_comms": 0,
         }
 
     # Validate target
@@ -583,7 +615,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         except ValueError:
             return {
                 "success": False,
-                "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number"
+                "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number",
             }
 
     request_id = str(uuid.uuid4())
@@ -592,21 +624,21 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     successful_sends = 0
     for comm in list(_ACTIVE_COMMS):
         try:
-            comm.send({
-                "type": "move_cursor",
-                "target": str(target),
-                "request_id": request_id
-            })
+            comm.send(
+                {"type": "move_cursor", "target": str(target), "request_id": request_id}
+            )
             successful_sends += 1
             logger.debug(f"Sent move_cursor request to comm {comm.comm_id}")
         except Exception as e:
-            logger.debug(f"Failed to send move_cursor request to comm {comm.comm_id}: {e}")
+            logger.debug(
+                f"Failed to send move_cursor request to comm {comm.comm_id}: {e}"
+            )
 
     if successful_sends == 0:
         return {
             "success": False,
             "error": "Failed to send move cursor request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS)
+            "active_comms": len(_ACTIVE_COMMS),
         }
 
     return {
@@ -615,5 +647,5 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         "target": target,
         "request_id": request_id,
         "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends
+        "successful_sends": successful_sends,
     }

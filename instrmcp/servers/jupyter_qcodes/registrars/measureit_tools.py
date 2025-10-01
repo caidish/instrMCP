@@ -48,7 +48,15 @@ class MeasureItToolRegistrar:
             """
             try:
                 result = await self.tools.get_measureit_status()
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in measureit/get_status: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]

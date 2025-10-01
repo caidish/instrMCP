@@ -16,7 +16,7 @@ from instrmcp.extensions.database.db_resources import (
     get_current_database_config,
     get_recent_measurements,
     _resolve_database_path,
-    QCODES_AVAILABLE
+    QCODES_AVAILABLE,
 )
 
 
@@ -32,7 +32,7 @@ class TestResolveDatabasePath:
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
         """Test MeasureItHome environment variable is used."""
         measureit_home = str(temp_dir)
-        monkeypatch.setenv('MeasureItHome', measureit_home)
+        monkeypatch.setenv("MeasureItHome", measureit_home)
 
         result = _resolve_database_path(None)
         expected = str(temp_dir / "Databases" / "Example_database.db")
@@ -42,16 +42,16 @@ class TestResolveDatabasePath:
     def test_resolve_qcodes_default(self, monkeypatch):
         """Test falls back to QCodes config."""
         # Clear MeasureItHome
-        monkeypatch.delenv('MeasureItHome', raising=False)
+        monkeypatch.delenv("MeasureItHome", raising=False)
 
-        with patch('instrmcp.extensions.database.db_resources.qc') as mock_qc:
+        with patch("instrmcp.extensions.database.db_resources.qc") as mock_qc:
             mock_qc.config.core.db_location = "/qcodes/default.db"
             result = _resolve_database_path(None)
             assert result == "/qcodes/default.db"
 
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
-        monkeypatch.setenv('MeasureItHome', str(temp_dir))
+        monkeypatch.setenv("MeasureItHome", str(temp_dir))
         explicit_path = "/explicit/database.db"
 
         result = _resolve_database_path(explicit_path)
@@ -104,7 +104,7 @@ class TestDatabaseConfig:
         assert config["database_exists"] is False
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.experiments')
+    @patch("instrmcp.extensions.database.db_resources.experiments")
     def test_config_connection_status(self, mock_experiments):
         """Test config reports connection status."""
         mock_experiments.return_value = []
@@ -113,7 +113,7 @@ class TestDatabaseConfig:
         assert config["connection_status"] in ["connected", "error", "unknown"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.experiments')
+    @patch("instrmcp.extensions.database.db_resources.experiments")
     def test_config_experiment_count(self, mock_experiments):
         """Test config includes experiment count."""
         mock_exp1 = MagicMock()
@@ -140,7 +140,7 @@ class TestDatabaseConfig:
         assert isinstance(config["configuration"], dict)
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.experiments')
+    @patch("instrmcp.extensions.database.db_resources.experiments")
     def test_config_handles_connection_error(self, mock_experiments):
         """Test config handles connection errors gracefully."""
         mock_experiments.side_effect = Exception("Connection failed")
@@ -151,7 +151,7 @@ class TestDatabaseConfig:
 
     def test_config_without_qcodes(self):
         """Test config returns error when QCodes unavailable."""
-        with patch('instrmcp.extensions.database.db_resources.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
             config = json.loads(get_current_database_config())
             assert "error" in config
             assert "QCodes not available" in config["error"]
@@ -193,7 +193,7 @@ class TestRecentMeasurements:
         assert len(result["recent_measurements"]) <= limit
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.load_by_id')
+    @patch("instrmcp.extensions.database.db_resources.load_by_id")
     def test_recent_measurements_dataset_structure(self, mock_load):
         """Test each measurement has proper structure."""
         mock_dataset = MagicMock()
@@ -223,7 +223,7 @@ class TestRecentMeasurements:
             assert "parameters" in measurement
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.load_by_id')
+    @patch("instrmcp.extensions.database.db_resources.load_by_id")
     def test_recent_measurements_includes_timestamp(self, mock_load):
         """Test measurements include timestamp information."""
         mock_dataset = MagicMock()
@@ -250,9 +250,10 @@ class TestRecentMeasurements:
                 datetime.fromisoformat(measurement["timestamp_readable"])
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.load_by_id')
+    @patch("instrmcp.extensions.database.db_resources.load_by_id")
     def test_recent_measurements_sorted_by_time(self, mock_load):
         """Test measurements are sorted by timestamp."""
+
         # Create mock datasets with different timestamps
         def create_mock_dataset(run_id, timestamp):
             ds = MagicMock()
@@ -273,7 +274,9 @@ class TestRecentMeasurements:
             3: create_mock_dataset(3, 2000.0),
         }
 
-        mock_load.side_effect = lambda rid: datasets.get(rid) if rid in datasets else MagicMock(side_effect=Exception)
+        mock_load.side_effect = lambda rid: (
+            datasets.get(rid) if rid in datasets else MagicMock(side_effect=Exception)
+        )
 
         result = json.loads(get_recent_measurements(limit=10))
         measurements = result["recent_measurements"]
@@ -281,17 +284,21 @@ class TestRecentMeasurements:
         # Should be sorted by timestamp descending (most recent first)
         if len(measurements) >= 2:
             for i in range(len(measurements) - 1):
-                if measurements[i]["timestamp"] and measurements[i+1]["timestamp"]:
-                    assert measurements[i]["timestamp"] >= measurements[i+1]["timestamp"]
+                if measurements[i]["timestamp"] and measurements[i + 1]["timestamp"]:
+                    assert (
+                        measurements[i]["timestamp"] >= measurements[i + 1]["timestamp"]
+                    )
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_with_explicit_path(self, mock_database_path):
         """Test recent measurements with explicit database path."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=mock_database_path))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=mock_database_path)
+        )
         assert result["database_path"] == mock_database_path
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.load_by_id')
+    @patch("instrmcp.extensions.database.db_resources.load_by_id")
     def test_recent_measurements_includes_measureit_type(self, mock_load):
         """Test measurements include MeasureIt type if available."""
         mock_dataset = MagicMock()
@@ -305,7 +312,7 @@ class TestRecentMeasurements:
         mock_dataset.parameters = {}
         mock_dataset.run_timestamp_raw = 1234567890.0
         mock_dataset.metadata = {
-            'measureit': json.dumps({'class': 'Sweep1D', 'module': 'MeasureIt'})
+            "measureit": json.dumps({"class": "Sweep1D", "module": "MeasureIt"})
         }
 
         mock_load.return_value = mock_dataset
@@ -318,13 +325,13 @@ class TestRecentMeasurements:
 
     def test_recent_measurements_without_qcodes(self):
         """Test recent measurements returns error when QCodes unavailable."""
-        with patch('instrmcp.extensions.database.db_resources.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
             result = json.loads(get_recent_measurements())
             assert "error" in result
             assert "QCodes not available" in result["error"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.db_resources.load_by_id')
+    @patch("instrmcp.extensions.database.db_resources.load_by_id")
     def test_recent_measurements_handles_incomplete_data(self, mock_load):
         """Test recent measurements handles datasets with missing fields."""
         mock_dataset = MagicMock()
@@ -354,7 +361,7 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_handles_errors_gracefully(self):
         """Test recent measurements handles database errors."""
-        with patch('instrmcp.extensions.database.db_resources.load_by_id') as mock_load:
+        with patch("instrmcp.extensions.database.db_resources.load_by_id") as mock_load:
             mock_load.side_effect = Exception("Database error")
 
             result = json.loads(get_recent_measurements())
@@ -368,7 +375,7 @@ class TestResourceIntegration:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_both_resources_use_same_path_resolution(self, temp_dir, monkeypatch):
         """Test config and measurements use consistent path resolution."""
-        monkeypatch.setenv('MeasureItHome', str(temp_dir))
+        monkeypatch.setenv("MeasureItHome", str(temp_dir))
 
         config = json.loads(get_current_database_config())
         measurements = json.loads(get_recent_measurements())
@@ -381,7 +388,9 @@ class TestResourceIntegration:
     def test_resources_handle_same_database(self, mock_database_path):
         """Test both resources work with same database path."""
         config = json.loads(get_current_database_config(mock_database_path))
-        measurements = json.loads(get_recent_measurements(database_path=mock_database_path))
+        measurements = json.loads(
+            get_recent_measurements(database_path=mock_database_path)
+        )
 
         assert config["database_path"] == mock_database_path
         assert measurements["database_path"] == mock_database_path
@@ -400,7 +409,7 @@ class TestResourceIntegration:
 
     def test_resources_without_qcodes_consistent(self):
         """Test both resources handle missing QCodes consistently."""
-        with patch('instrmcp.extensions.database.db_resources.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
             config = json.loads(get_current_database_config())
             measurements = json.loads(get_recent_measurements())
 

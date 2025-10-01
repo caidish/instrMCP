@@ -21,9 +21,9 @@ def get_sweep0d_template() -> str:
             "Monitor noise over time",
             "Track parameter stability",
             "Long-term monitoring",
-            "Background monitoring while other processes run"
+            "Background monitoring while other processes run",
         ],
-        "basic_pattern": '''# Sweep0D - Monitor parameters vs time
+        "basic_pattern": """# Sweep0D - Monitor parameters vs time
 import os
 from MeasureIt.sweep0d import Sweep0D
 from MeasureIt.util import init_database
@@ -54,13 +54,13 @@ init_database(database_name, exp_name, sample_name, s)
 s.start()
 
 # To stop: s.stop() or press ESC
-''',
-    "advanced_patterns":    {},
+""",
+        "advanced_patterns": {},
         "common_parameters": {
             "inter_delay": "Time between measurements (seconds)",
             "save_data": "Whether to save data to database (True/False)",
             "plot_bin": "Plot every Nth point for performance (integer)",
-            "max_time": "Maximum monitoring time in seconds"
+            "max_time": "Maximum monitoring time in seconds",
         },
         "tips": [
             "Use ESC key to stop measurement gracefully",
@@ -68,8 +68,8 @@ s.start()
             "inter_delay controls sampling rate (0.1s = 10 Hz max)",
             "Always call init_database before s.start()",
             "Use %gui qt for interactive plots",
-            "To see if the sweep is finished or not, check s.is_running"
-        ]
+            "To see if the sweep is finished or not, check s.is_running",
+        ],
     }
 
     return json.dumps(template, indent=2)
@@ -88,9 +88,9 @@ def get_sweep1d_template() -> str:
             "Frequency sweeps",
             "Temperature ramps",
             "Field sweeps",
-            "Characterization measurements"
+            "Characterization measurements",
         ],
-        "basic_pattern": '''# Sweep1D - Single parameter sweep
+        "basic_pattern": """# Sweep1D - Single parameter sweep
 import os
 from MeasureIt.sweep1d import Sweep1D
 from MeasureIt.util import init_database
@@ -125,9 +125,9 @@ init_database(database_name, exp_name, sample_name, s)
 s.start()
 
 # To stop: s.stop() or press ESC, spacebar to reverse direction
-''',
+""",
         "advanced_patterns": {
-            "fast_sweep": '''# Fast sweep with reduced plotting
+            "fast_sweep": """# Fast sweep with reduced plotting
 s = Sweep1D(
     freq_source.frequency,
     start=1e6, stop=10e6,   # 1-10 MHz
@@ -140,8 +140,8 @@ s = Sweep1D(
 s.follow_param(spectrum_analyzer.power)
 init_database("fast_sweep.db", "frequency_response", "device_B", s)
 s.start()
-''',
-            "temperature_ramp": '''# Slow temperature ramp
+""",
+            "temperature_ramp": """# Slow temperature ramp
 s = Sweep1D(
     temperature.setpoint,
     start=4.0, stop=300.0,  # 4K to 300K
@@ -157,8 +157,8 @@ s.follow_param(
 )
 init_database("temperature.db", "warmup", "sample_C", s)
 s.start()
-''',
-            "continual_sweep": '''# Continuous sweeping
+""",
+            "continual_sweep": """# Continuous sweeping
 s = Sweep1D(
     gate.voltage,
     start=-2.0, stop=2.0,
@@ -172,7 +172,7 @@ s.follow_param(current.current, voltage.voltage)
 init_database("continuous.db", "iv_curves", "device_D", s)
 s.start()
 # Will sweep continuously until stopped
-'''
+""",
         },
         "common_parameters": {
             "parameter": "QCoDeS parameter object to sweep",
@@ -182,7 +182,7 @@ s.start()
             "inter_delay": "Delay between measurements (seconds)",
             "bidirectional": "True: sweep back and forth, False: one direction",
             "continual": "True: sweep continuously, False: stop after completion",
-            "plot_bin": "Plot every Nth point for performance"
+            "plot_bin": "Plot every Nth point for performance",
         },
         "tips": [
             "Parameter will safely ramp to start value if not already there",
@@ -190,8 +190,8 @@ s.start()
             "Bidirectional sweeps are useful for hysteresis measurements",
             "Set appropriate rate to avoid damaging instruments",
             "continual=True useful for real-time monitoring",
-            "To see if the sweep is finished or not, check s.is_running"
-        ]
+            "To see if the sweep is finished or not, check s.is_running",
+        ],
     }
 
     return json.dumps(template, indent=2)
@@ -210,9 +210,9 @@ def get_sweep2d_template() -> str:
             "Frequency vs power maps",
             "Temperature vs field maps",
             "Stability diagrams",
-            "Charge sensing maps"
+            "Charge sensing maps",
         ],
-        "basic_pattern": '''# Sweep2D - 2D parameter mapping
+        "basic_pattern": """# Sweep2D - 2D parameter mapping
 import os
 from MeasureIt.sweep2d import Sweep2D
 from MeasureIt.util import init_database
@@ -261,9 +261,9 @@ init_database(database_name, exp_name, sample_name, s)
 s.start()
 
 # To stop: s.stop() or press ESC
-''',
+""",
         "advanced_patterns": {
-            "fine_mapping": '''# High-resolution 2D map
+            "fine_mapping": """# High-resolution 2D map
 s = Sweep2D(
     [gate1.voltage, -2.0, 2.0, 0.005],    # 0.005V steps (800 points)
     [gate2.voltage, -1.0, 1.0, 0.01],     # 0.01V steps (200 points)
@@ -278,8 +278,8 @@ s.follow_param(sensor.conductance, sensor.current)
 s.follow_heatmap_param([sensor.conductance])
 init_database("fine_map.db", "high_res", "device_E", s)
 s.start()
-''',
-            "frequency_power_map": '''# Frequency vs Power 2D sweep
+""",
+            "frequency_power_map": """# Frequency vs Power 2D sweep
 s = Sweep2D(
     [rf_source.frequency, 1e6, 10e6, 50e3],    # 1-10 MHz, 50kHz steps
     [rf_source.power, -30, 0, 1],               # -30 to 0 dBm, 1dB steps
@@ -295,8 +295,8 @@ s.follow_param(
 s.follow_heatmap_param([spectrum_analyzer.amplitude])
 init_database("rf_map.db", "frequency_power", "resonator_A", s)
 s.start()
-''',
-            "slow_2d_map": '''# Slow/careful 2D mapping
+""",
+            "slow_2d_map": """# Slow/careful 2D mapping
 s = Sweep2D(
     [magnetic_field.field, 0, 1.0, 0.01],      # 0-1T, 10mT steps
     [temperature.setpoint, 4, 20, 0.5],        # 4-20K, 0.5K steps
@@ -314,7 +314,7 @@ s.follow_param(
 s.follow_heatmap_param([resistance.resistance])
 init_database("magneto.db", "field_temp_map", "sample_F", s)
 s.start()
-'''
+""",
         },
         "common_parameters": {
             "inner_param": "Fast axis parameter (swept back and forth)",
@@ -325,7 +325,7 @@ s.start()
             "outer_delay": "Delay when stepping outer parameter (seconds)",
             "back_multiplier": "Speed multiplier for return sweep (>1 = faster)",
             "plot_bin": "Plot every Nth point for performance",
-            "out_ministeps": "Number of mini-steps per outer parameter change"
+            "out_ministeps": "Number of mini-steps per outer parameter change",
         },
         "tips": [
             "Inner parameter is swept rapidly back and forth",
@@ -334,8 +334,8 @@ s.start()
             "back_multiplier speeds up return sweeps",
             "Adjust outer_delay for instrument settling time",
             "Large maps can take hours - plan accordingly",
-            "To see if the sweep is finished or not, check s.is_running"
-        ]
+            "To see if the sweep is finished or not, check s.is_running",
+        ],
     }
 
     return json.dumps(template, indent=2)
@@ -354,9 +354,9 @@ def get_simulsweep_template() -> str:
             "Diagonal cuts through parameter space",
             "Maintaining parameter ratios",
             "Multi-parameter optimization",
-            "Synchronized instrument control"
+            "Synchronized instrument control",
         ],
-        "basic_pattern": '''# SimulSweep - Simultaneous parameter sweeping
+        "basic_pattern": """# SimulSweep - Simultaneous parameter sweeping
 import os
 from MeasureIt.simul_sweep import SimulSweep
 from MeasureIt.util import init_database
@@ -396,9 +396,9 @@ init_database(database_name, exp_name, sample_name, s)
 s.start()
 
 # To stop: s.stop() or press ESC
-''',
+""",
         "advanced_patterns": {
-            "ratio_sweep": '''# Maintain parameter ratio during sweep
+            "ratio_sweep": """# Maintain parameter ratio during sweep
 parameter_dict = {
     gate1.voltage: {'start': -1.0, 'stop': 1.0, 'step': 0.02},
     gate2.voltage: {'start': -0.5, 'stop': 0.5, 'step': 0.01}   # 2:1 ratio maintained
@@ -414,8 +414,8 @@ s = SimulSweep(parameter_dict, **sweep_args)
 s.follow_param(differential_current.current, sum_voltage.voltage)
 init_database("ratio_sweep.db", "gate_ratio", "double_dot", s)
 s.start()
-''',
-            "frequency_phase_sweep": '''# Synchronized frequency and phase sweep
+""",
+            "frequency_phase_sweep": """# Synchronized frequency and phase sweep
 parameter_dict = {
     rf_source.frequency: {'start': 1e6, 'stop': 10e6, 'step': 50e3},
     rf_source.phase: {'start': 0, 'stop': 360, 'step': 2}       # Phase follows frequency
@@ -435,8 +435,8 @@ s.follow_param(
 )
 init_database("freq_phase.db", "iq_measurement", "cavity_A", s)
 s.start()
-''',
-            "three_parameter_sweep": '''# Three parameters simultaneously
+""",
+            "three_parameter_sweep": """# Three parameters simultaneously
 parameter_dict = {
     gate1.voltage: {'start': -0.5, 'stop': 0.5, 'step': 0.01},
     gate2.voltage: {'start': -0.3, 'stop': 0.3, 'step': 0.006},
@@ -458,7 +458,7 @@ s.follow_param(
 )
 init_database("triple_sweep.db", "3d_characterization", "device_G", s)
 s.start()
-'''
+""",
         },
         "common_parameters": {
             "parameter_dict": "Dictionary mapping parameters to sweep ranges",
@@ -466,7 +466,7 @@ s.start()
             "bidirectional": "True: sweep back and forth, False: one direction",
             "continual": "True: sweep continuously, False: stop after completion",
             "inter_delay": "Delay between measurements (seconds)",
-            "plot_bin": "Plot every Nth point for performance"
+            "plot_bin": "Plot every Nth point for performance",
         },
         "tips": [
             "All parameters must have same number of steps",
@@ -474,8 +474,8 @@ s.start()
             "Useful for diagonal cuts through multi-dimensional parameter space",
             "Parameters sweep simultaneously at each measurement point",
             "Good for maintaining parameter relationships/ratios",
-            "To see if the sweep is finished or not, check s.is_running"
-        ]
+            "To see if the sweep is finished or not, check s.is_running",
+        ],
     }
 
     return json.dumps(template, indent=2)
@@ -494,9 +494,9 @@ def get_sweepqueue_template() -> str:
             "Multi-step characterization protocols",
             "Parameter space exploration",
             "Overnight measurement routines",
-            "Complex measurement workflows"
+            "Complex measurement workflows",
         ],
-        "basic_pattern": '''# SweepQueue - Sequential measurement workflow
+        "basic_pattern": """# SweepQueue - Sequential measurement workflow
 import os
 from pathlib import Path
 from MeasureIt.sweep_queue import SweepQueue, DatabaseEntry
@@ -554,9 +554,9 @@ for n, item in enumerate(sq):
 sq.start()
 
 # To stop: sq.stop()
-''',
+""",
         "advanced_patterns": {
-            "overnight_sequence": '''# Overnight measurement sequence
+            "overnight_sequence": """# Overnight measurement sequence
 sq = SweepQueue()
 follow_params = {sensor.conductance, temperature.temperature}
 
@@ -596,8 +596,8 @@ def start_warmup():
 sq += (start_warmup,)
 
 sq.start()
-''',
-            "parameter_space_exploration": '''# Systematic parameter space exploration
+""",
+            "parameter_space_exploration": """# Systematic parameter space exploration
 sq = SweepQueue()
 
 # Explore different bias points
@@ -630,8 +630,8 @@ def reset_bias():
 
 sq += (reset_bias,)
 sq.start()
-''',
-            "multi_device_sequence": '''# Multi-device measurement sequence
+""",
+            "multi_device_sequence": """# Multi-device measurement sequence
 sq = SweepQueue()
 
 devices = ["device_A", "device_B", "device_C"]
@@ -657,13 +657,13 @@ for device, channel in zip(devices, switch_channels):
     sq += (db_entry, s)
 
 sq.start()
-'''
+""",
         },
         "common_patterns": {
             "adding_sweeps": "sq += (DatabaseEntry(path, exp, sample), sweep_object)",
             "adding_functions": "sq += (function_name, arg1, arg2, ...)",
             "database_entry": "DatabaseEntry(db_path, experiment_name, sample_name)",
-            "queue_iteration": "for n, item in enumerate(sq): print(f'{n}. {item}')"
+            "queue_iteration": "for n, item in enumerate(sq): print(f'{n}. {item}')",
         },
         "tips": [
             "Use += operator to add items to queue",
@@ -672,8 +672,8 @@ sq.start()
             "Queue is iterable - you can inspect contents before starting",
             "Each sweep in queue can have different parameters",
             "Functions execute immediately when reached in queue",
-            "To see if the sweep is finished or not, check s.is_running"
-        ]
+            "To see if the sweep is finished or not, check s.is_running",
+        ],
     }
 
     return json.dumps(template, indent=2)
@@ -689,15 +689,15 @@ def get_common_patterns_template() -> str:
         "description": "Common MeasureIt patterns and best practices",
         "database_setup": {
             "description": "Standard database initialization patterns",
-            "basic": '''# Basic database setup
+            "basic": """# Basic database setup
 from MeasureIt.util import init_database
 
 database_name = "measurements.db"
 exp_name = "experiment_001"
 sample_name = "sample_A"
 init_database(database_name, exp_name, sample_name, sweep_object)
-''',
-            "with_path": '''# Database with explicit path
+""",
+            "with_path": """# Database with explicit path
 import os
 from pathlib import Path
 
@@ -709,8 +709,8 @@ sample_name = "device_001"
 # For SweepQueue
 from MeasureIt.sweep_queue import DatabaseEntry
 db_entry = DatabaseEntry(db_path, exp_name, sample_name)
-''',
-            "organized": '''# Organized database structure
+""",
+            "organized": """# Organized database structure
 import datetime
 
 # Use date-based organization
@@ -720,18 +720,18 @@ exp_name = f"sample_characterization_{today.strftime('%m%d')}"
 sample_name = "device_A_gate_sweep"
 
 init_database(db_name, exp_name, sample_name, sweep_object)
-'''
+""",
         },
         "parameter_following": {
             "description": "Best practices for parameter following",
-            "basic": '''# Basic parameter following
+            "basic": """# Basic parameter following
 sweep.follow_param(
     lockin.x, lockin.y, lockin.r,    # Lock-in amplifier
     voltmeter.voltage,               # DC measurements
     current_source.current           # Current measurements
 )
-''',
-            "organized": '''# Organized parameter groups
+""",
+            "organized": """# Organized parameter groups
 # Define parameter groups for clarity
 lockin_params = {lockin.x, lockin.y, lockin.r, lockin.phase}
 dc_params = {voltmeter.voltage, current_meter.current}
@@ -739,25 +739,25 @@ temp_params = {temperature.temperature, heater.power}
 
 # Combine as needed
 sweep.follow_param(*(lockin_params | dc_params))
-''',
-            "with_labels": '''# Set meaningful parameter labels
+""",
+            "with_labels": """# Set meaningful parameter labels
 lockin.x.label = "Lock-in X (V)"
 lockin.y.label = "Lock-in Y (V)"
 current_meter.current.label = "Sample Current (A)"
 gate.voltage.label = "Gate Voltage (V)"
 
 sweep.follow_param(lockin.x, lockin.y, current_meter.current)
-'''
+""",
         },
         "plotting_setup": {
             "description": "Plotting configuration patterns",
-            "basic": '''# Basic plotting setup
+            "basic": """# Basic plotting setup
 %gui qt
 
 # For 2D measurements, set heatmap parameters
 sweep2d.follow_heatmap_param([primary_signal, secondary_signal])
-''',
-            "performance": '''# Optimized plotting for performance
+""",
+            "performance": """# Optimized plotting for performance
 sweep = Sweep1D(
     parameter, start, stop, rate,
     plot_bin=10,        # Plot every 10th point
@@ -769,8 +769,8 @@ sweep = Sweep0D(
     plot_bin=20,        # Plot every 20th point
     max_time=3600       # 1 hour
 )
-''',
-            "multiple_plots": '''# Multiple plot windows
+""",
+            "multiple_plots": """# Multiple plot windows
 %gui qt
 
 # Start first measurement
@@ -779,38 +779,38 @@ sweep1.start()
 # In separate cell, start second measurement
 # This creates a second plot window
 sweep2.start()
-'''
+""",
         },
         "safety_patterns": {
             "description": "Safe measurement practices",
-            "ramp_safely": '''# Safe parameter ramping
+            "ramp_safely": """# Safe parameter ramping
 # MeasureIt automatically ramps to start value
 current_value = gate.voltage()
 if abs(current_value - start_value) > 0.1:
     print(f"Will ramp from {current_value}V to {start_value}V")
 
 sweep = Sweep1D(gate.voltage, start_value, stop_value, safe_rate)
-''',
-            "limits_check": '''# Check parameter limits before sweeping
+""",
+            "limits_check": """# Check parameter limits before sweeping
 param_limits = gate.voltage.vals
 print(f"Parameter limits: {param_limits}")
 
 if start_value < param_limits.min or stop_value > param_limits.max:
     print("WARNING: Sweep range exceeds parameter limits!")
     # Adjust range or exit
-''',
-            "instrument_settling": '''# Allow for instrument settling
+""",
+            "instrument_settling": """# Allow for instrument settling
 sweep = Sweep1D(
     slow_instrument.parameter,
     start, stop, rate,
     inter_delay=2.0,        # 2s settling time
     outer_delay=5.0         # 5s for outer parameter (2D sweeps)
 )
-'''
+""",
         },
         "error_handling": {
             "description": "Error handling and recovery patterns",
-            "basic": '''# Basic error handling
+            "basic": """# Basic error handling
 try:
     init_database(db_name, exp_name, sample_name, sweep)
     sweep.start()
@@ -818,8 +818,8 @@ except Exception as e:
     print(f"Error during measurement: {e}")
     if sweep.is_running:
         sweep.stop()
-''',
-            "graceful_stop": '''# Graceful stopping
+""",
+            "graceful_stop": """# Graceful stopping
 import signal
 
 def signal_handler(sig, frame):
@@ -832,8 +832,8 @@ signal.signal(signal.SIGINT, signal_handler)
 
 # Your measurement code here
 sweep.start()
-''',
-            "recovery": '''# Measurement recovery
+""",
+            "recovery": """# Measurement recovery
 # Check if measurement is still running
 if sweep.is_running:
     print("Measurement is running")
@@ -845,7 +845,7 @@ else:
 if not sweep.is_running and sweep.continual:
     print("Resuming measurement...")
     sweep.start()
-'''
+""",
         },
         "optimization_tips": [
             "Use plot_bin parameter to improve plotting performance for long measurements",
@@ -854,15 +854,15 @@ if not sweep.is_running and sweep.continual:
             "For 2D sweeps, use back_multiplier > 1 to speed up return sweeps",
             "Group related parameters when following multiple instruments",
             "Use continual=True for real-time monitoring applications",
-            "Save data locally and backup to network storage periodically"
+            "Save data locally and backup to network storage periodically",
         ],
         "troubleshooting": {
             "slow_measurements": "Increase plot_bin, reduce inter_delay if safe",
             "plot_not_updating": "Check %gui qt is set, restart kernel if needed",
             "database_errors": "Check file permissions and disk space",
             "instrument_errors": "Verify connections and parameter limits",
-            "memory_issues": "Use plot_bin parameter for long measurements"
-        }
+            "memory_issues": "Use plot_bin parameter for long measurements",
+        },
     }
 
     return json.dumps(template, indent=2)
@@ -880,31 +880,31 @@ def get_measureit_code_examples() -> str:
         "categories": {
             "sweep0d": {
                 "description": "Time-based monitoring patterns",
-                "template": json.loads(get_sweep0d_template())
+                "template": json.loads(get_sweep0d_template()),
             },
             "sweep1d": {
                 "description": "Single parameter sweep patterns",
-                "template": json.loads(get_sweep1d_template())
+                "template": json.loads(get_sweep1d_template()),
             },
             "sweep2d": {
                 "description": "2D parameter mapping patterns",
-                "template": json.loads(get_sweep2d_template())
+                "template": json.loads(get_sweep2d_template()),
             },
             "simulsweep": {
                 "description": "Simultaneous parameter sweeping patterns",
-                "template": json.loads(get_simulsweep_template())
+                "template": json.loads(get_simulsweep_template()),
             },
             "sweepqueue": {
                 "description": "Sequential measurement workflow patterns",
-                "template": json.loads(get_sweepqueue_template())
+                "template": json.loads(get_sweepqueue_template()),
             },
             "common_patterns": {
                 "description": "Best practices and common workflows",
-                "template": json.loads(get_common_patterns_template())
-            }
+                "template": json.loads(get_common_patterns_template()),
+            },
         },
         "quick_reference": {
-            "basic_imports": '''# Essential MeasureIt imports
+            "basic_imports": """# Essential MeasureIt imports
 import os
 from pathlib import Path
 from MeasureIt.sweep0d import Sweep0D
@@ -913,53 +913,69 @@ from MeasureIt.sweep2d import Sweep2D
 from MeasureIt.simul_sweep import SimulSweep
 from MeasureIt.sweep_queue import SweepQueue, DatabaseEntry
 from MeasureIt.util import init_database
-''',
-            "database_setup": '''# Standard database initialization
+""",
+            "database_setup": """# Standard database initialization
 database_name = "measurements.db"
 exp_name = "experiment_name"
 sample_name = "sample_name"
 init_database(database_name, exp_name, sample_name, sweep_object)
-''',
-            "parameter_following": '''# Follow parameters during measurement
+""",
+            "parameter_following": """# Follow parameters during measurement
 sweep.follow_param(
     instrument.parameter1,
     instrument.parameter2,
     # Add more parameters as needed
 )
-''',
-            "plotting_setup": '''# Enable interactive plotting
+""",
+            "plotting_setup": """# Enable interactive plotting
 %gui qt
 
 # For 2D measurements, enable heatmap
 sweep2d.follow_heatmap_param([primary_signal])
-'''
+""",
         },
         "measurement_selection_guide": {
             "sweep0d": {
                 "when_to_use": "Monitor parameters vs time",
-                "examples": ["Stability monitoring", "Noise characterization", "Long-term tracking"],
-                "key_parameters": ["inter_delay", "max_time", "plot_bin"]
+                "examples": [
+                    "Stability monitoring",
+                    "Noise characterization",
+                    "Long-term tracking",
+                ],
+                "key_parameters": ["inter_delay", "max_time", "plot_bin"],
             },
             "sweep1d": {
                 "when_to_use": "Sweep one parameter while monitoring others",
                 "examples": ["Gate voltage sweeps", "Frequency response", "IV curves"],
-                "key_parameters": ["start", "stop", "rate", "bidirectional"]
+                "key_parameters": ["start", "stop", "rate", "bidirectional"],
             },
             "sweep2d": {
                 "when_to_use": "Create 2D maps by sweeping two parameters",
                 "examples": ["Stability diagrams", "Gate maps", "Frequency vs power"],
-                "key_parameters": ["inner/outer ranges", "step sizes", "back_multiplier"]
+                "key_parameters": [
+                    "inner/outer ranges",
+                    "step sizes",
+                    "back_multiplier",
+                ],
             },
             "simulsweep": {
                 "when_to_use": "Sweep multiple parameters simultaneously",
-                "examples": ["Correlated sweeps", "Maintaining ratios", "Diagonal cuts"],
-                "key_parameters": ["parameter_dict", "step coordination"]
+                "examples": [
+                    "Correlated sweeps",
+                    "Maintaining ratios",
+                    "Diagonal cuts",
+                ],
+                "key_parameters": ["parameter_dict", "step coordination"],
             },
             "sweepqueue": {
                 "when_to_use": "Chain multiple measurements sequentially",
-                "examples": ["Automated protocols", "Multi-step characterization", "Overnight runs"],
-                "key_parameters": ["queue composition", "database entries"]
-            }
+                "examples": [
+                    "Automated protocols",
+                    "Multi-step characterization",
+                    "Overnight runs",
+                ],
+                "key_parameters": ["queue composition", "database entries"],
+            },
         },
         "code_generation_hints": {
             "ai_instructions": [
@@ -970,23 +986,23 @@ sweep2d.follow_heatmap_param([primary_signal])
                 "Include plotting setup for real-time monitoring",
                 "Consider using SweepQueue for complex measurement protocols",
                 "Always include proper imports at the beginning",
-                "Use descriptive variable names and comments"
+                "Use descriptive variable names and comments",
             ],
             "safety_guidelines": [
                 "Check instrument parameter limits before sweeping",
                 "Use safe sweep rates to avoid damaging equipment",
                 "Include proper settling delays (inter_delay, outer_delay)",
                 "Validate sweep ranges against instrument specifications",
-                "Consider using bidirectional=False for sensitive parameters"
+                "Consider using bidirectional=False for sensitive parameters",
             ],
             "performance_tips": [
                 "Use plot_bin parameter for long measurements",
                 "Adjust inter_delay based on instrument response time",
                 "For 2D sweeps, use back_multiplier > 1 for faster returns",
                 "Group related parameters when following multiple signals",
-                "Consider continual=True for real-time monitoring applications"
-            ]
-        }
+                "Consider continual=True for real-time monitoring applications",
+            ],
+        },
     }
 
     return json.dumps(all_examples, indent=2)

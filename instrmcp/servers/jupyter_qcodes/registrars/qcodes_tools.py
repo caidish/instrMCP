@@ -36,7 +36,9 @@ class QCodesToolRegistrar:
         """Register the qcodes_instrument_info tool."""
 
         @self.mcp.tool(name="qcodes_instrument_info")
-        async def instrument_info(name: str, with_values: bool = False) -> List[TextContent]:
+        async def instrument_info(
+            name: str, with_values: bool = False
+        ) -> List[TextContent]:
             """Get detailed information about a QCodes instrument.
 
             Args:
@@ -45,10 +47,18 @@ class QCodesToolRegistrar:
             """
             try:
                 info = await self.tools.instrument_info(name, with_values)
-                return [TextContent(type="text", text=json.dumps(info, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(info, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in qcodes_instrument_info: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_parameter_values(self):
         """Register the qcodes_get_parameter_values tool."""
@@ -65,7 +75,15 @@ class QCodesToolRegistrar:
             try:
                 queries_data = json.loads(queries)
                 results = await self.tools.get_parameter_values(queries_data)
-                return [TextContent(type="text", text=json.dumps(results, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(results, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in qcodes_get_parameter_values: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]

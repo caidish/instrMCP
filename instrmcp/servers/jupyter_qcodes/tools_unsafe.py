@@ -51,19 +51,25 @@ class UnsafeToolRegistrar:
             """
             try:
                 result = await self.tools.execute_editing_cell()
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/execute_cell: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_add_cell(self):
         """Register the notebook/add_cell tool."""
 
         @self.mcp.tool(name="notebook_add_cell")
         async def add_new_cell(
-            cell_type: str = "code",
-            position: str = "below",
-            content: str = ""
+            cell_type: str = "code", position: str = "below", content: str = ""
         ) -> List[TextContent]:
             """Add a new cell in the notebook.
 
@@ -77,10 +83,18 @@ class UnsafeToolRegistrar:
             """
             try:
                 result = await self.tools.add_new_cell(cell_type, position, content)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/add_cell: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_delete_cell(self):
         """Register the notebook/delete_cell tool."""
@@ -95,10 +109,18 @@ class UnsafeToolRegistrar:
             """
             try:
                 result = await self.tools.delete_editing_cell()
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/delete_cell: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_delete_cells(self):
         """Register the notebook/delete_cells tool."""
@@ -125,6 +147,7 @@ class UnsafeToolRegistrar:
             try:
                 # Parse cell_numbers - can be either single int or list
                 import json as json_module
+
                 try:
                     parsed = json_module.loads(cell_numbers)
                     if isinstance(parsed, int):
@@ -132,21 +155,46 @@ class UnsafeToolRegistrar:
                     elif isinstance(parsed, list):
                         cell_list = parsed
                     else:
-                        return [TextContent(type="text", text=json_module.dumps({
-                            "success": False,
-                            "error": "cell_numbers must be an integer or list of integers"
-                        }, indent=2))]
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json_module.dumps(
+                                    {
+                                        "success": False,
+                                        "error": "cell_numbers must be an integer or list of integers",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
                 except json_module.JSONDecodeError:
-                    return [TextContent(type="text", text=json_module.dumps({
-                        "success": False,
-                        "error": f"Invalid JSON format: {cell_numbers}"
-                    }, indent=2))]
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json_module.dumps(
+                                {
+                                    "success": False,
+                                    "error": f"Invalid JSON format: {cell_numbers}",
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ]
 
                 result = await self.tools.delete_cells_by_number(cell_list)
-                return [TextContent(type="text", text=json_module.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text",
+                        text=json_module.dumps(result, indent=2, default=str),
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/delete_cells: {e}")
-                return [TextContent(type="text", text=json_module.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json_module.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_apply_patch(self):
         """Register the notebook/apply_patch tool."""
@@ -164,7 +212,15 @@ class UnsafeToolRegistrar:
             """
             try:
                 result = await self.tools.apply_patch(old_text, new_text)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/apply_patch: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]

@@ -12,9 +12,9 @@ from .database_tools import DatabaseToolRegistrar
 from .resources import ResourceRegistrar
 
 __all__ = [
-    'QCodesToolRegistrar',
-    'NotebookToolRegistrar',
-    'MeasureItToolRegistrar',
-    'DatabaseToolRegistrar',
-    'ResourceRegistrar',
+    "QCodesToolRegistrar",
+    "NotebookToolRegistrar",
+    "MeasureItToolRegistrar",
+    "DatabaseToolRegistrar",
+    "ResourceRegistrar",
 ]

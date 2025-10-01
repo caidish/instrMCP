@@ -10,7 +10,9 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 from mcp.types import TextContent
 
-from instrmcp.servers.jupyter_qcodes.registrars.notebook_tools import NotebookToolRegistrar
+from instrmcp.servers.jupyter_qcodes.registrars.notebook_tools import (
+    NotebookToolRegistrar,
+)
 
 
 class TestNotebookToolRegistrar:
@@ -28,6 +30,7 @@ class TestNotebookToolRegistrar:
                 tool_name = name or func.__name__
                 mcp._tools[tool_name] = func
                 return func
+
             return wrapper
 
         mcp.tool = tool_decorator
@@ -49,8 +52,8 @@ class TestNotebookToolRegistrar:
         """Create a mock IPython instance."""
         ipython = MagicMock()
         ipython.user_ns = {
-            'In': ['', 'import numpy as np', 'x = 5'],
-            'Out': {1: None, 2: 5}
+            "In": ["", "import numpy as np", "x = 5"],
+            "Out": {1: None, 2: 5},
         }
         ipython.execution_count = 2
         return ipython
@@ -79,18 +82,20 @@ class TestNotebookToolRegistrar:
             "notebook_get_editing_cell_output",
             "notebook_get_notebook_cells",
             "notebook_move_cursor",
-            "notebook_server_status"
+            "notebook_server_status",
         ]
 
         for tool_name in expected_tools:
             assert tool_name in mock_mcp_server._tools
 
     @pytest.mark.asyncio
-    async def test_list_variables_no_filter(self, registrar, mock_tools, mock_mcp_server):
+    async def test_list_variables_no_filter(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test listing variables without filter."""
         mock_vars = [
             {"name": "x", "type": "int", "value": "5"},
-            {"name": "y", "type": "str", "value": "hello"}
+            {"name": "y", "type": "str", "value": "hello"},
         ]
         mock_tools.list_variables.return_value = mock_vars
 
@@ -103,7 +108,9 @@ class TestNotebookToolRegistrar:
         mock_tools.list_variables.assert_called_once_with(None)
 
     @pytest.mark.asyncio
-    async def test_list_variables_with_filter(self, registrar, mock_tools, mock_mcp_server):
+    async def test_list_variables_with_filter(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test listing variables with type filter."""
         mock_vars = [{"name": "arr", "type": "ndarray", "shape": "(10,)"}]
         mock_tools.list_variables.return_value = mock_vars
@@ -130,14 +137,11 @@ class TestNotebookToolRegistrar:
         assert "Namespace error" in response_data["error"]
 
     @pytest.mark.asyncio
-    async def test_get_variable_info_success(self, registrar, mock_tools, mock_mcp_server):
+    async def test_get_variable_info_success(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test getting variable info successfully."""
-        mock_info = {
-            "name": "x",
-            "type": "int",
-            "value": 5,
-            "size": "28 bytes"
-        }
+        mock_info = {"name": "x", "type": "int", "value": 5, "size": "28 bytes"}
         mock_tools.get_variable_info.return_value = mock_info
 
         registrar.register_all()
@@ -149,7 +153,9 @@ class TestNotebookToolRegistrar:
         mock_tools.get_variable_info.assert_called_once_with("x")
 
     @pytest.mark.asyncio
-    async def test_get_variable_info_not_found(self, registrar, mock_tools, mock_mcp_server):
+    async def test_get_variable_info_not_found(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test getting info for non-existent variable."""
         mock_tools.get_variable_info.side_effect = KeyError("Variable not found")
 
@@ -161,12 +167,14 @@ class TestNotebookToolRegistrar:
         assert "error" in response_data
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_success(self, registrar, mock_tools, mock_mcp_server):
+    async def test_get_editing_cell_success(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test getting editing cell content."""
         mock_cell = {
             "content": "import numpy as np",
             "cell_id": "abc123",
-            "timestamp": 1234567890
+            "timestamp": 1234567890,
         }
         mock_tools.get_editing_cell.return_value = mock_cell
 
@@ -179,7 +187,9 @@ class TestNotebookToolRegistrar:
         mock_tools.get_editing_cell.assert_called_once_with(1000)
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_default_fresh_ms(self, registrar, mock_tools, mock_mcp_server):
+    async def test_get_editing_cell_default_fresh_ms(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test getting editing cell with default fresh_ms."""
         mock_cell = {"content": "x = 5", "cell_id": "xyz789"}
         mock_tools.get_editing_cell.return_value = mock_cell
@@ -191,7 +201,9 @@ class TestNotebookToolRegistrar:
         mock_tools.get_editing_cell.assert_called_once_with(1000)
 
     @pytest.mark.asyncio
-    async def test_update_editing_cell_success(self, registrar, mock_tools, mock_mcp_server):
+    async def test_update_editing_cell_success(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test updating editing cell content."""
         new_content = "# Updated code\nx = 10"
         mock_result = {"status": "success", "updated": True}
@@ -206,7 +218,9 @@ class TestNotebookToolRegistrar:
         mock_tools.update_editing_cell.assert_called_once_with(new_content)
 
     @pytest.mark.asyncio
-    async def test_update_editing_cell_error(self, registrar, mock_tools, mock_mcp_server):
+    async def test_update_editing_cell_error(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test updating cell with error."""
         mock_tools.update_editing_cell.side_effect = Exception("Update failed")
 
@@ -219,13 +233,12 @@ class TestNotebookToolRegistrar:
         assert "Update failed" in response_data["error"]
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_output_with_output(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_editing_cell_output_with_output(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting cell output when output exists."""
         # Setup IPython with output
-        mock_ipython.user_ns = {
-            'In': ['', 'x = 5', 'print(x)'],
-            'Out': {1: None, 2: 5}
-        }
+        mock_ipython.user_ns = {"In": ["", "x = 5", "print(x)"], "Out": {1: None, 2: 5}}
         mock_ipython.execution_count = 2
 
         registrar.register_all()
@@ -239,13 +252,12 @@ class TestNotebookToolRegistrar:
         assert response_data["has_output"] is True
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_output_no_output(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_editing_cell_output_no_output(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting cell output when cell has no output."""
         # Setup IPython with no output for last cell
-        mock_ipython.user_ns = {
-            'In': ['', 'import numpy', 'x = 5'],
-            'Out': {}
-        }
+        mock_ipython.user_ns = {"In": ["", "import numpy", "x = 5"], "Out": {}}
         mock_ipython.execution_count = 3
 
         registrar.register_all()
@@ -256,13 +268,12 @@ class TestNotebookToolRegistrar:
         assert response_data["has_output"] is False
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_output_running(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_editing_cell_output_running(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting cell output when cell is running."""
         # Setup IPython with running cell
-        mock_ipython.user_ns = {
-            'In': ['', 'import time; time.sleep(10)'],
-            'Out': {}
-        }
+        mock_ipython.user_ns = {"In": ["", "import time; time.sleep(10)"], "Out": {}}
         mock_ipython.execution_count = 1
 
         registrar.register_all()
@@ -274,19 +285,18 @@ class TestNotebookToolRegistrar:
         assert response_data["has_output"] is False
 
     @pytest.mark.asyncio
-    async def test_get_editing_cell_output_with_error(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_editing_cell_output_with_error(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting cell output when cell raised an error."""
         # Setup IPython with error
-        mock_ipython.user_ns = {
-            'In': ['', 'raise ValueError("test error")'],
-            'Out': {}
-        }
+        mock_ipython.user_ns = {"In": ["", 'raise ValueError("test error")'], "Out": {}}
         mock_ipython.execution_count = 2
 
         # Mock sys.last_* for error tracking
-        with patch.object(sys, 'last_type', ValueError, create=True), \
-             patch.object(sys, 'last_value', ValueError("test error"), create=True), \
-             patch.object(sys, 'last_traceback', None, create=True):
+        with patch.object(sys, "last_type", ValueError, create=True), patch.object(
+            sys, "last_value", ValueError("test error"), create=True
+        ), patch.object(sys, "last_traceback", None, create=True):
 
             registrar.register_all()
             get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
@@ -297,11 +307,13 @@ class TestNotebookToolRegistrar:
             assert response_data["status"] == "error"
 
     @pytest.mark.asyncio
-    async def test_get_notebook_cells_with_output(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_notebook_cells_with_output(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting notebook cells with output."""
         mock_ipython.user_ns = {
-            'In': ['', 'x = 5', 'y = 10', 'z = x + y'],
-            'Out': {1: None, 2: None, 3: 15}
+            "In": ["", "x = 5", "y = 10", "z = x + y"],
+            "Out": {1: None, 2: None, 3: 15},
         }
         mock_ipython.execution_count = 3
 
@@ -315,12 +327,11 @@ class TestNotebookToolRegistrar:
         assert response_data["cells"][-1]["output"] == "15"
 
     @pytest.mark.asyncio
-    async def test_get_notebook_cells_without_output(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_notebook_cells_without_output(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting notebook cells without output."""
-        mock_ipython.user_ns = {
-            'In': ['', 'x = 5', 'y = 10'],
-            'Out': {}
-        }
+        mock_ipython.user_ns = {"In": ["", "x = 5", "y = 10"], "Out": {}}
 
         registrar.register_all()
         get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
@@ -334,11 +345,7 @@ class TestNotebookToolRegistrar:
     @pytest.mark.asyncio
     async def test_move_cursor_success(self, registrar, mock_tools, mock_mcp_server):
         """Test moving cursor successfully."""
-        mock_result = {
-            "status": "success",
-            "old_index": 5,
-            "new_index": 6
-        }
+        mock_result = {"status": "success", "old_index": 5, "new_index": 6}
         mock_tools.move_cursor.return_value = mock_result
 
         registrar.register_all()
@@ -397,17 +404,19 @@ class TestNotebookToolRegistrar:
         assert response_data["mode"] == "safe"
 
     @pytest.mark.asyncio
-    async def test_get_notebook_cells_with_errors(self, registrar, mock_ipython, mock_mcp_server):
+    async def test_get_notebook_cells_with_errors(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
         """Test getting notebook cells with error tracking."""
         mock_ipython.user_ns = {
-            'In': ['', 'x = 5', 'raise ValueError("test")'],
-            'Out': {1: None}
+            "In": ["", "x = 5", 'raise ValueError("test")'],
+            "Out": {1: None},
         }
         mock_ipython.execution_count = 3
 
-        with patch.object(sys, 'last_type', ValueError, create=True), \
-             patch.object(sys, 'last_value', ValueError("test"), create=True), \
-             patch.object(sys, 'last_traceback', None, create=True):
+        with patch.object(sys, "last_type", ValueError, create=True), patch.object(
+            sys, "last_value", ValueError("test"), create=True
+        ), patch.object(sys, "last_traceback", None, create=True):
 
             registrar.register_all()
             get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
@@ -424,5 +433,6 @@ class TestNotebookToolRegistrar:
         registrar.register_all()
 
         for tool_name, tool_func in mock_mcp_server._tools.items():
-            assert asyncio.iscoroutinefunction(tool_func), \
-                f"Tool {tool_name} should be an async function"
+            assert asyncio.iscoroutinefunction(
+                tool_func
+            ), f"Tool {tool_name} should be an async function"

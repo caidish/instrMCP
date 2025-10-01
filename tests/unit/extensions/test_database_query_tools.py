@@ -18,7 +18,7 @@ from instrmcp.extensions.database.query_tools import (
     get_database_stats,
     _resolve_database_path,
     _format_file_size,
-    QCODES_AVAILABLE
+    QCODES_AVAILABLE,
 )
 
 
@@ -34,7 +34,7 @@ class TestResolveDatabasePath:
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
         """Test MeasureItHome environment variable is used."""
         measureit_home = str(temp_dir)
-        monkeypatch.setenv('MeasureItHome', measureit_home)
+        monkeypatch.setenv("MeasureItHome", measureit_home)
 
         result = _resolve_database_path(None)
         expected = str(temp_dir / "Databases" / "Example_database.db")
@@ -43,16 +43,16 @@ class TestResolveDatabasePath:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_resolve_qcodes_default(self, monkeypatch):
         """Test falls back to QCodes config."""
-        monkeypatch.delenv('MeasureItHome', raising=False)
+        monkeypatch.delenv("MeasureItHome", raising=False)
 
-        with patch('instrmcp.extensions.database.query_tools.qc') as mock_qc:
+        with patch("instrmcp.extensions.database.query_tools.qc") as mock_qc:
             mock_qc.config.core.db_location = "/qcodes/default.db"
             result = _resolve_database_path(None)
             assert result == "/qcodes/default.db"
 
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
-        monkeypatch.setenv('MeasureItHome', str(temp_dir))
+        monkeypatch.setenv("MeasureItHome", str(temp_dir))
         explicit_path = "/explicit/database.db"
 
         result = _resolve_database_path(explicit_path)
@@ -111,7 +111,7 @@ class TestListExperiments:
         assert isinstance(result["experiments"], list)
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_list_experiments_empty_database(self, mock_experiments):
         """Test list_experiments with empty database."""
         mock_experiments.return_value = []
@@ -121,7 +121,7 @@ class TestListExperiments:
         assert result["experiments"] == []
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_list_experiments_multiple_experiments(self, mock_experiments):
         """Test list_experiments with multiple experiments."""
         mock_exp1 = MagicMock()
@@ -141,7 +141,7 @@ class TestListExperiments:
         assert len(result["experiments"]) == 2
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_list_experiments_experiment_structure(self, mock_experiments):
         """Test each experiment has proper structure."""
         mock_exp = MagicMock()
@@ -171,13 +171,13 @@ class TestListExperiments:
 
     def test_list_experiments_without_qcodes(self):
         """Test list_experiments returns error when QCodes unavailable."""
-        with patch('instrmcp.extensions.database.query_tools.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
             result = json.loads(list_experiments())
             assert "error" in result
             assert "QCodes not available" in result["error"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_list_experiments_handles_errors(self, mock_experiments):
         """Test list_experiments handles database errors gracefully."""
         mock_experiments.side_effect = Exception("Database error")
@@ -193,7 +193,7 @@ class TestGetDatasetInfo:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_dataset_info_returns_valid_json(self):
         """Test get_dataset_info returns valid JSON."""
-        with patch('instrmcp.extensions.database.query_tools.load_by_id') as mock_load:
+        with patch("instrmcp.extensions.database.query_tools.load_by_id") as mock_load:
             mock_dataset = self._create_mock_dataset()
             mock_load.return_value = mock_dataset
 
@@ -202,7 +202,7 @@ class TestGetDatasetInfo:
             assert isinstance(parsed, dict)
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_has_required_sections(self, mock_load):
         """Test get_dataset_info includes required sections."""
         mock_dataset = self._create_mock_dataset()
@@ -215,7 +215,7 @@ class TestGetDatasetInfo:
         assert "metadata" in result
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_basic_info_structure(self, mock_load):
         """Test basic_info section has correct structure."""
         mock_dataset = self._create_mock_dataset()
@@ -231,7 +231,7 @@ class TestGetDatasetInfo:
         assert "number_of_results" in basic
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_experiment_info_structure(self, mock_load):
         """Test experiment_info section has correct structure."""
         mock_dataset = self._create_mock_dataset()
@@ -245,7 +245,7 @@ class TestGetDatasetInfo:
         assert exp["sample_name"] == "test_sample"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_parameters_structure(self, mock_load):
         """Test parameters section is properly structured."""
         mock_dataset = self._create_mock_dataset()
@@ -270,18 +270,20 @@ class TestGetDatasetInfo:
         assert params["voltage"]["unit"] == "V"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_with_measureit_metadata(self, mock_load):
         """Test extracting MeasureIt metadata."""
         mock_dataset = self._create_mock_dataset()
         mock_dataset.metadata = {
-            'measureit': json.dumps({
-                'class': 'Sweep1D',
-                'module': 'MeasureIt.sweep1d',
-                'attributes': {'rate': 0.01, 'bidirectional': True},
-                'set_param': 'gate.voltage',
-                'follow_params': {'lockin.x': {}, 'lockin.y': {}}
-            })
+            "measureit": json.dumps(
+                {
+                    "class": "Sweep1D",
+                    "module": "MeasureIt.sweep1d",
+                    "attributes": {"rate": 0.01, "bidirectional": True},
+                    "set_param": "gate.voltage",
+                    "follow_params": {"lockin.x": {}, "lockin.y": {}},
+                }
+            )
         }
         mock_load.return_value = mock_dataset
 
@@ -295,18 +297,17 @@ class TestGetDatasetInfo:
         assert "follow_params" in measureit
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_parameter_data_truncation(self, mock_load):
         """Test parameter data is truncated for large datasets."""
         mock_dataset = self._create_mock_dataset()
 
         import numpy as np
+
         large_data = np.arange(100)
 
         mock_dataset.get_parameter_data.return_value = {
-            'voltage': {
-                'voltage': large_data
-            }
+            "voltage": {"voltage": large_data}
         }
         mock_load.return_value = mock_dataset
 
@@ -319,18 +320,17 @@ class TestGetDatasetInfo:
         assert "data_truncated" in voltage_data
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_small_parameter_data(self, mock_load):
         """Test parameter data is not truncated for small datasets."""
         mock_dataset = self._create_mock_dataset()
 
         import numpy as np
+
         small_data = np.array([1.0, 2.0, 3.0])
 
         mock_dataset.get_parameter_data.return_value = {
-            'current': {
-                'current': small_data
-            }
+            "current": {"current": small_data}
         }
         mock_load.return_value = mock_dataset
 
@@ -343,7 +343,7 @@ class TestGetDatasetInfo:
         assert "data" in current_data
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_with_timestamp(self, mock_load):
         """Test dataset info includes timestamp."""
         mock_dataset = self._create_mock_dataset()
@@ -362,7 +362,7 @@ class TestGetDatasetInfo:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_dataset_info_with_explicit_path(self, mock_database_path):
         """Test get_dataset_info with explicit database path."""
-        with patch('instrmcp.extensions.database.query_tools.load_by_id') as mock_load:
+        with patch("instrmcp.extensions.database.query_tools.load_by_id") as mock_load:
             mock_dataset = self._create_mock_dataset()
             mock_load.return_value = mock_dataset
 
@@ -372,13 +372,13 @@ class TestGetDatasetInfo:
 
     def test_get_dataset_info_without_qcodes(self):
         """Test get_dataset_info returns error when QCodes unavailable."""
-        with patch('instrmcp.extensions.database.query_tools.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
             result = json.loads(get_dataset_info(1))
             assert "error" in result
             assert "QCodes not available" in result["error"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_dataset_info_handles_errors(self, mock_load):
         """Test get_dataset_info handles errors gracefully."""
         mock_load.side_effect = Exception("Dataset not found")
@@ -456,11 +456,14 @@ class TestGetDatabaseStats:
 
         result = json.loads(get_database_stats(str(db_path)))
 
-        assert "KB" in result["database_size_readable"] or "B" in result["database_size_readable"]
+        assert (
+            "KB" in result["database_size_readable"]
+            or "B" in result["database_size_readable"]
+        )
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.Path')
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.Path")
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_get_database_stats_experiment_count(self, mock_experiments, mock_path_cls):
         """Test stats includes experiment count."""
         # Mock database file exists
@@ -484,8 +487,8 @@ class TestGetDatabaseStats:
         assert result["experiment_count"] == 2
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_database_stats_dataset_count(self, mock_load, mock_experiments):
         """Test stats includes dataset count."""
         mock_experiments.return_value = []
@@ -505,8 +508,8 @@ class TestGetDatabaseStats:
         assert result["total_dataset_count"] >= 0
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
     def test_get_database_stats_measurement_types(self, mock_load, mock_experiments):
         """Test stats includes measurement type breakdown."""
         mock_experiments.return_value = []
@@ -516,9 +519,7 @@ class TestGetDatabaseStats:
             if run_id == 1:
                 ds = MagicMock()
                 ds.run_id = 1
-                ds.metadata = {
-                    'measureit': json.dumps({'class': 'Sweep1D'})
-                }
+                ds.metadata = {"measureit": json.dumps({"class": "Sweep1D"})}
                 return ds
             raise Exception("Not found")
 
@@ -528,7 +529,7 @@ class TestGetDatabaseStats:
         assert "measurement_types" in result
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_get_database_stats_experiment_details(self, mock_experiments):
         """Test stats includes experiment details."""
         mock_exp = MagicMock()
@@ -554,14 +555,14 @@ class TestGetDatabaseStats:
 
     def test_get_database_stats_without_qcodes(self):
         """Test get_database_stats returns error when QCodes unavailable."""
-        with patch('instrmcp.extensions.database.query_tools.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
             result = json.loads(get_database_stats())
             assert "error" in result
             assert "QCodes not available" in result["error"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.Path')
-    @patch('instrmcp.extensions.database.query_tools.experiments')
+    @patch("instrmcp.extensions.database.query_tools.Path")
+    @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_get_database_stats_handles_errors(self, mock_experiments, mock_path_cls):
         """Test get_database_stats handles errors gracefully."""
         # Mock database file exists
@@ -586,11 +587,13 @@ class TestQueryToolsIntegration:
     """Test integration between query tools."""
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
-    def test_all_tools_use_same_path_resolution(self, mock_experiments, temp_dir, monkeypatch):
+    @patch("instrmcp.extensions.database.query_tools.experiments")
+    def test_all_tools_use_same_path_resolution(
+        self, mock_experiments, temp_dir, monkeypatch
+    ):
         """Test all tools use consistent path resolution."""
         mock_experiments.return_value = []
-        monkeypatch.setenv('MeasureItHome', str(temp_dir))
+        monkeypatch.setenv("MeasureItHome", str(temp_dir))
 
         experiments_result = json.loads(list_experiments())
         stats_result = json.loads(get_database_stats())
@@ -605,7 +608,7 @@ class TestQueryToolsIntegration:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_all_tools_return_valid_json(self):
         """Test all tools return valid JSON."""
-        with patch('instrmcp.extensions.database.query_tools.load_by_id') as mock_load:
+        with patch("instrmcp.extensions.database.query_tools.load_by_id") as mock_load:
             mock_dataset = MagicMock()
             mock_dataset.run_id = 1
             mock_dataset.captured_run_id = 1
@@ -631,7 +634,7 @@ class TestQueryToolsIntegration:
 
     def test_all_tools_without_qcodes_consistent(self):
         """Test all tools handle missing QCodes consistently."""
-        with patch('instrmcp.extensions.database.query_tools.QCODES_AVAILABLE', False):
+        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
             experiments = json.loads(list_experiments())
             dataset_info = json.loads(get_dataset_info(1))
             stats = json.loads(get_database_stats())
@@ -641,9 +644,11 @@ class TestQueryToolsIntegration:
             assert "error" in stats
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    @patch('instrmcp.extensions.database.query_tools.experiments')
-    @patch('instrmcp.extensions.database.query_tools.load_by_id')
-    def test_tools_work_with_same_database(self, mock_load, mock_experiments, mock_database_path):
+    @patch("instrmcp.extensions.database.query_tools.experiments")
+    @patch("instrmcp.extensions.database.query_tools.load_by_id")
+    def test_tools_work_with_same_database(
+        self, mock_load, mock_experiments, mock_database_path
+    ):
         """Test tools work consistently with same database."""
         mock_exp = MagicMock()
         mock_exp.exp_id = 1

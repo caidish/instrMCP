@@ -25,6 +25,7 @@ from .registrars import (
 # MeasureIt integration (optional)
 try:
     from ...extensions import MeasureIt as measureit_module
+
     MEASUREIT_AVAILABLE = True
 except ImportError:
     measureit_module = None
@@ -33,6 +34,7 @@ except ImportError:
 # Database integration (optional)
 try:
     from ...extensions import database as db_integration
+
     DATABASE_AVAILABLE = True
 except ImportError:
     db_integration = None
@@ -43,8 +45,15 @@ logger = logging.getLogger(__name__)
 
 class JupyterMCPServer:
     """MCP server for Jupyter QCoDeS integration."""
-    
-    def __init__(self, ipython, host: str = "127.0.0.1", port: int = 8123, safe_mode: bool = True, enabled_options: set = None):
+
+    def __init__(
+        self,
+        ipython,
+        host: str = "127.0.0.1",
+        port: int = 8123,
+        safe_mode: bool = True,
+        enabled_options: set = None,
+    ):
         self.ipython = ipython
         self.host = host
         self.port = port
@@ -52,21 +61,25 @@ class JupyterMCPServer:
         self.enabled_options = enabled_options or set()
         self.running = False
         self.server_task: Optional[asyncio.Task] = None
-        
+
         # Generate a random token for basic security
         self.token = secrets.token_urlsafe(32)
-        
+
         # Initialize tools
         self.tools = QCodesReadOnlyTools(ipython)
-        
+
         # Create FastMCP server
-        server_name = f"Jupyter QCoDeS MCP Server ({'Safe' if safe_mode else 'Unsafe'} Mode)"
+        server_name = (
+            f"Jupyter QCoDeS MCP Server ({'Safe' if safe_mode else 'Unsafe'} Mode)"
+        )
         self.mcp = FastMCP(server_name)
         self._register_resources()
         self._register_tools()
-        
+
         mode_status = "safe" if safe_mode else "unsafe"
-        logger.info(f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode")
+        logger.info(
+            f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode"
+        )
 
     def _register_resources(self):
         """Register MCP resources using the ResourceRegistrar."""
@@ -75,7 +88,7 @@ class JupyterMCPServer:
             self.tools,
             enabled_options=self.enabled_options,
             measureit_module=measureit_module if MEASUREIT_AVAILABLE else None,
-            db_module=db_integration if DATABASE_AVAILABLE else None
+            db_module=db_integration if DATABASE_AVAILABLE else None,
         )
         resource_registrar.register_all()
 
@@ -96,12 +109,12 @@ class JupyterMCPServer:
             unsafe_registrar.register_all()
 
         # Optional: MeasureIt tools
-        if MEASUREIT_AVAILABLE and 'measureit' in self.enabled_options:
+        if MEASUREIT_AVAILABLE and "measureit" in self.enabled_options:
             measureit_registrar = MeasureItToolRegistrar(self.mcp, self.tools)
             measureit_registrar.register_all()
 
         # Optional: Database tools
-        if DATABASE_AVAILABLE and 'database' in self.enabled_options:
+        if DATABASE_AVAILABLE and "database" in self.enabled_options:
             database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
             database_registrar.register_all()
 
@@ -121,21 +134,21 @@ class JupyterMCPServer:
         """Start the MCP server."""
         if self.running:
             return
-        
+
         try:
             logger.info(f"Starting Jupyter MCP server on {self.host}:{self.port}")
-            
+
             # Start the server in a separate task
             self.server_task = asyncio.create_task(self._run_server())
             self.running = True
-            
+
             print(f"🚀 QCoDeS MCP Server running on http://{self.host}:{self.port}")
             print(f"🔑 Access token: {self.token}")
-            
+
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
             raise
-    
+
     async def _run_server(self):
         """Run the FastMCP server."""
         try:
@@ -145,23 +158,23 @@ class JupyterMCPServer:
                 transport="http",
                 host=self.host,
                 port=self.port,
-                show_banner=False
+                show_banner=False,
             )
         except Exception as e:
             logger.error(f"MCP server error: {e}")
             raise
-    
+
     async def stop(self):
         """Stop the MCP server."""
         if not self.running:
             return
-        
+
         try:
             self.running = False
-            
+
             # Clean up tools
             await self.tools.cleanup()
-            
+
             # Cancel server task
             if self.server_task and not self.server_task.done():
                 self.server_task.cancel()
@@ -169,38 +182,38 @@ class JupyterMCPServer:
                     await self.server_task
                 except asyncio.CancelledError:
                     pass
-            
+
             logger.info("Jupyter MCP server stopped")
             print("🛑 QCoDeS MCP Server stopped")
-            
+
         except Exception as e:
             logger.error(f"Error stopping MCP server: {e}")
-    
+
     def set_safe_mode(self, safe_mode: bool) -> Dict[str, Any]:
         """Change the server's safe mode setting.
-        
+
         Note: This requires server restart to take effect for tool registration.
-        
+
         Args:
             safe_mode: True for safe mode, False for unsafe mode
-            
+
         Returns:
             Dictionary with status information
         """
         old_mode = self.safe_mode
         self.safe_mode = safe_mode
-        
+
         mode_status = "safe" if safe_mode else "unsafe"
         old_mode_status = "safe" if old_mode else "unsafe"
-        
+
         logger.info(f"MCP server mode changed from {old_mode_status} to {mode_status}")
-        
+
         return {
             "old_mode": old_mode_status,
             "new_mode": mode_status,
             "server_running": self.running,
             "restart_required": True,
-            "message": f"Server mode changed to {mode_status}. Restart required for tool changes to take effect."
+            "message": f"Server mode changed to {mode_status}. Restart required for tool changes to take effect.",
         }
 
     def set_enabled_options(self, enabled_options: set) -> Dict[str, Any]:
@@ -229,5 +242,5 @@ class JupyterMCPServer:
             "removed_options": sorted(removed),
             "server_running": self.running,
             "restart_required": True,
-            "message": f"Server options updated. Restart required for resource changes to take effect."
+            "message": f"Server options updated. Restart required for resource changes to take effect.",
         }

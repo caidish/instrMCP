@@ -58,7 +58,9 @@ class TestHttpMCPProxy:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = '{"jsonrpc": "2.0", "result": {"tools": []}}'
-        mock_response.json = Mock(return_value={"jsonrpc": "2.0", "result": {"tools": []}})
+        mock_response.json = Mock(
+            return_value={"jsonrpc": "2.0", "result": {"tools": []}}
+        )
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
         endpoint = await proxy._find_working_endpoint()
@@ -91,7 +93,9 @@ class TestHttpMCPProxy:
         mock_httpx_client.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_find_working_endpoint_failure_defaults(self, proxy, mock_httpx_client):
+    async def test_find_working_endpoint_failure_defaults(
+        self, proxy, mock_httpx_client
+    ):
         """Test finding working endpoint defaults on failure."""
         mock_httpx_client.post = AsyncMock(side_effect=Exception("Connection error"))
 
@@ -155,11 +159,15 @@ class TestHttpMCPProxy:
 
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.text = '{"jsonrpc": "2.0", "result": {"content": [{"text": "test result"}]}}'
-        mock_response.json = Mock(return_value={
-            "jsonrpc": "2.0",
-            "result": {"content": [{"text": "test result"}]}
-        })
+        mock_response.text = (
+            '{"jsonrpc": "2.0", "result": {"content": [{"text": "test result"}]}}'
+        )
+        mock_response.json = Mock(
+            return_value={
+                "jsonrpc": "2.0",
+                "result": {"content": [{"text": "test result"}]},
+            }
+        )
         mock_response.raise_for_status = Mock()
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
@@ -215,10 +223,12 @@ class TestHttpMCPProxy:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = '{"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}}'
-        mock_response.json = Mock(return_value={
-            "jsonrpc": "2.0",
-            "error": {"code": -32601, "message": "Method not found"}
-        })
+        mock_response.json = Mock(
+            return_value={
+                "jsonrpc": "2.0",
+                "error": {"code": -32601, "message": "Method not found"},
+            }
+        )
         mock_response.raise_for_status = Mock()
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
@@ -264,7 +274,9 @@ class TestHttpMCPProxy:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.text = '{"jsonrpc": "2.0", "result": "simple result"}'
-        mock_response.json = Mock(return_value={"jsonrpc": "2.0", "result": "simple result"})
+        mock_response.json = Mock(
+            return_value={"jsonrpc": "2.0", "result": "simple result"}
+        )
         mock_response.raise_for_status = Mock()
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
@@ -330,15 +342,22 @@ class TestCheckHttpMcpServer:
         mock_test_response = Mock()
         mock_test_response.status_code = 200
         mock_test_response.text = '{"jsonrpc": "2.0", "result": {"tools": []}}'
-        mock_test_response.json = Mock(return_value={"jsonrpc": "2.0", "result": {"tools": []}})
+        mock_test_response.json = Mock(
+            return_value={"jsonrpc": "2.0", "result": {"tools": []}}
+        )
 
-        mock_httpx_client.post = AsyncMock(side_effect=[
-            mock_init_response,  # initialize
-            mock_init_response,  # initialized notification
-            mock_test_response,  # tools/list
-        ])
+        mock_httpx_client.post = AsyncMock(
+            side_effect=[
+                mock_init_response,  # initialize
+                mock_init_response,  # initialized notification
+                mock_test_response,  # tools/list
+            ]
+        )
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is True
@@ -352,15 +371,22 @@ class TestCheckHttpMcpServer:
 
         mock_test_response = Mock()
         mock_test_response.status_code = 200
-        mock_test_response.text = 'data: {"jsonrpc": "2.0", "result": {"tools": []}}\n\n'
+        mock_test_response.text = (
+            'data: {"jsonrpc": "2.0", "result": {"tools": []}}\n\n'
+        )
 
-        mock_httpx_client.post = AsyncMock(side_effect=[
-            mock_init_response,
-            mock_init_response,
-            mock_test_response,
-        ])
+        mock_httpx_client.post = AsyncMock(
+            side_effect=[
+                mock_init_response,
+                mock_init_response,
+                mock_test_response,
+            ]
+        )
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is True
@@ -377,13 +403,18 @@ class TestCheckHttpMcpServer:
         mock_test_response.text = '{"jsonrpc": "2.0", "result": {}}'
         mock_test_response.json = Mock(return_value={"jsonrpc": "2.0", "result": {}})
 
-        mock_httpx_client.post = AsyncMock(side_effect=[
-            mock_init_response,
-            mock_init_response,
-            mock_test_response,
-        ])
+        mock_httpx_client.post = AsyncMock(
+            side_effect=[
+                mock_init_response,
+                mock_init_response,
+                mock_test_response,
+            ]
+        )
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server(host="localhost", port=9000)
 
         assert result is True
@@ -399,7 +430,10 @@ class TestCheckHttpMcpServer:
 
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is False
@@ -413,7 +447,10 @@ class TestCheckHttpMcpServer:
 
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is False
@@ -428,13 +465,18 @@ class TestCheckHttpMcpServer:
         mock_test_response = Mock()
         mock_test_response.status_code = 500
 
-        mock_httpx_client.post = AsyncMock(side_effect=[
-            mock_init_response,
-            mock_init_response,
-            mock_test_response,
-        ])
+        mock_httpx_client.post = AsyncMock(
+            side_effect=[
+                mock_init_response,
+                mock_init_response,
+                mock_test_response,
+            ]
+        )
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is False
@@ -444,7 +486,10 @@ class TestCheckHttpMcpServer:
         """Test server check handles network errors."""
         mock_httpx_client.post = AsyncMock(side_effect=Exception("Network error"))
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is False
@@ -461,13 +506,18 @@ class TestCheckHttpMcpServer:
         mock_test_response.text = '{"invalid": "response"}'
         mock_test_response.json = Mock(return_value={"invalid": "response"})
 
-        mock_httpx_client.post = AsyncMock(side_effect=[
-            mock_init_response,
-            mock_init_response,
-            mock_test_response,
-        ])
+        mock_httpx_client.post = AsyncMock(
+            side_effect=[
+                mock_init_response,
+                mock_init_response,
+                mock_test_response,
+            ]
+        )
 
-        with patch("instrmcp.tools.stdio_proxy.httpx.AsyncClient", return_value=mock_httpx_client):
+        with patch(
+            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            return_value=mock_httpx_client,
+        ):
             result = await check_http_mcp_server()
 
         assert result is False
@@ -484,7 +534,9 @@ class TestCreateStdioProxyServer:
 
     def test_create_server_custom_name(self):
         """Test server creation with custom name."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123", server_name="Custom Proxy")
+        mcp = create_stdio_proxy_server(
+            "http://127.0.0.1:8123", server_name="Custom Proxy"
+        )
         assert mcp is not None
 
     def test_create_server_custom_url(self):

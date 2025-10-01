@@ -5,6 +5,7 @@ HERE = Path(__file__).parent.resolve()
 
 # Get version from package.json
 import json
+
 with open(HERE / "package.json", "r") as f:
     package_json = json.load(f)
     version = package_json["version"]

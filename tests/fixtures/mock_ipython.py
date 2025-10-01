@@ -24,10 +24,10 @@ class MockIPythonEvents:
 
     def __init__(self):
         self._callbacks = {
-            'pre_run_cell': [],
-            'post_run_cell': [],
-            'pre_execute': [],
-            'post_execute': []
+            "pre_run_cell": [],
+            "post_run_cell": [],
+            "pre_execute": [],
+            "post_execute": [],
         }
 
     def register(self, event_type: str, callback):
@@ -62,7 +62,9 @@ class MockIPythonKernel:
         # Mock display system
         self.display_pub = Mock()
 
-    def run_cell(self, cell_content: str, silent: bool = False, store_history: bool = True):
+    def run_cell(
+        self, cell_content: str, silent: bool = False, store_history: bool = True
+    ):
         """Execute a cell (mock implementation)."""
         self.execution_count += 1
 
@@ -70,7 +72,7 @@ class MockIPythonKernel:
         exec_info = MockExecutionInfo(cell_content)
 
         # Trigger pre_run_cell event
-        self.events.trigger('pre_run_cell', exec_info)
+        self.events.trigger("pre_run_cell", exec_info)
 
         # Mock execution (just return success)
         result = Mock()
@@ -82,7 +84,7 @@ class MockIPythonKernel:
         self.last_execution_succeeded = True
 
         # Trigger post_run_cell event
-        self.events.trigger('post_run_cell', result)
+        self.events.trigger("post_run_cell", result)
 
         return result
 
@@ -96,10 +98,12 @@ class MockIPythonKernel:
 
     def get_parent(self):
         """Get parent message (mock)."""
-        return {'header': {'msg_id': 'test_msg_id'}}
+        return {"header": {"msg_id": "test_msg_id"}}
 
 
-def create_mock_ipython_with_instruments(instruments: Dict[str, Any]) -> MockIPythonKernel:
+def create_mock_ipython_with_instruments(
+    instruments: Dict[str, Any],
+) -> MockIPythonKernel:
     """Create a mock IPython kernel with instruments in the namespace."""
     namespace = instruments.copy()
     return MockIPythonKernel(user_namespace=namespace)

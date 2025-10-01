@@ -15,16 +15,10 @@ __license__ = "MIT"
 # Use: from instrmcp import servers, tools, config when needed
 
 # Version info accessible as instrmcp.version_info
-version_info = tuple(int(x) for x in __version__.split('.'))
+version_info = tuple(int(x) for x in __version__.split("."))
 
 # Package metadata
-__all__ = [
-    "__version__",
-    "__author__", 
-    "__email__",
-    "__license__",
-    "version_info"
-]
+__all__ = ["__version__", "__author__", "__email__", "__license__", "version_info"]
 
 # Package description
 DESCRIPTION = "MCP server suite for physics laboratory instrumentation control"
@@ -34,32 +28,19 @@ LONG_DESCRIPTION = __doc__
 PYTHON_REQUIRES = ">=3.8"
 
 # Core dependencies
-INSTALL_REQUIRES = [
-    "fastmcp>=0.1.0",
-    "mcp>=1.0.0", 
-    "pyyaml>=6.0",
-    "httpx>=0.25.0"
-]
+INSTALL_REQUIRES = ["fastmcp>=0.1.0", "mcp>=1.0.0", "pyyaml>=6.0", "httpx>=0.25.0"]
 
 # Optional dependency groups
 EXTRAS_REQUIRE = {
-    "jupyter": [
-        "jupyterlab>=4.0.0",
-        "ipython>=8.0.0",
-        "notebook>=6.4.0"
-    ],
+    "jupyter": ["jupyterlab>=4.0.0", "ipython>=8.0.0", "notebook>=6.4.0"],
     "qcodes": [
         "qcodes>=0.45.0",
-        "numpy>=1.24.0", 
+        "numpy>=1.24.0",
         "pandas>=2.0.0",
         "matplotlib>=3.7.0",
-        "scipy>=1.10.0"
-    ],
-    "redpitaya": [
-        "pyrpl>=0.9.4",
         "scipy>=1.10.0",
-        "numpy>=1.24.0"
     ],
+    "redpitaya": ["pyrpl>=0.9.4", "scipy>=1.10.0", "numpy>=1.24.0"],
     "dev": [
         "pytest>=7.0.0",
         "pytest-asyncio>=0.21.0",
@@ -67,13 +48,11 @@ EXTRAS_REQUIRE = {
         "black>=23.0.0",
         "flake8>=6.0.0",
         "mypy>=1.0.0",
-        "pre-commit>=3.0.0"
-    ]
+        "pre-commit>=3.0.0",
+    ],
 }
 
 # Add "full" extras that includes everything
 EXTRAS_REQUIRE["full"] = (
-    EXTRAS_REQUIRE["jupyter"] + 
-    EXTRAS_REQUIRE["qcodes"] + 
-    EXTRAS_REQUIRE["redpitaya"]
+    EXTRAS_REQUIRE["jupyter"] + EXTRAS_REQUIRE["qcodes"] + EXTRAS_REQUIRE["redpitaya"]
 )

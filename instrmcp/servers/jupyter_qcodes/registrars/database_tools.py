@@ -37,7 +37,9 @@ class DatabaseToolRegistrar:
         """Register the database/list_experiments tool."""
 
         @self.mcp.tool(name="database_list_experiments")
-        async def list_experiments(database_path: Optional[str] = None) -> List[TextContent]:
+        async def list_experiments(
+            database_path: Optional[str] = None,
+        ) -> List[TextContent]:
             """List all experiments in the specified QCodes database.
 
             Args:
@@ -51,15 +53,18 @@ class DatabaseToolRegistrar:
                 return [TextContent(type="text", text=result)]
             except Exception as e:
                 logger.error(f"Error in list_experiments: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_dataset_info(self):
         """Register the database/get_dataset_info tool."""
 
         @self.mcp.tool(name="database_get_dataset_info")
         async def get_dataset_info(
-            id: int,
-            database_path: Optional[str] = None
+            id: int, database_path: Optional[str] = None
         ) -> List[TextContent]:
             """Get detailed information about a specific dataset.
 
@@ -68,20 +73,23 @@ class DatabaseToolRegistrar:
                 database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
             """
             try:
-                result = self.db.get_dataset_info(
-                    id=id,
-                    database_path=database_path
-                )
+                result = self.db.get_dataset_info(id=id, database_path=database_path)
                 return [TextContent(type="text", text=result)]
             except Exception as e:
                 logger.error(f"Error in database/get_dataset_info: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_database_stats(self):
         """Register the database/get_database_stats tool."""
 
         @self.mcp.tool(name="database_get_database_stats")
-        async def get_database_stats(database_path: Optional[str] = None) -> List[TextContent]:
+        async def get_database_stats(
+            database_path: Optional[str] = None,
+        ) -> List[TextContent]:
             """Get database statistics and health information.
 
             Args:
@@ -95,4 +103,8 @@ class DatabaseToolRegistrar:
                 return [TextContent(type="text", text=result)]
             except Exception as e:
                 logger.error(f"Error in database/get_database_stats: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]

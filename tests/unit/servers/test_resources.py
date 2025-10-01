@@ -26,6 +26,7 @@ class TestResourceRegistrar:
             def wrapper(func):
                 mcp._resources[uri] = func
                 return func
+
             return wrapper
 
         mcp.resource = resource_decorator
@@ -66,15 +67,17 @@ class TestResourceRegistrar:
         assert registrar.measureit is None
         assert registrar.db is None
 
-    def test_initialization_with_options(self, mock_mcp_server, mock_tools, mock_measureit_module, mock_db_module):
+    def test_initialization_with_options(
+        self, mock_mcp_server, mock_tools, mock_measureit_module, mock_db_module
+    ):
         """Test registrar initialization with optional features."""
-        enabled_options = {'measureit', 'database'}
+        enabled_options = {"measureit", "database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
             measureit_module=mock_measureit_module,
-            db_module=mock_db_module
+            db_module=mock_db_module,
         )
         assert registrar.enabled_options == enabled_options
         assert registrar.measureit == mock_measureit_module
@@ -92,23 +95,29 @@ class TestResourceRegistrar:
         assert "resource://measureit_sweep0d_template" not in mock_mcp_server._resources
         assert "resource://database_config" not in mock_mcp_server._resources
 
-    def test_register_all_with_measureit(self, mock_mcp_server, mock_tools, mock_measureit_module):
+    def test_register_all_with_measureit(
+        self, mock_mcp_server, mock_tools, mock_measureit_module
+    ):
         """Test registering resources with MeasureIt enabled."""
-        enabled_options = {'measureit'}
+        enabled_options = {"measureit"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            measureit_module=mock_measureit_module
+            measureit_module=mock_measureit_module,
         )
 
-        with patch('instrmcp.extensions.MeasureIt.get_sweep0d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep1d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep2d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_simulsweep_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweepqueue_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_common_patterns_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_measureit_code_examples'):
+        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
+            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
+        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
+            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        ):
 
             registrar.register_all()
 
@@ -120,19 +129,25 @@ class TestResourceRegistrar:
             assert "resource://measureit_sweep0d_template" in mock_mcp_server._resources
             assert "resource://measureit_sweep1d_template" in mock_mcp_server._resources
             assert "resource://measureit_sweep2d_template" in mock_mcp_server._resources
-            assert "resource://measureit_simulsweep_template" in mock_mcp_server._resources
-            assert "resource://measureit_sweepqueue_template" in mock_mcp_server._resources
+            assert (
+                "resource://measureit_simulsweep_template" in mock_mcp_server._resources
+            )
+            assert (
+                "resource://measureit_sweepqueue_template" in mock_mcp_server._resources
+            )
             assert "resource://measureit_common_patterns" in mock_mcp_server._resources
             assert "resource://measureit_code_examples" in mock_mcp_server._resources
 
-    def test_register_all_with_database(self, mock_mcp_server, mock_tools, mock_db_module):
+    def test_register_all_with_database(
+        self, mock_mcp_server, mock_tools, mock_db_module
+    ):
         """Test registering resources with database enabled."""
-        enabled_options = {'database'}
+        enabled_options = {"database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            db_module=mock_db_module
+            db_module=mock_db_module,
         )
 
         registrar.register_all()
@@ -146,21 +161,23 @@ class TestResourceRegistrar:
         assert "resource://recent_measurements" in mock_mcp_server._resources
 
     @pytest.mark.asyncio
-    async def test_available_instruments_resource(self, registrar, mock_tools, mock_mcp_server):
+    async def test_available_instruments_resource(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test available_instruments resource."""
         mock_instruments = [
             {
                 "name": "mock_dac",
                 "type": "DAC",
-                "parameters": {
-                    "ch01.voltage": {"unit": "V", "limits": [-10, 10]}
-                }
+                "parameters": {"ch01.voltage": {"unit": "V", "limits": [-10, 10]}},
             }
         ]
         mock_tools.list_instruments.return_value = mock_instruments
 
         registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources["resource://available_instruments"]
+        available_instruments_func = mock_mcp_server._resources[
+            "resource://available_instruments"
+        ]
         resource = await available_instruments_func()
 
         assert isinstance(resource, Resource)
@@ -174,12 +191,16 @@ class TestResourceRegistrar:
         assert content == mock_instruments
 
     @pytest.mark.asyncio
-    async def test_available_instruments_error(self, registrar, mock_tools, mock_mcp_server):
+    async def test_available_instruments_error(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test available_instruments resource with error."""
         mock_tools.list_instruments.side_effect = Exception("QCodes error")
 
         registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources["resource://available_instruments"]
+        available_instruments_func = mock_mcp_server._resources[
+            "resource://available_instruments"
+        ]
         resource = await available_instruments_func()
 
         assert isinstance(resource, Resource)
@@ -191,14 +212,7 @@ class TestResourceRegistrar:
     @pytest.mark.asyncio
     async def test_station_state_resource(self, registrar, mock_tools, mock_mcp_server):
         """Test station_state resource."""
-        mock_snapshot = {
-            "instruments": {
-                "mock_dac": {
-                    "type": "DAC",
-                    "parameters": {}
-                }
-            }
-        }
+        mock_snapshot = {"instruments": {"mock_dac": {"type": "DAC", "parameters": {}}}}
         mock_tools.get_station_snapshot.return_value = mock_snapshot
 
         registrar.register_all()
@@ -228,21 +242,22 @@ class TestResourceRegistrar:
         assert "Station error" in content["error"]
 
     @pytest.mark.asyncio
-    async def test_database_config_resource(self, mock_mcp_server, mock_tools, mock_db_module):
+    async def test_database_config_resource(
+        self, mock_mcp_server, mock_tools, mock_db_module
+    ):
         """Test database_config resource."""
-        enabled_options = {'database'}
+        enabled_options = {"database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            db_module=mock_db_module
+            db_module=mock_db_module,
         )
 
-        mock_config = json.dumps({
-            "database_path": "/path/to/db.db",
-            "connected": True,
-            "version": "0.20.0"
-        }, indent=2)
+        mock_config = json.dumps(
+            {"database_path": "/path/to/db.db", "connected": True, "version": "0.20.0"},
+            indent=2,
+        )
         mock_db_module.get_current_database_config.return_value = mock_config
 
         registrar.register_all()
@@ -259,23 +274,36 @@ class TestResourceRegistrar:
         assert content["connected"] is True
 
     @pytest.mark.asyncio
-    async def test_recent_measurements_resource(self, mock_mcp_server, mock_tools, mock_db_module):
+    async def test_recent_measurements_resource(
+        self, mock_mcp_server, mock_tools, mock_db_module
+    ):
         """Test recent_measurements resource."""
-        enabled_options = {'database'}
+        enabled_options = {"database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            db_module=mock_db_module
+            db_module=mock_db_module,
         )
 
-        mock_measurements = json.dumps({
-            "measurements": [
-                {"run_id": 1, "name": "measurement1", "timestamp": "2024-01-01 12:00:00"},
-                {"run_id": 2, "name": "measurement2", "timestamp": "2024-01-01 13:00:00"}
-            ],
-            "count": 2
-        }, indent=2)
+        mock_measurements = json.dumps(
+            {
+                "measurements": [
+                    {
+                        "run_id": 1,
+                        "name": "measurement1",
+                        "timestamp": "2024-01-01 12:00:00",
+                    },
+                    {
+                        "run_id": 2,
+                        "name": "measurement2",
+                        "timestamp": "2024-01-01 13:00:00",
+                    },
+                ],
+                "count": 2,
+            },
+            indent=2,
+        )
         mock_db_module.get_recent_measurements.return_value = mock_measurements
 
         registrar.register_all()
@@ -292,32 +320,42 @@ class TestResourceRegistrar:
         assert len(content["measurements"]) == 2
 
     @pytest.mark.asyncio
-    async def test_measureit_template_resource(self, mock_mcp_server, mock_tools, mock_measureit_module):
+    async def test_measureit_template_resource(
+        self, mock_mcp_server, mock_tools, mock_measureit_module
+    ):
         """Test MeasureIt template resource registration."""
-        enabled_options = {'measureit'}
+        enabled_options = {"measureit"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            measureit_module=mock_measureit_module
+            measureit_module=mock_measureit_module,
         )
 
-        mock_template = json.dumps({
-            "examples": [
-                {"name": "basic_sweep0d", "code": "# Sweep0D example"}
-            ]
-        }, indent=2)
+        mock_template = json.dumps(
+            {"examples": [{"name": "basic_sweep0d", "code": "# Sweep0D example"}]},
+            indent=2,
+        )
 
-        with patch('instrmcp.extensions.MeasureIt.get_sweep0d_template', return_value=mock_template), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep1d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep2d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_simulsweep_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweepqueue_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_common_patterns_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_measureit_code_examples'):
+        with patch(
+            "instrmcp.extensions.MeasureIt.get_sweep0d_template",
+            return_value=mock_template,
+        ), patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"), patch(
+            "instrmcp.extensions.MeasureIt.get_sweep2d_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        ):
 
             registrar.register_all()
-            sweep0d_func = mock_mcp_server._resources["resource://measureit_sweep0d_template"]
+            sweep0d_func = mock_mcp_server._resources[
+                "resource://measureit_sweep0d_template"
+            ]
             resource = await sweep0d_func()
 
             assert isinstance(resource, Resource)
@@ -328,24 +366,30 @@ class TestResourceRegistrar:
             content = json.loads(resource.contents[0].text)
             assert "examples" in content
 
-    def test_register_all_with_all_options(self, mock_mcp_server, mock_tools, mock_measureit_module, mock_db_module):
+    def test_register_all_with_all_options(
+        self, mock_mcp_server, mock_tools, mock_measureit_module, mock_db_module
+    ):
         """Test registering all resources with all options enabled."""
-        enabled_options = {'measureit', 'database'}
+        enabled_options = {"measureit", "database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
             measureit_module=mock_measureit_module,
-            db_module=mock_db_module
+            db_module=mock_db_module,
         )
 
-        with patch('instrmcp.extensions.MeasureIt.get_sweep0d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep1d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweep2d_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_simulsweep_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_sweepqueue_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_common_patterns_template'), \
-             patch('instrmcp.extensions.MeasureIt.get_measureit_code_examples'):
+        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
+            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
+        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
+            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
+        ), patch(
+            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        ):
 
             registrar.register_all()
 
@@ -356,7 +400,9 @@ class TestResourceRegistrar:
             assert resource_count == 11
 
     @pytest.mark.asyncio
-    async def test_resources_have_correct_structure(self, registrar, mock_tools, mock_mcp_server):
+    async def test_resources_have_correct_structure(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test that all resources have correct structure."""
         mock_tools.list_instruments.return_value = []
         mock_tools.get_station_snapshot.return_value = {}
@@ -377,12 +423,12 @@ class TestResourceRegistrar:
 
     def test_no_measureit_resources_without_module(self, mock_mcp_server, mock_tools):
         """Test that MeasureIt resources are not registered without module."""
-        enabled_options = {'measureit'}
+        enabled_options = {"measureit"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            measureit_module=None  # No module provided
+            measureit_module=None,  # No module provided
         )
 
         registrar.register_all()
@@ -392,12 +438,12 @@ class TestResourceRegistrar:
 
     def test_no_database_resources_without_module(self, mock_mcp_server, mock_tools):
         """Test that database resources are not registered without module."""
-        enabled_options = {'database'}
+        enabled_options = {"database"}
         registrar = ResourceRegistrar(
             mock_mcp_server,
             mock_tools,
             enabled_options=enabled_options,
-            db_module=None  # No module provided
+            db_module=None,  # No module provided
         )
 
         registrar.register_all()
@@ -407,7 +453,9 @@ class TestResourceRegistrar:
         assert "resource://recent_measurements" not in mock_mcp_server._resources
 
     @pytest.mark.asyncio
-    async def test_available_instruments_with_complex_data(self, registrar, mock_tools, mock_mcp_server):
+    async def test_available_instruments_with_complex_data(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
         """Test available_instruments with complex hierarchical instruments."""
         mock_instruments = [
             {
@@ -417,26 +465,24 @@ class TestResourceRegistrar:
                     "ch01": {
                         "parameters": {
                             "voltage": {"unit": "V", "value": 0.0},
-                            "current": {"unit": "A", "value": 0.001}
+                            "current": {"unit": "A", "value": 0.001},
                         }
                     },
-                    "ch02": {
-                        "parameters": {
-                            "voltage": {"unit": "V", "value": 0.5}
-                        }
-                    }
+                    "ch02": {"parameters": {"voltage": {"unit": "V", "value": 0.5}}},
                 },
                 "metadata": {
                     "serial": "12345",
                     "firmware": "v1.2.3",
-                    "calibration_date": "2024-01-01"
-                }
+                    "calibration_date": "2024-01-01",
+                },
             }
         ]
         mock_tools.list_instruments.return_value = mock_instruments
 
         registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources["resource://available_instruments"]
+        available_instruments_func = mock_mcp_server._resources[
+            "resource://available_instruments"
+        ]
         resource = await available_instruments_func()
 
         content = json.loads(resource.contents[0].text)

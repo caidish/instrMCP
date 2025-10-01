@@ -8,7 +8,11 @@ managing QCodes parameter reads and rate limiting.
 import pytest
 import asyncio
 import time
-from instrmcp.servers.jupyter_qcodes.cache import ReadCache, RateLimiter, ParameterPoller
+from instrmcp.servers.jupyter_qcodes.cache import (
+    ReadCache,
+    RateLimiter,
+    ParameterPoller,
+)
 
 
 class TestReadCache:
@@ -109,8 +113,7 @@ class TestReadCache:
 
         # Run concurrent writes and reads
         await asyncio.gather(
-            writer(1), writer(2), writer(3),
-            reader(), reader(), reader()
+            writer(1), writer(2), writer(3), reader(), reader(), reader()
         )
 
         # Should complete without errors

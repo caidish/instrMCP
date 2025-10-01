@@ -55,7 +55,11 @@ class NotebookToolRegistrar:
                 return [TextContent(type="text", text=json.dumps(variables, indent=2))]
             except Exception as e:
                 logger.error(f"Error in notebook/list_variables: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_variable_info(self):
         """Register the notebook/get_variable_info tool."""
@@ -72,7 +76,11 @@ class NotebookToolRegistrar:
                 return [TextContent(type="text", text=json.dumps(info, indent=2))]
             except Exception as e:
                 logger.error(f"Error in notebook/get_variable_info: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_editing_cell(self):
         """Register the notebook/get_editing_cell tool."""
@@ -89,10 +97,18 @@ class NotebookToolRegistrar:
             """
             try:
                 result = await self.tools.get_editing_cell(fresh_ms)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/get_editing_cell: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_update_editing_cell(self):
         """Register the notebook/update_editing_cell tool."""
@@ -110,10 +126,18 @@ class NotebookToolRegistrar:
             """
             try:
                 result = await self.tools.update_editing_cell(content)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/update_editing_cell: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_get_editing_cell_output(self):
         """Register the notebook/get_editing_cell_output tool."""
@@ -131,18 +155,22 @@ class NotebookToolRegistrar:
                 import traceback
 
                 # Use IPython's In/Out cache to get the last executed cell
-                if hasattr(self.ipython, 'user_ns'):
-                    In = self.ipython.user_ns.get('In', [])
-                    Out = self.ipython.user_ns.get('Out', {})
-                    current_execution_count = getattr(self.ipython, 'execution_count', 0)
+                if hasattr(self.ipython, "user_ns"):
+                    In = self.ipython.user_ns.get("In", [])
+                    Out = self.ipython.user_ns.get("Out", {})
+                    current_execution_count = getattr(
+                        self.ipython, "execution_count", 0
+                    )
 
                     if len(In) > 1:  # In[0] is empty
                         latest_cell_num = len(In) - 1
 
                         # Check if the latest cell is currently running
-                        if (latest_cell_num not in Out and
-                            latest_cell_num == current_execution_count and
-                            In[latest_cell_num]):
+                        if (
+                            latest_cell_num not in Out
+                            and latest_cell_num == current_execution_count
+                            and In[latest_cell_num]
+                        ):
 
                             cell_info = {
                                 "cell_number": latest_cell_num,
@@ -152,9 +180,13 @@ class NotebookToolRegistrar:
                                 "message": "Cell is currently executing - no output available yet",
                                 "has_output": False,
                                 "has_error": False,
-                                "output": None
+                                "output": None,
                             }
-                            return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                            return [
+                                TextContent(
+                                    type="text", text=json.dumps(cell_info, indent=2)
+                                )
+                            ]
 
                         # Find the most recent completed cell (has both input and output)
                         for i in range(len(In) - 1, 0, -1):  # Start from most recent
@@ -168,9 +200,14 @@ class NotebookToolRegistrar:
                                         "status": "completed",
                                         "output": str(Out[i]),
                                         "has_output": True,
-                                        "has_error": False
+                                        "has_error": False,
                                     }
-                                    return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                                    return [
+                                        TextContent(
+                                            type="text",
+                                            text=json.dumps(cell_info, indent=2),
+                                        )
+                                    ]
                                 elif i < current_execution_count:
                                     # Cell was executed but produced no output
                                     # Check if this was due to an error
@@ -178,10 +215,12 @@ class NotebookToolRegistrar:
                                     error_info = None
 
                                     # Check sys.last_* for most recent exception
-                                    if (hasattr(sys, 'last_type') and
-                                        hasattr(sys, 'last_value') and
-                                        hasattr(sys, 'last_traceback') and
-                                        sys.last_type is not None):
+                                    if (
+                                        hasattr(sys, "last_type")
+                                        and hasattr(sys, "last_value")
+                                        and hasattr(sys, "last_traceback")
+                                        and sys.last_type is not None
+                                    ):
                                         # We can only know if this cell raised the last exception
                                         # by checking if it's the most recent executed cell
                                         if i == latest_cell_num:
@@ -189,9 +228,13 @@ class NotebookToolRegistrar:
                                             error_info = {
                                                 "type": sys.last_type.__name__,
                                                 "message": str(sys.last_value),
-                                                "traceback": ''.join(traceback.format_exception(
-                                                    sys.last_type, sys.last_value, sys.last_traceback
-                                                ))
+                                                "traceback": "".join(
+                                                    traceback.format_exception(
+                                                        sys.last_type,
+                                                        sys.last_value,
+                                                        sys.last_traceback,
+                                                    )
+                                                ),
                                             }
 
                                     if has_error:
@@ -204,7 +247,7 @@ class NotebookToolRegistrar:
                                             "output": None,
                                             "has_output": False,
                                             "has_error": True,
-                                            "error": error_info
+                                            "error": error_info,
                                         }
                                     else:
                                         cell_info = {
@@ -215,9 +258,14 @@ class NotebookToolRegistrar:
                                             "message": "Cell executed successfully but produced no output",
                                             "output": None,
                                             "has_output": False,
-                                            "has_error": False
+                                            "has_error": False,
                                         }
-                                    return [TextContent(type="text", text=json.dumps(cell_info, indent=2))]
+                                    return [
+                                        TextContent(
+                                            type="text",
+                                            text=json.dumps(cell_info, indent=2),
+                                        )
+                                    ]
 
                 # Fallback: no recent executed cells
                 result = {
@@ -225,19 +273,26 @@ class NotebookToolRegistrar:
                     "error": "No recently executed cells found",
                     "message": "Execute a cell first to see its output",
                     "has_output": False,
-                    "has_error": False
+                    "has_error": False,
                 }
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
             except Exception as e:
                 logger.error(f"Error in get_editing_cell_output: {e}")
-                return [TextContent(type="text", text=json.dumps({"status": "error", "error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"status": "error", "error": str(e)}, indent=2),
+                    )
+                ]
 
     def _register_get_notebook_cells(self):
         """Register the notebook/get_notebook_cells tool."""
 
         @self.mcp.tool(name="notebook_get_notebook_cells")
-        async def get_notebook_cells(num_cells: int = 2, include_output: bool = True) -> List[TextContent]:
+        async def get_notebook_cells(
+            num_cells: int = 2, include_output: bool = True
+        ) -> List[TextContent]:
             """Get recent notebook cells with input, output, and error information.
 
             Args:
@@ -249,27 +304,31 @@ class NotebookToolRegistrar:
                 import traceback
 
                 cells = []
-                current_execution_count = getattr(self.ipython, 'execution_count', 0)
+                current_execution_count = getattr(self.ipython, "execution_count", 0)
 
                 # Track last error info (only most recent is available)
                 last_error_info = None
                 latest_cell_with_error = None
-                if (hasattr(sys, 'last_type') and
-                    hasattr(sys, 'last_value') and
-                    hasattr(sys, 'last_traceback') and
-                    sys.last_type is not None):
+                if (
+                    hasattr(sys, "last_type")
+                    and hasattr(sys, "last_value")
+                    and hasattr(sys, "last_traceback")
+                    and sys.last_type is not None
+                ):
                     last_error_info = {
                         "type": sys.last_type.__name__,
                         "message": str(sys.last_value),
-                        "traceback": ''.join(traceback.format_exception(
-                            sys.last_type, sys.last_value, sys.last_traceback
-                        ))
+                        "traceback": "".join(
+                            traceback.format_exception(
+                                sys.last_type, sys.last_value, sys.last_traceback
+                            )
+                        ),
                     }
 
                 # Method 1: Use IPython's In/Out cache (fastest for recent cells)
-                if hasattr(self.ipython, 'user_ns'):
-                    In = self.ipython.user_ns.get('In', [])
-                    Out = self.ipython.user_ns.get('Out', {})
+                if hasattr(self.ipython, "user_ns"):
+                    In = self.ipython.user_ns.get("In", [])
+                    Out = self.ipython.user_ns.get("Out", {})
 
                     # Get the last num_cells entries
                     if len(In) > 1:  # In[0] is empty
@@ -278,7 +337,11 @@ class NotebookToolRegistrar:
 
                         # The most recent error corresponds to the latest executed cell
                         # that doesn't have output
-                        if last_error_info and latest_executed not in Out and latest_executed < current_execution_count:
+                        if (
+                            last_error_info
+                            and latest_executed not in Out
+                            and latest_executed < current_execution_count
+                        ):
                             latest_cell_with_error = latest_executed
 
                         for i in range(start_idx, len(In)):
@@ -287,7 +350,7 @@ class NotebookToolRegistrar:
                                     "cell_number": i,
                                     "execution_count": i,
                                     "input": In[i],
-                                    "has_error": False
+                                    "has_error": False,
                                 }
 
                                 if include_output:
@@ -295,7 +358,9 @@ class NotebookToolRegistrar:
                                         # Cell has output
                                         cell_info["output"] = str(Out[i])
                                         cell_info["has_output"] = True
-                                    elif i == latest_cell_with_error and last_error_info:
+                                    elif (
+                                        i == latest_cell_with_error and last_error_info
+                                    ):
                                         # Cell raised the most recent error
                                         cell_info["has_output"] = False
                                         cell_info["has_error"] = True
@@ -315,39 +380,47 @@ class NotebookToolRegistrar:
                                 cells.append(cell_info)
 
                 # Method 2: Fallback to history_manager if In/Out not available
-                if not cells and hasattr(self.ipython, 'history_manager'):
+                if not cells and hasattr(self.ipython, "history_manager"):
                     try:
                         # Get range with output
-                        current_count = getattr(self.ipython, 'execution_count', 1)
+                        current_count = getattr(self.ipython, "execution_count", 1)
                         start_line = max(1, current_count - num_cells)
 
-                        history = list(self.ipython.history_manager.get_range(
-                            session=0,  # Current session
-                            start=start_line,
-                            stop=current_count + 1,
-                            raw=True,
-                            output=include_output
-                        ))
+                        history = list(
+                            self.ipython.history_manager.get_range(
+                                session=0,  # Current session
+                                start=start_line,
+                                stop=current_count + 1,
+                                raw=True,
+                                output=include_output,
+                            )
+                        )
 
                         for _, line_num, content in history:
                             if include_output and isinstance(content, tuple):
                                 input_text, output_text = content
-                                cells.append({
-                                    "cell_number": line_num,
-                                    "execution_count": line_num,
-                                    "input": input_text,
-                                    "output": str(output_text) if output_text else None,
-                                    "has_output": output_text is not None,
-                                    "has_error": False  # Can't determine from history_manager
-                                })
+                                cells.append(
+                                    {
+                                        "cell_number": line_num,
+                                        "execution_count": line_num,
+                                        "input": input_text,
+                                        "output": (
+                                            str(output_text) if output_text else None
+                                        ),
+                                        "has_output": output_text is not None,
+                                        "has_error": False,  # Can't determine from history_manager
+                                    }
+                                )
                             else:
-                                cells.append({
-                                    "cell_number": line_num,
-                                    "execution_count": line_num,
-                                    "input": content,
-                                    "has_output": False,
-                                    "has_error": False  # Can't determine from history_manager
-                                })
+                                cells.append(
+                                    {
+                                        "cell_number": line_num,
+                                        "execution_count": line_num,
+                                        "input": content,
+                                        "has_output": False,
+                                        "has_error": False,  # Can't determine from history_manager
+                                    }
+                                )
                     except Exception as hist_error:
                         logger.warning(f"History manager fallback failed: {hist_error}")
 
@@ -359,14 +432,18 @@ class NotebookToolRegistrar:
                     "count": len(cells),
                     "requested": num_cells,
                     "error_count": error_count,
-                    "note": "Only the most recent error can be captured. Older errors are not available."
+                    "note": "Only the most recent error can be captured. Older errors are not available.",
                 }
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
             except Exception as e:
                 logger.error(f"Error in get_notebook_cells: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_move_cursor(self):
         """Register the notebook/move_cursor tool."""
@@ -394,10 +471,18 @@ class NotebookToolRegistrar:
             """
             try:
                 result = await self.tools.move_cursor(target)
-                return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
             except Exception as e:
                 logger.error(f"Error in notebook/move_cursor: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_server_status(self):
         """Register the notebook/server_status tool."""
@@ -408,12 +493,16 @@ class NotebookToolRegistrar:
             try:
                 # Get list of registered tools from FastMCP
                 registered_tools = []
-                if hasattr(self.mcp, '_tools'):
+                if hasattr(self.mcp, "_tools"):
                     registered_tools = list(self.mcp._tools.keys())
 
                 status = {
                     "status": "running",
-                    "mode": "safe" if hasattr(self, 'safe_mode') and self.safe_mode else "unsafe",
+                    "mode": (
+                        "safe"
+                        if hasattr(self, "safe_mode") and self.safe_mode
+                        else "unsafe"
+                    ),
                     "tools_count": len(registered_tools),
                     "tools": registered_tools[:20],  # Limit to first 20 for readability
                 }
@@ -421,4 +510,8 @@ class NotebookToolRegistrar:
                 return [TextContent(type="text", text=json.dumps(status, indent=2))]
             except Exception as e:
                 logger.error(f"Error in server_status: {e}")
-                return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]

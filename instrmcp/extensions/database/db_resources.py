@@ -14,6 +14,7 @@ from typing import Optional
 try:
     from qcodes.dataset import experiments, load_by_id
     import qcodes as qc
+
     QCODES_AVAILABLE = True
 except ImportError:
     QCODES_AVAILABLE = False
@@ -36,7 +37,7 @@ def _resolve_database_path(database_path: Optional[str] = None) -> str:
         return database_path
 
     # Check if MeasureIt is available and use its default databases
-    measureit_home = os.environ.get('MeasureItHome')
+    measureit_home = os.environ.get("MeasureItHome")
     if measureit_home:
         # Default to Example_database.db in MeasureIt/Databases/
         return str(Path(measureit_home) / "Databases" / "Example_database.db")
@@ -56,10 +57,9 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
         JSON string containing database path, status, and configuration details.
     """
     if not QCODES_AVAILABLE:
-        return json.dumps({
-            "error": "QCodes not available",
-            "status": "unavailable"
-        }, indent=2)
+        return json.dumps(
+            {"error": "QCodes not available", "status": "unavailable"}, indent=2
+        )
 
     try:
         # Resolve database path
@@ -71,7 +71,7 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
             "connection_status": "unknown",
             "qcodes_version": qc.__version__,
             "configuration": {},
-            "last_checked": datetime.now().isoformat()
+            "last_checked": datetime.now().isoformat(),
         }
 
         # Check database existence
@@ -100,9 +100,11 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
         try:
             config["configuration"] = {
                 "db_location": str(qc.config.core.db_location),
-                "db_debug": getattr(qc.config.core, 'db_debug', False),
-                "default_fmt": getattr(qc.config.gui, 'default_fmt', 'data/{name}_{counter}'),
-                "notebook": getattr(qc.config.gui, 'notebook', True)
+                "db_debug": getattr(qc.config.core, "db_debug", False),
+                "default_fmt": getattr(
+                    qc.config.gui, "default_fmt", "data/{name}_{counter}"
+                ),
+                "notebook": getattr(qc.config.gui, "notebook", True),
             }
         except Exception as e:
             config["config_error"] = str(e)
@@ -110,13 +112,15 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
         return json.dumps(config, indent=2, default=str)
 
     except Exception as e:
-        return json.dumps({
-            "error": f"Failed to get database config: {str(e)}",
-            "status": "error"
-        }, indent=2)
+        return json.dumps(
+            {"error": f"Failed to get database config: {str(e)}", "status": "error"},
+            indent=2,
+        )
 
 
-def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None) -> str:
+def get_recent_measurements(
+    limit: int = 20, database_path: Optional[str] = None
+) -> str:
     """
     Get metadata for recent measurements across all experiments.
 
@@ -128,10 +132,9 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
         JSON string containing recent measurement metadata
     """
     if not QCODES_AVAILABLE:
-        return json.dumps({
-            "error": "QCodes not available",
-            "recent_measurements": []
-        }, indent=2)
+        return json.dumps(
+            {"error": "QCodes not available", "recent_measurements": []}, indent=2
+        )
 
     try:
         # Resolve database path
@@ -145,7 +148,7 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
             "database_path": resolved_path,
             "limit": limit,
             "recent_measurements": [],
-            "retrieved_at": datetime.now().isoformat()
+            "retrieved_at": datetime.now().isoformat(),
         }
 
         # Find recent datasets by scanning backwards from high run IDs
@@ -163,9 +166,9 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
                 measureit_metadata = None
                 measurement_type = "unknown"
                 try:
-                    if hasattr(dataset, 'metadata') and 'measureit' in dataset.metadata:
-                        measureit_metadata = json.loads(dataset.metadata['measureit'])
-                        measurement_type = measureit_metadata.get('class', 'unknown')
+                    if hasattr(dataset, "metadata") and "measureit" in dataset.metadata:
+                        measureit_metadata = json.loads(dataset.metadata["measureit"])
+                        measurement_type = measureit_metadata.get("class", "unknown")
                 except (json.JSONDecodeError, KeyError, AttributeError):
                     pass
 
@@ -180,12 +183,15 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
                     "parameters": list(dataset.parameters.keys()),
                     "timestamp": None,
                     "timestamp_readable": None,
-                    "measurement_type": measurement_type
+                    "measurement_type": measurement_type,
                 }
 
                 # Try to get timestamp for sorting
                 try:
-                    if hasattr(dataset, 'run_timestamp_raw') and dataset.run_timestamp_raw:
+                    if (
+                        hasattr(dataset, "run_timestamp_raw")
+                        and dataset.run_timestamp_raw
+                    ):
                         dataset_info["timestamp"] = dataset.run_timestamp_raw
                         dataset_info["timestamp_readable"] = datetime.fromtimestamp(
                             dataset.run_timestamp_raw
@@ -201,8 +207,7 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
 
         # Sort by timestamp (most recent first), then by run_id for datasets without timestamps
         all_datasets.sort(
-            key=lambda x: (x["timestamp"] or 0, x["run_id"]),
-            reverse=True
+            key=lambda x: (x["timestamp"] or 0, x["run_id"]), reverse=True
         )
 
         # Take the most recent ones
@@ -212,13 +217,14 @@ def get_recent_measurements(limit: int = 20, database_path: Optional[str] = None
         return json.dumps(result, indent=2, default=str)
 
     except Exception as e:
-        return json.dumps({
-            "error": f"Failed to get recent measurements: {str(e)}",
-            "recent_measurements": []
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": f"Failed to get recent measurements: {str(e)}",
+                "recent_measurements": [],
+            },
+            indent=2,
+        )
     finally:
         # Restore original database location
-        if 'original_db_location' in locals():
+        if "original_db_location" in locals():
             qc.config.core.db_location = original_db_location
-
-

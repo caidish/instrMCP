@@ -13,13 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 try:
-    from qcodes.dataset import (
-        experiments,
-        load_by_id,
-        load_by_guid,
-        load_by_run_spec
-    )
+    from qcodes.dataset import experiments, load_by_id, load_by_guid, load_by_run_spec
     import qcodes as qc
+
     QCODES_AVAILABLE = True
 except ImportError:
     QCODES_AVAILABLE = False
@@ -42,7 +38,7 @@ def _resolve_database_path(database_path: Optional[str] = None) -> str:
         return database_path
 
     # Check if MeasureIt is available and use its default databases
-    measureit_home = os.environ.get('MeasureItHome')
+    measureit_home = os.environ.get("MeasureItHome")
     if measureit_home:
         # Default to Example_database.db in MeasureIt/Databases/
         return str(Path(measureit_home) / "Databases" / "Example_database.db")
@@ -63,10 +59,9 @@ def list_experiments(database_path: Optional[str] = None) -> str:
         sample_name, start_time, end_time, and run IDs.
     """
     if not QCODES_AVAILABLE:
-        return json.dumps({
-            "error": "QCodes not available",
-            "experiments": []
-        }, indent=2)
+        return json.dumps(
+            {"error": "QCodes not available", "experiments": []}, indent=2
+        )
 
     try:
         # Resolve database path
@@ -82,7 +77,7 @@ def list_experiments(database_path: Optional[str] = None) -> str:
         result = {
             "database_path": resolved_path,
             "experiment_count": len(exp_list),
-            "experiments": []
+            "experiments": [],
         }
 
         for exp in exp_list:
@@ -110,32 +105,28 @@ def list_experiments(database_path: Optional[str] = None) -> str:
                 "experiment_id": exp.exp_id,
                 "name": exp.name,
                 "sample_name": exp.sample_name,
-                "start_time": getattr(exp, 'start_time', None),
-                "end_time": getattr(exp, 'end_time', None),
+                "start_time": getattr(exp, "start_time", None),
+                "end_time": getattr(exp, "end_time", None),
                 "run_ids": sorted(run_ids),
                 "dataset_count": len(run_ids),
-                "format_string": getattr(exp, 'format_string', None)
+                "format_string": getattr(exp, "format_string", None),
             }
             result["experiments"].append(exp_info)
 
         return json.dumps(result, indent=2, default=str)
 
     except Exception as e:
-        return json.dumps({
-            "error": f"Failed to list experiments: {str(e)}",
-            "experiments": []
-        }, indent=2)
+        return json.dumps(
+            {"error": f"Failed to list experiments: {str(e)}", "experiments": []},
+            indent=2,
+        )
     finally:
         # Restore original database location
-        if 'original_db_location' in locals():
+        if "original_db_location" in locals():
             qc.config.core.db_location = original_db_location
 
 
-
-def get_dataset_info(
-    id: int,
-    database_path: Optional[str] = None
-) -> str:
+def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
     """
     Get detailed information about a specific dataset.
 
@@ -147,9 +138,7 @@ def get_dataset_info(
         JSON string containing detailed dataset information with MeasureIt metadata
     """
     if not QCODES_AVAILABLE:
-        return json.dumps({
-            "error": "QCodes not available"
-        }, indent=2)
+        return json.dumps({"error": "QCodes not available"}, indent=2)
 
     try:
         # Resolve database path
@@ -170,22 +159,22 @@ def get_dataset_info(
                 "name": dataset.name,
                 "guid": str(dataset.guid),
                 "completed": dataset.completed,
-                "number_of_results": len(dataset)
+                "number_of_results": len(dataset),
             },
             "experiment_info": {
                 "experiment_id": dataset.exp_id,
                 "name": dataset.exp_name,
-                "sample_name": dataset.sample_name
+                "sample_name": dataset.sample_name,
             },
             "parameters": {},
             "metadata": {},
             "measureit_info": None,
-            "parameter_data": None
+            "parameter_data": None,
         }
 
         # Get parameter information
         try:
-            if hasattr(dataset.parameters, 'items'):
+            if hasattr(dataset.parameters, "items"):
                 for param_name, param_spec in dataset.parameters.items():
                     param_info = {
                         "name": param_spec.name,
@@ -193,21 +182,23 @@ def get_dataset_info(
                         "label": param_spec.label,
                         "unit": param_spec.unit,
                         "depends_on": param_spec.depends_on,
-                        "shape": getattr(param_spec, 'shape', None)
+                        "shape": getattr(param_spec, "shape", None),
                     }
                     result["parameters"][param_name] = param_info
             else:
                 # Parameters is a string (comma-separated parameter names)
-                param_names = str(dataset.parameters).split(',')
+                param_names = str(dataset.parameters).split(",")
                 for param_name in param_names:
-                    result["parameters"][param_name.strip()] = {"name": param_name.strip()}
+                    result["parameters"][param_name.strip()] = {
+                        "name": param_name.strip()
+                    }
         except Exception as e:
             result["parameters_error"] = str(e)
 
         # Get all metadata
         try:
-            if hasattr(dataset, 'metadata'):
-                if hasattr(dataset.metadata, 'items'):
+            if hasattr(dataset, "metadata"):
+                if hasattr(dataset.metadata, "items"):
                     result["metadata"] = dict(dataset.metadata)
                 else:
                     result["metadata"] = {"raw": str(dataset.metadata)}
@@ -216,18 +207,18 @@ def get_dataset_info(
 
         # Extract MeasureIt metadata specifically
         try:
-            if hasattr(dataset, 'metadata') and 'measureit' in dataset.metadata:
-                measureit_json = dataset.metadata['measureit']
+            if hasattr(dataset, "metadata") and "measureit" in dataset.metadata:
+                measureit_json = dataset.metadata["measureit"]
                 measureit_metadata = json.loads(measureit_json)
                 result["measureit_info"] = {
-                    "class": measureit_metadata.get('class', 'unknown'),
-                    "module": measureit_metadata.get('module', 'unknown'),
-                    "attributes": measureit_metadata.get('attributes', {}),
-                    "set_param": measureit_metadata.get('set_param'),
-                    "set_params": measureit_metadata.get('set_params'),
-                    "inner_sweep": measureit_metadata.get('inner_sweep'),
-                    "outer_sweep": measureit_metadata.get('outer_sweep'),
-                    "follow_params": measureit_metadata.get('follow_params', {})
+                    "class": measureit_metadata.get("class", "unknown"),
+                    "module": measureit_metadata.get("module", "unknown"),
+                    "attributes": measureit_metadata.get("attributes", {}),
+                    "set_param": measureit_metadata.get("set_param"),
+                    "set_params": measureit_metadata.get("set_params"),
+                    "inner_sweep": measureit_metadata.get("inner_sweep"),
+                    "outer_sweep": measureit_metadata.get("outer_sweep"),
+                    "follow_params": measureit_metadata.get("follow_params", {}),
                 }
         except (json.JSONDecodeError, KeyError, AttributeError):
             pass
@@ -242,16 +233,28 @@ def get_dataset_info(
                 for setpoint_name, values in param_dict.items():
                     if len(values) > 20:  # If more than 20 points, show first/last 10
                         limited_data[param_name][setpoint_name] = {
-                            "first_10": values[:10].tolist() if hasattr(values, 'tolist') else list(values[:10]),
-                            "last_10": values[-10:].tolist() if hasattr(values, 'tolist') else list(values[-10:]),
+                            "first_10": (
+                                values[:10].tolist()
+                                if hasattr(values, "tolist")
+                                else list(values[:10])
+                            ),
+                            "last_10": (
+                                values[-10:].tolist()
+                                if hasattr(values, "tolist")
+                                else list(values[-10:])
+                            ),
                             "total_points": len(values),
-                            "data_truncated": True
+                            "data_truncated": True,
                         }
                     else:
                         limited_data[param_name][setpoint_name] = {
-                            "data": values.tolist() if hasattr(values, 'tolist') else list(values),
+                            "data": (
+                                values.tolist()
+                                if hasattr(values, "tolist")
+                                else list(values)
+                            ),
                             "total_points": len(values),
-                            "data_truncated": False
+                            "data_truncated": False,
                         }
             result["parameter_data"] = limited_data
         except Exception as e:
@@ -259,7 +262,7 @@ def get_dataset_info(
 
         # Add timestamp if available
         try:
-            if hasattr(dataset, 'run_timestamp_raw') and dataset.run_timestamp_raw:
+            if hasattr(dataset, "run_timestamp_raw") and dataset.run_timestamp_raw:
                 result["basic_info"]["timestamp"] = dataset.run_timestamp_raw
                 result["basic_info"]["timestamp_readable"] = datetime.fromtimestamp(
                     dataset.run_timestamp_raw
@@ -270,12 +273,10 @@ def get_dataset_info(
         return json.dumps(result, indent=2, default=str)
 
     except Exception as e:
-        return json.dumps({
-            "error": f"Failed to get dataset info: {str(e)}"
-        }, indent=2)
+        return json.dumps({"error": f"Failed to get dataset info: {str(e)}"}, indent=2)
     finally:
         # Restore original database location
-        if 'original_db_location' in locals():
+        if "original_db_location" in locals():
             qc.config.core.db_location = original_db_location
 
 
@@ -291,9 +292,7 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
         experiment count, dataset count, and last modified time.
     """
     if not QCODES_AVAILABLE:
-        return json.dumps({
-            "error": "QCodes not available"
-        }, indent=2)
+        return json.dumps({"error": "QCodes not available"}, indent=2)
 
     try:
         # Resolve database path
@@ -316,7 +315,7 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
             "total_dataset_count": 0,
             "qcodes_version": qc.__version__,
             "latest_run_id": None,
-            "measurement_types": {}
+            "measurement_types": {},
         }
 
         if db_path.exists():
@@ -346,14 +345,25 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
 
                         # Count measurement types from MeasureIt metadata
                         try:
-                            if hasattr(dataset, 'metadata') and 'measureit' in dataset.metadata:
-                                measureit_metadata = json.loads(dataset.metadata['measureit'])
-                                mtype = measureit_metadata.get('class', 'unknown')
-                                measurement_types[mtype] = measurement_types.get(mtype, 0) + 1
+                            if (
+                                hasattr(dataset, "metadata")
+                                and "measureit" in dataset.metadata
+                            ):
+                                measureit_metadata = json.loads(
+                                    dataset.metadata["measureit"]
+                                )
+                                mtype = measureit_metadata.get("class", "unknown")
+                                measurement_types[mtype] = (
+                                    measurement_types.get(mtype, 0) + 1
+                                )
                             else:
-                                measurement_types['qcodes'] = measurement_types.get('qcodes', 0) + 1
+                                measurement_types["qcodes"] = (
+                                    measurement_types.get("qcodes", 0) + 1
+                                )
                         except:
-                            measurement_types['unknown'] = measurement_types.get('unknown', 0) + 1
+                            measurement_types["unknown"] = (
+                                measurement_types.get("unknown", 0) + 1
+                            )
                     except:
                         continue
 
@@ -367,31 +377,33 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
                         "experiment_id": exp.exp_id,
                         "name": exp.name,
                         "sample_name": exp.sample_name,
-                        "start_time": getattr(exp, 'start_time', None),
-                        "end_time": getattr(exp, 'end_time', None)
+                        "start_time": getattr(exp, "start_time", None),
+                        "end_time": getattr(exp, "end_time", None),
                     }
                     experiment_details.append(exp_detail)
 
                 result["experiment_details"] = experiment_details
 
             except Exception as e:
-                result["count_error"] = f"Could not count experiments/datasets: {str(e)}"
+                result["count_error"] = (
+                    f"Could not count experiments/datasets: {str(e)}"
+                )
 
         return json.dumps(result, indent=2, default=str)
 
     except Exception as e:
-        return json.dumps({
-            "error": f"Failed to get database stats: {str(e)}"
-        }, indent=2)
+        return json.dumps(
+            {"error": f"Failed to get database stats: {str(e)}"}, indent=2
+        )
     finally:
         # Restore original database location
-        if 'original_db_location' in locals():
+        if "original_db_location" in locals():
             qc.config.core.db_location = original_db_location
 
 
 def _format_file_size(size_bytes: int) -> str:
     """Format file size in human-readable format."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024.0:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0

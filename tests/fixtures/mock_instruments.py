@@ -43,7 +43,7 @@ class MockParameter:
             "name": self.name,
             "value": self._value,
             "unit": self.unit,
-            "label": self.label
+            "label": self.label,
         }
 
 
@@ -68,9 +68,8 @@ class MockChannel:
         return {
             "name": self.name,
             "parameters": {
-                name: param.snapshot(update)
-                for name, param in self.parameters.items()
-            }
+                name: param.snapshot(update) for name, param in self.parameters.items()
+            },
         }
 
 
@@ -90,7 +89,9 @@ class MockDAC:
             self.submodules[channel_name] = channel
 
         # Create global parameters
-        self.idn = MockParameter("idn", {"vendor": "Mock", "model": "DAC", "serial": "12345"})
+        self.idn = MockParameter(
+            "idn", {"vendor": "Mock", "model": "DAC", "serial": "12345"}
+        )
         self.parameters["idn"] = self.idn
 
     def get_idn(self) -> Dict[str, str]:
@@ -102,13 +103,12 @@ class MockDAC:
         return {
             "name": self.name,
             "parameters": {
-                name: param.snapshot(update)
-                for name, param in self.parameters.items()
+                name: param.snapshot(update) for name, param in self.parameters.items()
             },
             "submodules": {
                 name: submod.snapshot(update)
                 for name, submod in self.submodules.items()
-            }
+            },
         }
 
     def close(self):
@@ -127,13 +127,15 @@ class MockDMM:
         self.voltage = MockParameter("voltage", 0.0, "V")
         self.current = MockParameter("current", 0.0, "A")
         self.resistance = MockParameter("resistance", 1000.0, "Ohm")
-        self.idn = MockParameter("idn", {"vendor": "Mock", "model": "DMM", "serial": "67890"})
+        self.idn = MockParameter(
+            "idn", {"vendor": "Mock", "model": "DMM", "serial": "67890"}
+        )
 
         self.parameters = {
             "voltage": self.voltage,
             "current": self.current,
             "resistance": self.resistance,
-            "idn": self.idn
+            "idn": self.idn,
         }
 
     def get_idn(self) -> Dict[str, str]:
@@ -145,9 +147,8 @@ class MockDMM:
         return {
             "name": self.name,
             "parameters": {
-                name: param.snapshot(update)
-                for name, param in self.parameters.items()
-            }
+                name: param.snapshot(update) for name, param in self.parameters.items()
+            },
         }
 
     def close(self):
@@ -167,14 +168,16 @@ class MockVNA:
         self.power = MockParameter("power", -10, "dBm")
         self.s11_magnitude = MockParameter("s11_magnitude", 0.5, "")
         self.s11_phase = MockParameter("s11_phase", 45, "deg")
-        self.idn = MockParameter("idn", {"vendor": "Mock", "model": "VNA", "serial": "11111"})
+        self.idn = MockParameter(
+            "idn", {"vendor": "Mock", "model": "VNA", "serial": "11111"}
+        )
 
         self.parameters = {
             "frequency": self.frequency,
             "power": self.power,
             "s11_magnitude": self.s11_magnitude,
             "s11_phase": self.s11_phase,
-            "idn": self.idn
+            "idn": self.idn,
         }
 
     def get_idn(self) -> Dict[str, str]:
@@ -186,9 +189,8 @@ class MockVNA:
         return {
             "name": self.name,
             "parameters": {
-                name: param.snapshot(update)
-                for name, param in self.parameters.items()
-            }
+                name: param.snapshot(update) for name, param in self.parameters.items()
+            },
         }
 
     def close(self):
@@ -201,5 +203,5 @@ def create_mock_station() -> Dict[str, Any]:
     return {
         "mock_dac": MockDAC("mock_dac", num_channels=4),
         "mock_dmm": MockDMM("mock_dmm"),
-        "mock_vna": MockVNA("mock_vna")
+        "mock_vna": MockVNA("mock_vna"),
     }
