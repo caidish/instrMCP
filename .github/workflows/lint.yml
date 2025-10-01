@@ -1,0 +1,39 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev]
+
+    - name: Run Black (formatting check)
+      run: |
+        black --check instrmcp/ tests/
+
+    - name: Run Flake8 (linting)
+      run: |
+        flake8 instrmcp/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 instrmcp/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run MyPy (type checking)
+      run: |
+        mypy instrmcp/ --ignore-missing-imports
+      continue-on-error: true
