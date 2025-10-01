@@ -34,9 +34,14 @@ cd instrMCP
 pip install -e .
 
 # Set required environment variable
+# For macOS/Linux:
 export instrMCP_PATH="$(pwd)"
-echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc
+echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc  # or ~/.bashrc
 source ~/.zshrc
+
+# For Windows (PowerShell):
+$env:instrMCP_PATH = (Get-Location).Path
+[System.Environment]::SetEnvironmentVariable('instrMCP_PATH', (Get-Location).Path, 'User') 
 ```
 
 **That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.

@@ -5,11 +5,9 @@ Main CLI entry point for InstrMCP server management.
 
 import argparse
 import sys
-import asyncio
-from typing import Optional
 
 from .config import config
-from .servers import JupyterMCPServer, QCodesStationServer
+from .servers import QCodesStationServer
 
 
 async def run_jupyter_server(port: int = 3000, safe_mode: bool = True):
@@ -72,22 +70,22 @@ def main():
     )
 
     # Config command
-    config_parser = subparsers.add_parser(
-        "config", help="Show configuration information"
-    )
+    subparsers.add_parser("config", help="Show configuration information")
 
     # Version command
-    version_parser = subparsers.add_parser("version", help="Show version information")
+    subparsers.add_parser("version", help="Show version information")
 
     args = parser.parse_args()
 
     if args.command == "jupyter":
+        import asyncio
+
         safe_mode = not args.unsafe
         asyncio.run(run_jupyter_server(port=args.port, safe_mode=safe_mode))
     elif args.command == "qcodes":
         run_qcodes_server(port=args.port)
     elif args.command == "config":
-        print(f"InstrMCP Configuration:")
+        print("InstrMCP Configuration:")
         print(f"Package path: {config.get_package_path()}")
         print(f"Config file: {config.get_config_file()}")
         print(f"User config directory: {config.get_user_config_dir()}")
@@ -118,7 +116,7 @@ def main():
                     measureit_version = result.stdout.strip()
                     print(f"  ✅ MeasureIt: {measureit_version}")
                 else:
-                    print(f"  ⚠️  MeasureIt: Installed but failed to import")
+                    print("  ⚠️  MeasureIt: Installed but failed to import")
                     # Extract first meaningful error line
                     errors = [
                         line
@@ -130,10 +128,10 @@ def main():
                         error_msg = error_msg[:70] + "..."
                     print(f"     Error: {error_msg}")
             except subprocess.TimeoutExpired:
-                print(f"  ⚠️  MeasureIt: Installed but import timed out")
-                print(f"     Possible dependency issue (e.g., NumPy compatibility)")
+                print("  ⚠️  MeasureIt: Installed but import timed out")
+                print("     Possible dependency issue (e.g., NumPy compatibility)")
             except Exception as e:
-                print(f"  ⚠️  MeasureIt: Installed but check failed")
+                print("  ⚠️  MeasureIt: Installed but check failed")
                 print(f"     Error: {str(e)[:70]}")
         else:
             print("  ❌ MeasureIt: Not installed")
