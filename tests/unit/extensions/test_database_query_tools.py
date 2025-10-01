@@ -459,9 +459,20 @@ class TestGetDatabaseStats:
         assert "KB" in result["database_size_readable"] or "B" in result["database_size_readable"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
+    @patch('instrmcp.extensions.database.query_tools.Path')
     @patch('instrmcp.extensions.database.query_tools.experiments')
-    def test_get_database_stats_experiment_count(self, mock_experiments):
+    def test_get_database_stats_experiment_count(self, mock_experiments, mock_path_cls):
         """Test stats includes experiment count."""
+        # Mock database file exists
+        mock_db_path = MagicMock()
+        mock_db_path.exists.return_value = True
+        mock_stat = MagicMock()
+        mock_stat.st_size = 1024 * 1024  # 1 MB
+        mock_stat.st_mtime = 1234567890
+        mock_db_path.stat.return_value = mock_stat
+        mock_path_cls.return_value = mock_db_path
+
+        # Mock experiments
         mock_exp1 = MagicMock()
         mock_exp1.exp_id = 1
         mock_exp2 = MagicMock()
@@ -549,14 +560,26 @@ class TestGetDatabaseStats:
             assert "QCodes not available" in result["error"]
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
+    @patch('instrmcp.extensions.database.query_tools.Path')
     @patch('instrmcp.extensions.database.query_tools.experiments')
-    def test_get_database_stats_handles_errors(self, mock_experiments):
+    def test_get_database_stats_handles_errors(self, mock_experiments, mock_path_cls):
         """Test get_database_stats handles errors gracefully."""
+        # Mock database file exists
+        mock_db_path = MagicMock()
+        mock_db_path.exists.return_value = True
+        mock_stat = MagicMock()
+        mock_stat.st_size = 1024
+        mock_stat.st_mtime = 1234567890
+        mock_db_path.stat.return_value = mock_stat
+        mock_path_cls.return_value = mock_db_path
+
+        # Make experiments() raise an error
         mock_experiments.side_effect = Exception("Database error")
 
         result = json.loads(get_database_stats())
-        # Should handle error gracefully
-        assert "error" in result or "count_error" in result
+        # Should handle error gracefully with count_error field
+        assert "count_error" in result
+        assert "Database error" in result["count_error"]
 
 
 class TestQueryToolsIntegration:

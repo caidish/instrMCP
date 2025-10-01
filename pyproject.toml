@@ -32,13 +32,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=0.1.0",
     "mcp>=1.0.0",
