@@ -419,20 +419,29 @@ rm -f ~/.instrmcp/consents/always_allow.json
 unset INSTRMCP_CONSENT_BYPASS
 ```
 
-### Phase 3: Capability System (Optional Enhancement)
-- [ ] Create `instrmcp/servers/jupyter_qcodes/security/capabilities.py`
-  - [ ] Define capability taxonomy:
-    - `cap:qcodes.read` - Read QCodes instruments
-    - `cap:qcodes.write` - Write to instruments
-    - `cap:notebook.read` - Read notebook variables
-    - `cap:notebook.write` - Modify notebook cells
-    - `cap:database.read` - Read measurement database
-    - `cap:database.write` - Write to database
-    - `cap:numpy` - Use NumPy
-    - `cap:scipy` - Use SciPy
-    - `cap:matplotlib` - Use Matplotlib
-  - [ ] Basic capability checking (for documentation/tracking)
-  - [ ] Mode-based capability restrictions (safe mode blocks write caps)
+### Phase 3: Capability Labels Enhancement ✅ COMPLETE
+**Goal**: Capabilities as freeform labels for documentation/discovery (NOT enforcement)
+
+- [x] Remove strict pattern validation from `tool_spec.py`
+  - [x] Allow any non-empty string as capability label
+  - [x] Update JSON schema to remove pattern requirement
+  - [x] Update comments to clarify "labels only, not enforced"
+- [x] Update documentation
+  - [x] Document that capabilities are freeform labels in tool_spec.py docstrings
+  - [x] Suggest optional format: 'cap:library.action' (e.g., 'cap:numpy.array')
+  - [x] Clarify no enforcement - just for transparency and discovery
+
+**Design Decision**: Defer capability enforcement to v3.0.0
+- Current: Freeform labels for LLM flexibility
+- No context overhead from rigid taxonomy
+- Useful for discovery, filtering, and transparency
+- Future: Add enforcement layer in v3.0.0 without breaking existing tools
+
+**Future: v3.0.0 Capability Enforcement (Not Now)**
+- Define capability taxonomy and enforcement rules
+- Mode-based restrictions (safe mode blocks write capabilities)
+- Capability checking before tool execution
+- Security boundaries based on capabilities
 
 ### Phase 4: Agentic Error Correction with MCP Sampling ✅ COMPLETE
 **Goal**: Demonstrate MCP sampling framework by implementing safe, automatic JSON error correction

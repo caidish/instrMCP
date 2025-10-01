@@ -189,15 +189,37 @@ class TestToolSpecValidation:
                 source_code="def test_func():\n    return 'test'",
             )
 
-    def test_invalid_capability_format(self):
-        """Test validation fails for invalid capability format."""
+    def test_freeform_capabilities_allowed(self):
+        """Test that freeform capability labels are allowed (v2.0.0)."""
+        # Any non-empty string is valid as capability label
+        spec = create_tool_spec(
+            name="test_tool",
+            version="1.0.0",
+            description="A test tool for unit testing purposes",
+            author="test_author",
+            capabilities=[
+                "cap:numpy.array",  # Suggested format
+                "data-processing",  # Simple label
+                "custom.analysis",  # No cap: prefix
+                "UPPERCASE",  # Any case
+                "123numeric",  # Can start with number
+            ],
+            parameters=[],
+            returns={"type": "string", "description": "Test result"},
+            source_code="def test_func():\n    return 'test'",
+        )
+        # Should not raise - all freeform labels are valid
+        assert len(spec.capabilities) == 5
+
+    def test_empty_capability_string_invalid(self):
+        """Test validation fails for empty capability strings."""
         with pytest.raises(ValidationError, match="Invalid capability"):
             create_tool_spec(
                 name="test_tool",
                 version="1.0.0",
                 description="A test tool for unit testing purposes",
                 author="test_author",
-                capabilities=["invalid_capability"],  # Invalid format
+                capabilities=[""],  # Empty string not allowed
                 parameters=[],
                 returns={"type": "string", "description": "Test result"},
                 source_code="def test_func():\n    return 'test'",

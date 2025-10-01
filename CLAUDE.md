@@ -138,6 +138,49 @@ All tools use underscore naming convention for better compatibility.
 - `database_config` - Current QCodes database configuration, path, and connection status
 - `recent_measurements` - Metadata for recent measurements across all experiments
 
+### Dynamic Tool Creation (v2.0.0 - Unsafe Mode Only)
+
+**Meta-Tools for Runtime Tool Creation:**
+- `dynamic_register_tool(name, source_code, ...)` - Register new dynamic tool
+- `dynamic_update_tool(name, version, ...)` - Update existing tool
+- `dynamic_revoke_tool(name, reason)` - Delete tool from registry
+- `dynamic_list_tools(tag, capability, author)` - List registered tools with optional filtering
+- `dynamic_inspect_tool(name)` - Get full tool specification
+- `dynamic_registry_stats()` - Get registry statistics (total tools, by capability, by author, etc.)
+
+**Capability Labels (Freeform - v2.0.0):**
+Capabilities are **documentation labels only** - NOT enforced security boundaries. Use any descriptive string:
+- **Suggested format**: `cap:library.action` (e.g., `cap:numpy.array`, `cap:qcodes.read`, `cap:custom.analysis`)
+- **But any format is allowed** - flexibility for LLMs to describe tool dependencies
+- **Uses**: Discovery (filtering/search), transparency (shown in consent UI), documentation
+- **Not enforced**: No validation of capability names, no runtime checking
+- **Examples of valid capabilities**:
+  - `cap:numpy.array` - Uses NumPy arrays
+  - `cap:qcodes.read` - Reads QCodes instrument parameters
+  - `cap:scipy.optimize` - Uses SciPy optimization
+  - `cap:custom.my_analysis` - Custom analysis capability
+  - `data-processing` - Simple label (no cap: prefix required)
+  - `instrument-control` - Any descriptive string works
+- **Future (v3.0.0)**: Capability enforcement with taxonomy and security boundaries planned
+
+**Tool Registration Example:**
+```python
+dynamic_register_tool(
+    name="analyze_data",
+    source_code="import numpy as np\n\ndef analyze_data(arr):\n    return np.mean(arr)",
+    capabilities=["cap:numpy.stats", "data-processing"],  # Freeform labels
+    parameters=[{"name": "arr", "type": "array", "description": "Data array", "required": true}],
+    version="1.0.0",
+    description="Calculate mean of data array",
+    author="my_llm"
+)
+```
+
+**Storage & Persistence:**
+- Tools saved to `~/.instrmcp/registry/{tool_name}.json`
+- Automatically reloaded on server restart
+- Audit trail in `~/.instrmcp/audit/tool_audit.log`
+
 ### Optional Features and Magic Commands
 
 The server supports optional features that can be enabled/disabled via magic commands:

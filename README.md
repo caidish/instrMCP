@@ -180,8 +180,42 @@ Codex expects MCP servers over STDIO. Use the Codex launcher to proxy STDIO call
   - `JUPYTER_MCP_HOST=127.0.0.1`
   - `JUPYTER_MCP_PORT=8123`
 
-## V2.0.0 Plan
+## V2.0.0 Features (Current Release)
 
+### Dynamic Tool Creation
+Create custom MCP tools at runtime using LLM-powered tool registration:
+
+```python
+# In Jupyter with instrMCP loaded in unsafe mode
+# LLM can create tools dynamically using meta-tools:
+dynamic_register_tool(
+    name="analyze_data",
+    source_code="def analyze_data(x): return x * 2",
+    capabilities=["cap:numpy", "cap:custom.analysis"],  # Freeform labels
+    parameters=[{"name": "x", "type": "number", "description": "Input", "required": true}]
+)
+```
+
+**Features:**
+- **6 Meta-Tools**: `register`, `update`, `revoke`, `list`, `inspect`, `registry_stats`
+- **Consent UI**: User approval required for tool registration/updates
+- **Freeform Capability Labels**: Tag tools with descriptive capabilities for discovery
+- **Persistent Registry**: Tools saved to `~/.instrmcp/registry/` and reloaded on server start
+- **Audit Trail**: All tool operations logged to `~/.instrmcp/audit/tool_audit.log`
+- **Auto JSON Correction**: Optional LLM-powered JSON error fixing (opt-in via `%mcp_option auto_correct_json`)
+
+**Capability Labels** (v2.0.0):
+Capabilities are freeform documentation labels - NOT enforced security boundaries. Use any descriptive string:
+- Suggested format: `cap:library.action` (e.g., `cap:numpy.array`, `cap:qcodes.read`)
+- Used for discovery, filtering, and transparency in consent UI
+- No validation - flexibility for LLMs to describe tool dependencies
+- Future: Enforcement layer planned for v3.0.0
+
+See [Dynamic Tools Quickstart](docs/DYNAMIC_TOOLS_QUICKSTART.md) for details.
+
+## V3.0.0 Roadmap
+
+- **Capability Enforcement**: Security boundaries based on capability taxonomy
 - Support RedPitaya
 - Support Raspberry Pi for outdated instruments
 - Integrating lab wiki knowledge base for safety rails

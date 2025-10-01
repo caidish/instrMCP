@@ -166,10 +166,9 @@ TOOL_SPEC_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "string",
-                "pattern": "^cap:[a-z]+\\.[a-z]+$",
+                "minLength": 1,
             },
-            "minItems": 1,
-            "description": "Required capabilities (e.g., cap:qcodes.read)",
+            "description": "Freeform capability labels for documentation/discovery (e.g., cap:numpy, cap:qcodes.read). Not enforced.",
         },
         "parameters": {
             "type": "array",
@@ -270,11 +269,14 @@ def validate_tool_spec(spec: ToolSpec) -> None:
     except ValueError as e:
         raise ValidationError(f"Invalid timestamp format: {e}")
 
-    # Validate capabilities (optional - just for documentation)
+    # Validate capabilities (freeform labels - for documentation/discovery only, not enforced)
+    # No pattern validation - LLMs can use any format to describe tool dependencies
+    # Suggested format: 'cap:library.action' (e.g., 'cap:numpy.array', 'cap:qcodes.read')
+    # But any descriptive string is allowed for flexibility
     for cap in spec.capabilities:
-        if not re.match(r"^cap:[a-z]+\.[a-z]+$", cap):
+        if not isinstance(cap, str) or len(cap) == 0:
             raise ValidationError(
-                f"Invalid capability '{cap}': must match pattern 'cap:domain.action'"
+                f"Invalid capability '{cap}': must be non-empty string"
             )
 
     # Validate parameters
@@ -328,7 +330,9 @@ def create_tool_spec(
         version: Semantic version (default: "1.0.0")
         description: Tool description (default: auto-generated from name)
         author: Author identifier (default: "unknown")
-        capabilities: Required capabilities (default: ["cap:python.builtin"])
+        capabilities: Freeform capability labels for documentation/discovery (default: [])
+                     Suggested format: 'cap:library.action' (e.g., 'cap:numpy.array', 'cap:qcodes.read')
+                     But any descriptive string is allowed. Not enforced - labels only.
         parameters: Parameter specifications (default: [])
         returns: Return type specification (default: {"type": "object", "description": "Result"})
         source_code: Python function source code
@@ -349,7 +353,7 @@ def create_tool_spec(
     if capabilities is None:
         capabilities = (
             []
-        )  # Empty - capabilities are for documentation only, not enforced
+        )  # Empty default - capabilities are freeform labels for documentation/discovery, not enforced
     if parameters is None:
         parameters = []
     if returns is None:
