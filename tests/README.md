@@ -48,6 +48,42 @@ tests/
 - CLI & Config: 87 tests
 - Core Components: 72 tests
 - Server Registrars: 82 tests
+
+## Important Testing Guidelines
+
+### Avoid MagicMock File Artifacts
+
+When mocking `Path` or file system operations, ensure mocks don't create actual files:
+
+**❌ Bad - Creates files with MagicMock names:**
+```python
+@patch("some_module.Path")
+def test_something(mock_path_cls):
+    mock_path = MagicMock()
+    mock_path_cls.return_value = mock_path
+    # If code calls str(mock_path), it returns "<MagicMock...>"
+    # QCodes or other libraries may create files with this name!
+```
+
+**✅ Good - Use spec and configure string representation:**
+```python
+@patch("some_module.Path")
+def test_something(mock_path_cls, tmp_path):
+    mock_path = MagicMock(spec=Path)
+    mock_path.__str__.return_value = str(tmp_path / "test.db")
+    mock_path.__fspath__.return_value = str(tmp_path / "test.db")
+    mock_path_cls.return_value = mock_path
+```
+
+**✅ Better - Don't mock Path at all, use temp directories:**
+```python
+def test_something(tmp_path, monkeypatch):
+    test_db = tmp_path / "test.db"
+    monkeypatch.setenv("DB_PATH", str(test_db))
+    # Test with real Path objects, just in temp location
+```
+
+Files with names like `<MagicMock name='...'>` are automatically ignored by `.gitignore`, but it's better to prevent their creation entirely.
 - Extensions: 139 tests
 
 ## Running Tests

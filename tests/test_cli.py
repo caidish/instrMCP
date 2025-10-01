@@ -6,9 +6,7 @@ and error handling for the InstrMCP command-line interface.
 """
 
 import pytest
-import sys
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock, call
+from unittest.mock import MagicMock, patch
 from io import StringIO
 
 from instrmcp import cli, __version__
@@ -34,47 +32,55 @@ class TestCLIArgumentParsing:
     def test_jupyter_command_default_args(self):
         """Test jupyter command with default arguments."""
         with patch("sys.argv", ["instrmcp", "jupyter"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                # Should call with default port=3000, safe_mode=True
-                mock_run.assert_called_once()
-                args = mock_run.call_args[0][0]
-                # The coroutine is passed, we can't inspect args directly
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_asyncio_run:
+                with pytest.raises(SystemExit):  # run_jupyter_server calls sys.exit(1)
+                    cli.main()
+                mock_asyncio_run.assert_called_once()
 
     def test_jupyter_command_custom_port(self):
         """Test jupyter command with custom port."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "5000"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_asyncio_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
+                mock_asyncio_run.assert_called_once()
 
     def test_jupyter_command_unsafe_flag(self):
         """Test jupyter command with unsafe flag."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--unsafe"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_asyncio_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
+                mock_asyncio_run.assert_called_once()
 
     def test_jupyter_command_custom_port_and_unsafe(self):
         """Test jupyter command with both custom port and unsafe flag."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "4000", "--unsafe"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_asyncio_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
+                mock_asyncio_run.assert_called_once()
 
     def test_qcodes_command_default_port(self):
         """Test qcodes command with default port."""
         with patch("sys.argv", ["instrmcp", "qcodes"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
+            with patch("instrmcp.cli.QCodesStationServer") as mock_server_class:
+                mock_server = MagicMock()
+                mock_server_class.return_value = mock_server
+                with patch("sys.stdout", new_callable=StringIO):
+                    cli.main()
+                mock_server_class.assert_called_once_with(port=3001)
+                mock_server.start.assert_called_once()
 
     def test_qcodes_command_custom_port(self):
         """Test qcodes command with custom port."""
         with patch("sys.argv", ["instrmcp", "qcodes", "--port", "6000"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
-                mock_run.assert_called_once()
+            with patch("instrmcp.cli.QCodesStationServer") as mock_server_class:
+                mock_server = MagicMock()
+                mock_server_class.return_value = mock_server
+                with patch("sys.stdout", new_callable=StringIO):
+                    cli.main()
+                mock_server_class.assert_called_once_with(port=6000)
 
     def test_config_command(self):
         """Test config command prints configuration."""
@@ -89,12 +95,13 @@ class TestCLIArgumentParsing:
                         with patch.object(
                             cli.config, "get_user_config_dir", return_value="/fake/user"
                         ):
-                            cli.main()
-                            output = mock_stdout.getvalue()
-                            assert "InstrMCP Configuration:" in output
-                            assert "/fake/path" in output
-                            assert "/fake/config" in output
-                            assert "/fake/user" in output
+                            with patch("importlib.util.find_spec", return_value=None):
+                                cli.main()
+                                output = mock_stdout.getvalue()
+                                assert "InstrMCP Configuration:" in output
+                                assert "/fake/path" in output
+                                assert "/fake/config" in output
+                                assert "/fake/user" in output
 
     def test_version_command(self):
         """Test version command prints version."""
@@ -132,150 +139,83 @@ class TestJupyterServerFunction:
     """Test run_jupyter_server async function."""
 
     @pytest.mark.asyncio
-    async def test_jupyter_server_default_args(self):
-        """Test jupyter server with default arguments."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch(
-            "instrmcp.cli.JupyterMCPServer", return_value=mock_server
-        ) as mock_class:
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+    async def test_jupyter_server_exits_with_message(self):
+        """Test jupyter server shows standalone mode message and exits."""
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            with pytest.raises(SystemExit) as exc_info:
                 await cli.run_jupyter_server()
 
-                # Should create server with default args
-                mock_class.assert_called_once_with(port=3000, safe_mode=True)
-                mock_server.run.assert_called_once()
-
-                # Check output messages
-                output = mock_stdout.getvalue()
-                assert "Starting Jupyter QCodes MCP server on port 3000" in output
-                assert "Safe mode: enabled" in output
-
-    @pytest.mark.asyncio
-    async def test_jupyter_server_custom_port(self):
-        """Test jupyter server with custom port."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch(
-            "instrmcp.cli.JupyterMCPServer", return_value=mock_server
-        ) as mock_class:
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                await cli.run_jupyter_server(port=5000)
-
-                mock_class.assert_called_once_with(port=5000, safe_mode=True)
-                output = mock_stdout.getvalue()
-                assert "5000" in output
-
-    @pytest.mark.asyncio
-    async def test_jupyter_server_unsafe_mode(self):
-        """Test jupyter server with unsafe mode."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch(
-            "instrmcp.cli.JupyterMCPServer", return_value=mock_server
-        ) as mock_class:
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                await cli.run_jupyter_server(safe_mode=False)
-
-                mock_class.assert_called_once_with(port=3000, safe_mode=False)
-                output = mock_stdout.getvalue()
-                assert "Safe mode: disabled" in output
-
-    @pytest.mark.asyncio
-    async def test_jupyter_server_exception_handling(self):
-        """Test jupyter server handles exceptions properly."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock(side_effect=RuntimeError("Server error"))
-
-        with patch("instrmcp.cli.JupyterMCPServer", return_value=mock_server):
-            with pytest.raises(RuntimeError, match="Server error"):
-                await cli.run_jupyter_server()
+            assert exc_info.value.code == 1
+            output = mock_stdout.getvalue()
+            assert "STANDALONE MODE" in output
+            assert "not fully implemented" in output
 
 
 class TestQCodesServerFunction:
-    """Test run_qcodes_server async function."""
+    """Test run_qcodes_server function."""
 
-    @pytest.mark.asyncio
-    async def test_qcodes_server_default_port(self):
+    def test_qcodes_server_default_port(self):
         """Test qcodes server with default port."""
         mock_server = MagicMock()
-        mock_server.run = AsyncMock()
 
         with patch(
             "instrmcp.cli.QCodesStationServer", return_value=mock_server
         ) as mock_class:
             with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                await cli.run_qcodes_server()
+                cli.run_qcodes_server()
 
                 mock_class.assert_called_once_with(port=3001)
-                mock_server.run.assert_called_once()
+                mock_server.start.assert_called_once()
 
                 output = mock_stdout.getvalue()
                 assert "Starting QCodes station MCP server on port 3001" in output
 
-    @pytest.mark.asyncio
-    async def test_qcodes_server_custom_port(self):
+    def test_qcodes_server_custom_port(self):
         """Test qcodes server with custom port."""
         mock_server = MagicMock()
-        mock_server.run = AsyncMock()
 
         with patch(
             "instrmcp.cli.QCodesStationServer", return_value=mock_server
         ) as mock_class:
             with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                await cli.run_qcodes_server(port=6000)
+                cli.run_qcodes_server(port=6000)
 
                 mock_class.assert_called_once_with(port=6000)
                 output = mock_stdout.getvalue()
                 assert "6000" in output
 
-    @pytest.mark.asyncio
-    async def test_qcodes_server_exception_handling(self):
+    def test_qcodes_server_exception_handling(self):
         """Test qcodes server handles exceptions properly."""
         mock_server = MagicMock()
-        mock_server.run = AsyncMock(side_effect=ConnectionError("Connection failed"))
+        mock_server.start.side_effect = ConnectionError("Connection failed")
 
         with patch("instrmcp.cli.QCodesStationServer", return_value=mock_server):
             with pytest.raises(ConnectionError, match="Connection failed"):
-                await cli.run_qcodes_server()
+                cli.run_qcodes_server()
 
 
 class TestCLIIntegration:
-    """Test CLI integration with asyncio.run."""
+    """Test CLI integration."""
 
     def test_jupyter_command_calls_asyncio_run(self):
-        """Test that jupyter command calls asyncio.run with correct coroutine."""
+        """Test that jupyter command calls asyncio.run."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "3500"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
+                mock_run.assert_called_once()
 
-                # Should call asyncio.run once
-                assert mock_run.call_count == 1
-
-                # The first argument should be a coroutine
-                called_coro = mock_run.call_args[0][0]
-                assert asyncio.iscoroutine(called_coro)
-                # Clean up the coroutine
-                called_coro.close()
-
-    def test_qcodes_command_calls_asyncio_run(self):
-        """Test that qcodes command calls asyncio.run with correct coroutine."""
+    def test_qcodes_command_calls_function(self):
+        """Test that qcodes command calls run_qcodes_server."""
         with patch("sys.argv", ["instrmcp", "qcodes", "--port", "3500"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
+            with patch("instrmcp.cli.run_qcodes_server") as mock_run:
                 cli.main()
-
-                assert mock_run.call_count == 1
-                called_coro = mock_run.call_args[0][0]
-                assert asyncio.iscoroutine(called_coro)
-                called_coro.close()
+                mock_run.assert_called_once_with(port=3500)
 
     def test_config_command_no_asyncio_run(self):
-        """Test that config command does not call asyncio.run."""
+        """Test that config command does not use asyncio."""
         with patch("sys.argv", ["instrmcp", "config"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
+            with patch("asyncio.run") as mock_run:
                 with patch.object(
                     cli.config, "get_package_path", return_value="/fake/path"
                 ):
@@ -286,15 +226,18 @@ class TestCLIIntegration:
                             cli.config, "get_user_config_dir", return_value="/fake/user"
                         ):
                             with patch("sys.stdout", new_callable=StringIO):
-                                cli.main()
+                                with patch(
+                                    "importlib.util.find_spec", return_value=None
+                                ):
+                                    cli.main()
 
                 # Config should not use asyncio
                 mock_run.assert_not_called()
 
     def test_version_command_no_asyncio_run(self):
-        """Test that version command does not call asyncio.run."""
+        """Test that version command does not use asyncio."""
         with patch("sys.argv", ["instrmcp", "version"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
+            with patch("asyncio.run") as mock_run:
                 with patch("sys.stdout", new_callable=StringIO):
                     cli.main()
 
@@ -319,10 +262,10 @@ class TestCLIErrorHandling:
 
     def test_jupyter_negative_port(self):
         """Test jupyter command with negative port number."""
-        # Note: argparse doesn't validate port range, but we test it accepts the value
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "-1"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
                 mock_run.assert_called_once()
 
     def test_jupyter_unknown_flag(self):
@@ -356,23 +299,25 @@ class TestCLIEdgeCases:
     def test_jupyter_port_zero(self):
         """Test jupyter command with port 0 (OS assigns port)."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "0"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
                 mock_run.assert_called_once()
 
     def test_jupyter_high_port_number(self):
         """Test jupyter command with high port number."""
         with patch("sys.argv", ["instrmcp", "jupyter", "--port", "65535"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
-                cli.main()
+            with patch("asyncio.run", side_effect=SystemExit(1)) as mock_run:
+                with pytest.raises(SystemExit):
+                    cli.main()
                 mock_run.assert_called_once()
 
     def test_qcodes_port_zero(self):
         """Test qcodes command with port 0."""
         with patch("sys.argv", ["instrmcp", "qcodes", "--port", "0"]):
-            with patch.object(cli.asyncio, "run") as mock_run:
+            with patch("instrmcp.cli.run_qcodes_server") as mock_run:
                 cli.main()
-                mock_run.assert_called_once()
+                mock_run.assert_called_once_with(port=0)
 
     def test_multiple_flags_order(self):
         """Test jupyter command with flags in different orders."""
@@ -383,8 +328,9 @@ class TestCLIEdgeCases:
 
         for argv in test_cases:
             with patch("sys.argv", argv):
-                with patch.object(cli.asyncio, "run") as mock_run:
-                    cli.main()
+                with patch("asyncio.run", side_effect=SystemExit(1)) as mock_run:
+                    with pytest.raises(SystemExit):
+                        cli.main()
                     mock_run.assert_called_once()
 
     def test_config_with_none_values(self):
@@ -396,11 +342,13 @@ class TestCLIEdgeCases:
                         with patch.object(
                             cli.config, "get_user_config_dir", return_value="/user"
                         ):
-                            cli.main()
-                            output = mock_stdout.getvalue()
-                            assert (
-                                "None" in output or "InstrMCP Configuration:" in output
-                            )
+                            with patch("importlib.util.find_spec", return_value=None):
+                                cli.main()
+                                output = mock_stdout.getvalue()
+                                assert (
+                                    "None" in output
+                                    or "InstrMCP Configuration:" in output
+                                )
 
 
 class TestMainFunction:
@@ -424,105 +372,15 @@ class TestMainFunction:
 
     def test_main_module_execution(self):
         """Test that module can be executed with python -m."""
-        # This tests the if __name__ == "__main__": block
         with patch("sys.argv", ["cli.py", "version"]):
             with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                # We can't directly test __name__ == "__main__", but we can test main()
                 cli.main()
                 output = mock_stdout.getvalue()
                 assert __version__ in output
 
 
-class TestAsyncServerFunctions:
-    """Test async server initialization and execution."""
-
-    @pytest.mark.asyncio
-    async def test_jupyter_server_initialization_params(self):
-        """Test that JupyterMCPServer receives correct initialization parameters."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch(
-            "instrmcp.cli.JupyterMCPServer", return_value=mock_server
-        ) as mock_class:
-            # Test various parameter combinations
-            test_cases = [
-                {"port": 3000, "safe_mode": True},
-                {"port": 4000, "safe_mode": False},
-                {"port": 8080, "safe_mode": True},
-            ]
-
-            for params in test_cases:
-                await cli.run_jupyter_server(**params)
-                mock_class.assert_called_with(**params)
-
-    @pytest.mark.asyncio
-    async def test_qcodes_server_initialization_params(self):
-        """Test that QCodesStationServer receives correct initialization parameters."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch(
-            "instrmcp.cli.QCodesStationServer", return_value=mock_server
-        ) as mock_class:
-            test_ports = [3001, 5000, 9000]
-
-            for port in test_ports:
-                await cli.run_qcodes_server(port=port)
-                mock_class.assert_called_with(port=port)
-
-    @pytest.mark.asyncio
-    async def test_server_run_called_once(self):
-        """Test that server.run() is called exactly once."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch("instrmcp.cli.JupyterMCPServer", return_value=mock_server):
-            await cli.run_jupyter_server()
-            mock_server.run.assert_called_once()
-
-        mock_server.run.reset_mock()
-
-        with patch("instrmcp.cli.QCodesStationServer", return_value=mock_server):
-            await cli.run_qcodes_server()
-            mock_server.run.assert_called_once()
-
-
 class TestCLIOutput:
     """Test CLI output messages and formatting."""
-
-    def test_jupyter_safe_mode_message(self):
-        """Test that safe mode message is displayed correctly."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch("instrmcp.cli.JupyterMCPServer", return_value=mock_server):
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                asyncio.run(cli.run_jupyter_server(safe_mode=True))
-                output = mock_stdout.getvalue()
-                assert "Safe mode: enabled" in output
-
-    def test_jupyter_unsafe_mode_message(self):
-        """Test that unsafe mode message is displayed correctly."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch("instrmcp.cli.JupyterMCPServer", return_value=mock_server):
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                asyncio.run(cli.run_jupyter_server(safe_mode=False))
-                output = mock_stdout.getvalue()
-                assert "Safe mode: disabled" in output
-
-    def test_server_port_in_output(self):
-        """Test that server port is displayed in output."""
-        mock_server = MagicMock()
-        mock_server.run = AsyncMock()
-
-        with patch("instrmcp.cli.JupyterMCPServer", return_value=mock_server):
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                asyncio.run(cli.run_jupyter_server(port=7777))
-                output = mock_stdout.getvalue()
-                assert "7777" in output
 
     def test_config_output_format(self):
         """Test config command output format."""
@@ -537,17 +395,18 @@ class TestCLIOutput:
                         with patch.object(
                             cli.config, "get_user_config_dir", return_value="/test/user"
                         ):
-                            cli.main()
-                            output = mock_stdout.getvalue()
+                            with patch("importlib.util.find_spec", return_value=None):
+                                cli.main()
+                                output = mock_stdout.getvalue()
 
-                            # Check all expected lines are present
-                            assert "InstrMCP Configuration:" in output
-                            assert "Package path:" in output
-                            assert "Config file:" in output
-                            assert "User config directory:" in output
-                            assert "/test/package" in output
-                            assert "/test/config.yaml" in output
-                            assert "/test/user" in output
+                                # Check all expected lines are present
+                                assert "InstrMCP Configuration:" in output
+                                assert "Package path:" in output
+                                assert "Config file:" in output
+                                assert "User config directory:" in output
+                                assert "/test/package" in output
+                                assert "/test/config.yaml" in output
+                                assert "/test/user" in output
 
     def test_version_output_format(self):
         """Test version command output format."""

@@ -229,14 +229,10 @@ The package includes a JupyterLab extension for active cell bridging:
 
 ## Important Notes
 - **Always use conda environment instrMCPdev for testing** by `source ~/miniforge3/etc/profile.d/conda.sh && conda activate instrMCPdev`
-- Always test MCP tool changes with both safe and unsafe modes
-- The caching system (`cache.py`) prevents excessive instrument reads
-- Rate limiting protects instruments from command flooding
-- The system supports hierarchical parameter access (e.g., `ch01.voltage`)
 - Jupyter cell tracking happens via IPython event hooks for real-time access
 - Remember to update stdio_proxy.py whenever we change the tools for mcp server.
 - check requirements.txt when new python file is created.
-- don't forget to update pyproject.toml
+- update pyproject.toml
 - whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.tools.stdio_proxy
 - when removing features, update readme.md
 - Format code when wrapping up: black instrmcp/ tests/. Check linter.
