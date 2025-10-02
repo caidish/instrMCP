@@ -11,9 +11,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Feature:** Enhanced `notebook_apply_patch` with visual diff consent dialog, mimicking Claude Code/Codex behavior.
 
+### Added - Line Range Parameters for notebook_get_editing_cell
+
+**Feature:** Added `line_start` and `line_end` parameters to control context window consumption.
+
+#### Parameters
+- `line_start` (Optional[int]): Starting line number, 1-indexed (default: 1)
+- `line_end` (Optional[int]): Ending line number, 1-indexed inclusive (default: 100)
+- Returns metadata: `total_lines`, `line_start`, `line_end`, `truncated`
+
+#### Benefits
+- **Context Window Management** - Prevents large cells from consuming excessive LLM context
+- **Flexible Range Selection** - Get specific line ranges for focused analysis
+- **Automatic Bounds Clamping** - Invalid ranges safely clamped to cell boundaries
+- **Truncation Indicator** - `truncated` flag shows when content is partial
+
+#### Implementation
+- **Backend** ([tools.py:655-732](instrmcp/servers/jupyter_qcodes/tools.py#L655-L732)):
+  - Added line slicing with 1-indexed bounds
+  - Returns empty string (not error) for out-of-bounds ranges
+  - Includes line count and truncation metadata
+- **MCP Tool** ([notebook_tools.py:88-120](instrmcp/servers/jupyter_qcodes/registrars/notebook_tools.py#L88-L120)):
+  - Updated tool signature and documentation
+  - Default: lines 1-100 to save context
+- **STDIO Proxy** ([stdio_proxy.py:266-278](instrmcp/tools/stdio_proxy.py#L266-L278)):
+  - Added parameters to proxy for Claude Desktop/Codex integration
+- **Tests**: Updated test expectations for new signature
+
 **Fixed:**
 - Backend was using wrong dictionary key (`"text"` instead of `"cell_content"`) causing empty content in diff display
 - Replaced custom diff algorithm with industry-standard `diff` library (npm package used by GitHub/GitLab) for robust pattern matching
+- Fixed linter issues: removed unused imports in modified files
 
 #### User Experience
 - **Visual Diff Display** - Shows exactly what will change before applying patch:
@@ -49,13 +77,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Zero custom string matching bugs
 
 #### Testing
-- All 177 server tests pass (1 skipped)
-- JupyterLab extension builds successfully
-- Code formatted with black
+- All 463 tests pass (1 skipped) across entire codebase
+- JupyterLab extension builds successfully with `diff` library integration
+- Code formatted with black, all linter checks pass
 
 ### Changed
-- **CLAUDE.md** - Updated unsafe tool descriptions to indicate consent requirements
+- **Version Update** - System-wide version updated from 1.0.0 to 2.0.0
+  - [pyproject.toml](pyproject.toml#L7) - Package version
+  - [instrmcp/__init__.py](instrmcp/__init__.py#L9) - Module `__version__`
+  - [docs/source/conf.py](docs/source/conf.py#L16-L17) - Documentation version
+  - JupyterLab extension remains at 1.0.0
+- **CLAUDE.md** - Updated tool documentation:
+  - Added line range parameters to `notebook_get_editing_cell` documentation
+  - Updated unsafe tool descriptions to indicate consent requirements
+  - Clarified which operations require consent (execute, delete, apply_patch)
 - **Consent System Documentation** - Clarified which operations require consent
+- **Dependencies** - Added `diff` npm package (v8.0.2) to JupyterLab extension
 
 ## [2.0.0] - 2025-10-01
 
