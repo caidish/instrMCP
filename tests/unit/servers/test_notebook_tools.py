@@ -8,7 +8,6 @@ import pytest
 import json
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
-from mcp.types import TextContent
 
 from instrmcp.servers.jupyter_qcodes.registrars.notebook_tools import (
     NotebookToolRegistrar,
@@ -184,7 +183,9 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_cell
-        mock_tools.get_editing_cell.assert_called_once_with(1000)
+        mock_tools.get_editing_cell.assert_called_once_with(
+            fresh_ms=1000, line_start=None, line_end=None
+        )
 
     @pytest.mark.asyncio
     async def test_get_editing_cell_default_fresh_ms(
@@ -196,9 +197,11 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_cell_func = mock_mcp_server._tools["notebook_get_editing_cell"]
-        result = await get_cell_func(fresh_ms=1000)
+        await get_cell_func(fresh_ms=1000)
 
-        mock_tools.get_editing_cell.assert_called_once_with(1000)
+        mock_tools.get_editing_cell.assert_called_once_with(
+            fresh_ms=1000, line_start=None, line_end=None
+        )
 
     @pytest.mark.asyncio
     async def test_update_editing_cell_success(
@@ -364,7 +367,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         move_cursor_func = mock_mcp_server._tools["notebook_move_cursor"]
-        result = await move_cursor_func(target="5")
+        await move_cursor_func(target="5")
 
         mock_tools.move_cursor.assert_called_once_with("5")
 
@@ -428,7 +431,6 @@ class TestNotebookToolRegistrar:
     def test_all_tools_are_async(self, registrar, mock_mcp_server):
         """Test that all registered tools are async functions."""
         import asyncio
-        import inspect
 
         registrar.register_all()
 

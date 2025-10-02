@@ -9,10 +9,9 @@ Used by both Claude Desktop and Codex launchers to avoid code duplication.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from typing import Optional, List
+from typing import Optional
 
 import httpx
 from fastmcp import FastMCP
@@ -264,8 +263,17 @@ def create_stdio_proxy_server(
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_get_editing_cell")
-    async def get_editing_cell(fresh_ms: int = 1000) -> list[TextContent]:
-        result = await proxy.call("notebook_get_editing_cell", fresh_ms=fresh_ms)
+    async def get_editing_cell(
+        fresh_ms: int = 1000,
+        line_start: Optional[int] = None,
+        line_end: Optional[int] = None,
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_get_editing_cell",
+            fresh_ms=fresh_ms,
+            line_start=line_start,
+            line_end=line_end,
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_update_editing_cell")

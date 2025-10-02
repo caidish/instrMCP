@@ -93,7 +93,9 @@ class TestAlwaysAllowStorage:
     def test_persistence_to_disk(self, mock_ipython, temp_always_allow_path):
         """Test that always_allow permissions persist to disk when persistence is enabled."""
         # Create manager with persistence enabled
-        manager = ConsentManager(mock_ipython, timeout_seconds=1, persist_permissions=True)
+        manager = ConsentManager(
+            mock_ipython, timeout_seconds=1, persist_permissions=True
+        )
         manager.always_allow_path = temp_always_allow_path
         manager.always_allow_path.parent.mkdir(parents=True, exist_ok=True)
         manager._always_allow = {}

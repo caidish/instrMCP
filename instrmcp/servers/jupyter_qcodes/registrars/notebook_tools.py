@@ -6,7 +6,7 @@ Registers tools for interacting with Jupyter notebook variables and cells.
 
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
 from mcp.types import TextContent
 
@@ -86,7 +86,11 @@ class NotebookToolRegistrar:
         """Register the notebook/get_editing_cell tool."""
 
         @self.mcp.tool(name="notebook_get_editing_cell")
-        async def get_editing_cell(fresh_ms: int = 1000) -> List[TextContent]:
+        async def get_editing_cell(
+            fresh_ms: int = 1000,
+            line_start: Optional[int] = None,
+            line_end: Optional[int] = None,
+        ) -> List[TextContent]:
             """Get the currently editing cell content from JupyterLab frontend.
 
             This captures the cell that is currently being edited in the frontend.
@@ -94,9 +98,14 @@ class NotebookToolRegistrar:
             Args:
                 fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
                          will request fresh data from frontend (default: 1000, accept any age)
+                line_start: Optional starting line number (1-indexed). Defaults to 1.
+                line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
+                         Use this to limit context window consumption for large cells.
             """
             try:
-                result = await self.tools.get_editing_cell(fresh_ms)
+                result = await self.tools.get_editing_cell(
+                    fresh_ms=fresh_ms, line_start=line_start, line_end=line_end
+                )
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)

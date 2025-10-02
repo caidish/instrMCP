@@ -370,6 +370,61 @@ class UnsafeToolRegistrar:
                 old_text: Text to find and replace (cannot be empty)
                 new_text: Text to replace with (can be empty to delete text)
             """
+            # Request consent if consent manager is available
+            if self.consent_manager:
+                try:
+                    # Get current cell content to show diff
+                    cell_info = await self.tools.get_editing_cell()
+                    cell_content = cell_info.get("cell_content", "")
+
+                    consent_result = await self.consent_manager.request_consent(
+                        operation="apply_patch",
+                        tool_name="notebook_apply_patch",
+                        author="MCP Server",
+                        details={
+                            "old_text": old_text,
+                            "new_text": new_text,
+                            "cell_content": cell_content,
+                            "description": f"Apply patch: replace {len(old_text)} chars with {len(new_text)} chars",
+                            "cell_type": cell_info.get("cell_type", "code"),
+                            "cell_index": cell_info.get("index", "unknown"),
+                        },
+                    )
+
+                    if not consent_result["approved"]:
+                        reason = consent_result.get("reason", "User declined")
+                        logger.warning(f"Patch application declined - {reason}")
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "success": False,
+                                        "error": f"Patch declined: {reason}",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+                    else:
+                        logger.info("✅ Patch application approved")
+                        print("✅ Consent granted for patch application")
+
+                except TimeoutError:
+                    logger.error("Consent request timed out for patch application")
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "Consent request timed out",
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ]
+
             try:
                 result = await self.tools.apply_patch(old_text, new_text)
                 return [

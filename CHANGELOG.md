@@ -5,6 +5,58 @@ All notable changes to instrMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-10-02
+
+### Added - Visual Diff Consent for apply_patch
+
+**Feature:** Enhanced `notebook_apply_patch` with visual diff consent dialog, mimicking Claude Code/Codex behavior.
+
+**Fixed:**
+- Backend was using wrong dictionary key (`"text"` instead of `"cell_content"`) causing empty content in diff display
+- Replaced custom diff algorithm with industry-standard `diff` library (npm package used by GitHub/GitLab) for robust pattern matching
+
+#### User Experience
+- **Visual Diff Display** - Shows exactly what will change before applying patch:
+  - Red background with strikethrough for deleted text
+  - Green background for added text
+  - Grey context lines (3 before/after change location)
+  - Line numbers for easy navigation
+  - Scrollable view (max 400px height)
+  - **Pattern not found warning** - Shows prominent yellow warning if old_text doesn't exist in cell
+- **Change Statistics** - Shows chars removed, chars added, and delta
+- **Cell Context** - Displays cell type, cell index, and operation description
+- **Approval Buttons** - "Decline" | "Allow" | "Always Allow" (session-based permission)
+
+#### Implementation
+- **Backend** ([tools_unsafe.py:373-426](instrmcp/servers/jupyter_qcodes/tools_unsafe.py#L373-L426)):
+  - Added consent check to `_register_apply_patch`
+  - Passes cell content with old/new text for frontend diff computation
+  - Returns declined error if user rejects
+- **Frontend** ([index.ts:649-886](instrmcp/extensions/jupyterlab/src/index.ts#L649-L886)):
+  - `generateDiffDisplay()` - Computes unified diff with context
+  - `handlePatchConsentRequest()` - Shows consent dialog with diff visualization
+  - Wired into existing `mcp:capcall` consent comm channel
+- **Documentation** - Updated CLAUDE.md with consent requirements for all unsafe tools
+
+#### Technical Details
+- Follows same consent pattern as `execute_cell` and `delete_cell`
+- Uses infinite timeout (user reviews at their own pace)
+- **Session-based "always allow"** - Grants permission for "MCP Server" author until restart
+- **Uses `diff` library (v8.0.2)** - Battle-tested npm package from GitHub/GitLab
+  - Handles all edge cases (unicode, whitespace, newlines)
+  - Generates proper unified diff hunks
+  - Shows +/- indicators like git diff
+  - Zero custom string matching bugs
+
+#### Testing
+- All 177 server tests pass (1 skipped)
+- JupyterLab extension builds successfully
+- Code formatted with black
+
+### Changed
+- **CLAUDE.md** - Updated unsafe tool descriptions to indicate consent requirements
+- **Consent System Documentation** - Clarified which operations require consent
+
 ## [2.0.0] - 2025-10-01
 
 ### Added - Dynamic Tool Creation System

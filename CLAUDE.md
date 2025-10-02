@@ -92,7 +92,12 @@ All tools use underscore naming convention for better compatibility.
 **Jupyter Notebook Tools:**
 - `notebook_list_variables(type_filter)` - List notebook variables by type
 - `notebook_get_variable_info(name)` - Detailed variable information
-- `notebook_get_editing_cell(fresh_ms)` - Current JupyterLab cell content
+- `notebook_get_editing_cell(fresh_ms, line_start, line_end)` - Current JupyterLab cell content
+  - `fresh_ms`: Maximum age in ms (default: 1000)
+  - `line_start`: Starting line number, 1-indexed (default: 1)
+  - `line_end`: Ending line number, 1-indexed inclusive (default: 100)
+  - Returns truncated content if cell has more than 100 lines to save context window
+  - Returns empty string (not error) if selected line range is beyond cell content
 - `notebook_update_editing_cell(content)` - Update current cell content
 - `notebook_get_editing_cell_output()` - Get output of most recently executed cell
 - `notebook_get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
@@ -100,11 +105,11 @@ All tools use underscore naming convention for better compatibility.
 - `notebook_move_cursor(target)` - Move cursor to specified cell (use "next", "previous", "first", "last", or cell number)
 
 **Unsafe Notebook Tools (unsafe mode only):**
-- `notebook_execute_cell()` - Execute current cell
+- `notebook_execute_cell()` - Execute current cell (requires user consent via dialog)
 - `notebook_add_cell(cell_type, position, content)` - Add new cell relative to active cell
-- `notebook_delete_cell()` - Delete the currently active cell
-- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (comma-separated string)
-- `notebook_apply_patch(old_text, new_text)` - Apply text replacement patch to active cell
+- `notebook_delete_cell()` - Delete the currently active cell (requires user consent via dialog)
+- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (requires user consent via dialog)
+- `notebook_apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (requires user consent with visual diff preview)
 
 **MeasureIt Integration Tools (requires `%mcp_option measureit`):**
 - `measureit_get_status()` - Check if any MeasureIt sweep is currently running, returns sweep status and configuration
@@ -222,18 +227,27 @@ When `auto_correct_json` is enabled, the server uses MCP sampling to automatical
 - **Default**: Disabled (explicit errors preferred for transparency)
 
 **Consent System (Phase 2):**
-The server requires user consent for dynamic tool registration and updates:
-- **Consent workflow**: User must approve tool registration/updates via consent dialog (when frontend is available)
-- **Always allow**: Users can grant permanent permission to specific authors
+The server requires user consent for sensitive operations:
+- **Consent workflow**: User must approve operations via consent dialog (when frontend is available)
+- **Always allow**: Users can grant permanent permission to specific authors (for dynamic tools only)
 - **Storage**: Permissions stored in `~/.instrmcp/consents/always_allow.json`
 - **Bypass mode**: Set `INSTRMCP_CONSENT_BYPASS=1` environment variable to auto-approve all operations (for testing)
-- **Timeout**: 5 minutes (300 seconds) - requests timeout if no response
+- **Timeout**: Infinite for unsafe notebook operations, 5 minutes for dynamic tool operations
 - **Operations requiring consent**:
-  - `dynamic_register_tool` - Register new dynamic tool
-  - `dynamic_update_tool` - Update existing dynamic tool
+  - **Unsafe Notebook Operations**:
+    - `notebook_execute_cell` - Shows code to be executed with cell info
+    - `notebook_delete_cell` - Shows cell content and metadata before deletion
+    - `notebook_delete_cells` - Shows count of cells to be deleted
+    - `notebook_apply_patch` - Shows visual diff (red deletions, green additions) with context lines
+  - **Dynamic Tool Operations**:
+    - `dynamic_register_tool` - Register new dynamic tool
+    - `dynamic_update_tool` - Update existing dynamic tool
 - **Operations NOT requiring consent**:
   - `dynamic_revoke_tool` - Revoke/delete tool (always allowed)
   - Dynamic tool execution - Once registered with consent, tools can execute freely
+  - Read-only operations (all safe mode tools)
+  - `notebook_add_cell` - Adding cells is considered safe
+  - `notebook_update_editing_cell` - Direct content updates (LLM has full control)
 
 **Server Control:**
 - `%mcp_start` - Start the MCP server
