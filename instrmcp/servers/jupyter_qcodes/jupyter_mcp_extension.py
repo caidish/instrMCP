@@ -190,7 +190,7 @@ class MCPMagics(Magics):
         global _server, _enabled_options
 
         parts = line.strip().split()
-        valid_options = {"measureit", "database"}
+        valid_options = {"measureit", "database", "auto_correct_json"}
 
         if not parts:
             # Show current options status
@@ -201,6 +201,9 @@ class MCPMagics(Magics):
             print("   Available options:")
             print("   - measureit: Enable MeasureIt template resources")
             print("   - database: Enable database integration tools and resources")
+            print(
+                "   - auto_correct_json: Enable automatic JSON error correction (experimental)"
+            )
             print()
             print("   Usage:")
             print("   %mcp_option add measureit database    # Add multiple options")

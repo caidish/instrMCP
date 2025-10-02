@@ -92,7 +92,12 @@ All tools use underscore naming convention for better compatibility.
 **Jupyter Notebook Tools:**
 - `notebook_list_variables(type_filter)` - List notebook variables by type
 - `notebook_get_variable_info(name)` - Detailed variable information
-- `notebook_get_editing_cell(fresh_ms)` - Current JupyterLab cell content
+- `notebook_get_editing_cell(fresh_ms, line_start, line_end)` - Current JupyterLab cell content
+  - `fresh_ms`: Maximum age in ms (default: 1000)
+  - `line_start`: Starting line number, 1-indexed (default: 1)
+  - `line_end`: Ending line number, 1-indexed inclusive (default: 100)
+  - Returns truncated content if cell has more than 100 lines to save context window
+  - Returns empty string (not error) if selected line range is beyond cell content
 - `notebook_update_editing_cell(content)` - Update current cell content
 - `notebook_get_editing_cell_output()` - Get output of most recently executed cell
 - `notebook_get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
@@ -100,11 +105,11 @@ All tools use underscore naming convention for better compatibility.
 - `notebook_move_cursor(target)` - Move cursor to specified cell (use "next", "previous", "first", "last", or cell number)
 
 **Unsafe Notebook Tools (unsafe mode only):**
-- `notebook_execute_cell()` - Execute current cell
+- `notebook_execute_cell()` - Execute current cell (requires user consent via dialog)
 - `notebook_add_cell(cell_type, position, content)` - Add new cell relative to active cell
-- `notebook_delete_cell()` - Delete the currently active cell
-- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (comma-separated string)
-- `notebook_apply_patch(old_text, new_text)` - Apply text replacement patch to active cell
+- `notebook_delete_cell()` - Delete the currently active cell (requires user consent via dialog)
+- `notebook_delete_cells(cell_numbers)` - Delete multiple cells by number (requires user consent via dialog)
+- `notebook_apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (requires user consent with visual diff preview)
 
 **MeasureIt Integration Tools (requires `%mcp_option measureit`):**
 - `measureit_get_status()` - Check if any MeasureIt sweep is currently running, returns sweep status and configuration
@@ -138,6 +143,49 @@ All tools use underscore naming convention for better compatibility.
 - `database_config` - Current QCodes database configuration, path, and connection status
 - `recent_measurements` - Metadata for recent measurements across all experiments
 
+### Dynamic Tool Creation (v2.0.0 - Unsafe Mode Only)
+
+**Meta-Tools for Runtime Tool Creation:**
+- `dynamic_register_tool(name, source_code, ...)` - Register new dynamic tool
+- `dynamic_update_tool(name, version, ...)` - Update existing tool
+- `dynamic_revoke_tool(name, reason)` - Delete tool from registry
+- `dynamic_list_tools(tag, capability, author)` - List registered tools with optional filtering
+- `dynamic_inspect_tool(name)` - Get full tool specification
+- `dynamic_registry_stats()` - Get registry statistics (total tools, by capability, by author, etc.)
+
+**Capability Labels (Freeform - v2.0.0):**
+Capabilities are **documentation labels only** - NOT enforced security boundaries. Use any descriptive string:
+- **Suggested format**: `cap:library.action` (e.g., `cap:numpy.array`, `cap:qcodes.read`, `cap:custom.analysis`)
+- **But any format is allowed** - flexibility for LLMs to describe tool dependencies
+- **Uses**: Discovery (filtering/search), transparency (shown in consent UI), documentation
+- **Not enforced**: No validation of capability names, no runtime checking
+- **Examples of valid capabilities**:
+  - `cap:numpy.array` - Uses NumPy arrays
+  - `cap:qcodes.read` - Reads QCodes instrument parameters
+  - `cap:scipy.optimize` - Uses SciPy optimization
+  - `cap:custom.my_analysis` - Custom analysis capability
+  - `data-processing` - Simple label (no cap: prefix required)
+  - `instrument-control` - Any descriptive string works
+- **Future (v3.0.0)**: Capability enforcement with taxonomy and security boundaries planned
+
+**Tool Registration Example:**
+```python
+dynamic_register_tool(
+    name="analyze_data",
+    source_code="import numpy as np\n\ndef analyze_data(arr):\n    return np.mean(arr)",
+    capabilities=["cap:numpy.stats", "data-processing"],  # Freeform labels
+    parameters=[{"name": "arr", "type": "array", "description": "Data array", "required": true}],
+    version="1.0.0",
+    description="Calculate mean of data array",
+    author="my_llm"
+)
+```
+
+**Storage & Persistence:**
+- Tools saved to `~/.instrmcp/registry/{tool_name}.json`
+- Automatically reloaded on server restart
+- Audit trail in `~/.instrmcp/audit/tool_audit.log`
+
 ### Optional Features and Magic Commands
 
 The server supports optional features that can be enabled/disabled via magic commands:
@@ -163,7 +211,43 @@ The server supports optional features that can be enabled/disabled via magic com
 - `%mcp_option -measureit` - Disable MeasureIt template resources
 - `%mcp_option database` - Enable database integration tools and resources
 - `%mcp_option -database` - Disable database integration tools and resources
+- `%mcp_option auto_correct_json` - Enable automatic JSON error correction via LLM sampling (Phase 4 feature)
+- `%mcp_option -auto_correct_json` - Disable automatic JSON correction (default)
 - `%mcp_option` - Show current option status
+
+**Auto-Correction Feature (Experimental - Phase 4):**
+When `auto_correct_json` is enabled, the server uses MCP sampling to automatically fix malformed JSON in tool registration:
+- Applies to: `capabilities`, `parameters`, `returns`, `examples`, `tags` fields
+- Uses client's LLM to correct syntax errors (missing quotes, wrong brackets, etc.)
+- Returns transparent results showing original and corrected JSON
+- Max 1 correction attempt per registration
+- All corrections logged to audit trail
+- **Timeout**: 60 seconds (server-level default) - if LLM sampling takes longer, returns original error
+- **Safety**: Only fixes structural JSON errors, never modifies logic or values
+- **Default**: Disabled (explicit errors preferred for transparency)
+
+**Consent System (Phase 2):**
+The server requires user consent for sensitive operations:
+- **Consent workflow**: User must approve operations via consent dialog (when frontend is available)
+- **Always allow**: Users can grant permanent permission to specific authors (for dynamic tools only)
+- **Storage**: Permissions stored in `~/.instrmcp/consents/always_allow.json`
+- **Bypass mode**: Set `INSTRMCP_CONSENT_BYPASS=1` environment variable to auto-approve all operations (for testing)
+- **Timeout**: Infinite for unsafe notebook operations, 5 minutes for dynamic tool operations
+- **Operations requiring consent**:
+  - **Unsafe Notebook Operations**:
+    - `notebook_execute_cell` - Shows code to be executed with cell info
+    - `notebook_delete_cell` - Shows cell content and metadata before deletion
+    - `notebook_delete_cells` - Shows count of cells to be deleted
+    - `notebook_apply_patch` - Shows visual diff (red deletions, green additions) with context lines
+  - **Dynamic Tool Operations**:
+    - `dynamic_register_tool` - Register new dynamic tool
+    - `dynamic_update_tool` - Update existing dynamic tool
+- **Operations NOT requiring consent**:
+  - `dynamic_revoke_tool` - Revoke/delete tool (always allowed)
+  - Dynamic tool execution - Once registered with consent, tools can execute freely
+  - Read-only operations (all safe mode tools)
+  - `notebook_add_cell` - Adding cells is considered safe
+  - `notebook_update_editing_cell` - Direct content updates (LLM has full control)
 
 **Server Control:**
 - `%mcp_start` - Start the MCP server

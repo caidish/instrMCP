@@ -652,7 +652,12 @@ class QCodesReadOnlyTools:
         return info
 
     # Editing cell tools
-    async def get_editing_cell(self, fresh_ms: Optional[int] = None) -> Dict[str, Any]:
+    async def get_editing_cell(
+        self,
+        fresh_ms: Optional[int] = None,
+        line_start: Optional[int] = None,
+        line_end: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Get the currently editing cell content from JupyterLab frontend.
 
         This captures the cell that is currently being edited in the frontend.
@@ -660,6 +665,8 @@ class QCodesReadOnlyTools:
         Args:
             fresh_ms: Optional maximum age in milliseconds. If provided and the
                      cached snapshot is older, will request fresh data from frontend.
+            line_start: Optional starting line number (1-indexed). Defaults to 1.
+            line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
 
         Returns:
             Dictionary with editing cell information or error status
@@ -681,9 +688,26 @@ class QCodesReadOnlyTools:
             now_ms = time.time() * 1000
             age_ms = now_ms - snapshot.get("ts_ms", 0)
 
+            # Get full cell content
+            full_text = snapshot.get("text", "")
+            all_lines = full_text.splitlines()
+            total_lines = len(all_lines)
+
+            # Apply line range (default: lines 1-100)
+            start = (line_start or 1) - 1  # Convert to 0-indexed
+            end = line_end or 100  # Keep 1-indexed for slice end
+
+            # Clamp to valid range - don't error if range is outside content
+            start = max(0, min(start, total_lines))
+            end = max(start, min(end, total_lines))
+
+            # Extract requested lines (empty if range is beyond content)
+            selected_lines = all_lines[start:end] if total_lines > 0 else []
+            cell_content = "\n".join(selected_lines)
+
             # Create response
             return {
-                "cell_content": snapshot.get("text", ""),
+                "cell_content": cell_content,
                 "cell_id": snapshot.get("cell_id"),
                 "cell_index": snapshot.get("cell_index"),
                 "cell_type": snapshot.get("cell_type", "code"),
@@ -691,8 +715,12 @@ class QCodesReadOnlyTools:
                 "cursor": snapshot.get("cursor"),
                 "selection": snapshot.get("selection"),
                 "client_id": snapshot.get("client_id"),
-                "length": len(snapshot.get("text", "")),
-                "lines": len(snapshot.get("text", "").splitlines()),
+                "length": len(cell_content),
+                "lines": len(selected_lines),
+                "total_lines": total_lines,
+                "line_start": start + 1,  # Report as 1-indexed
+                "line_end": end,
+                "truncated": end < total_lines or start > 0,
                 "captured": True,
                 "age_ms": age_ms,
                 "age_seconds": age_ms / 1000,
@@ -1072,8 +1100,6 @@ class QCodesReadOnlyTools:
                 - error: str (if any error occurred)
         """
         try:
-            import inspect
-
             result = {"running": False, "sweeps": [], "checked_variables": []}
 
             # Look for MeasureIt sweep objects in the namespace

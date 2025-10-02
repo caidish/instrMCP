@@ -9,10 +9,9 @@ Used by both Claude Desktop and Codex launchers to avoid code duplication.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from typing import Optional, List
+from typing import Optional
 
 import httpx
 from fastmcp import FastMCP
@@ -264,8 +263,17 @@ def create_stdio_proxy_server(
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_get_editing_cell")
-    async def get_editing_cell(fresh_ms: int = 1000) -> list[TextContent]:
-        result = await proxy.call("notebook_get_editing_cell", fresh_ms=fresh_ms)
+    async def get_editing_cell(
+        fresh_ms: int = 1000,
+        line_start: Optional[int] = None,
+        line_end: Optional[int] = None,
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_get_editing_cell",
+            fresh_ms=fresh_ms,
+            line_start=line_start,
+            line_end=line_end,
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(name="notebook_update_editing_cell")
@@ -369,6 +377,95 @@ def create_stdio_proxy_server(
         result = await proxy.call(
             "database_get_database_stats", database_path=database_path
         )
+        return [TextContent(type="text", text=str(result))]
+
+    # Dynamic tool meta-tools (only available in unsafe mode)
+    @mcp.tool(name="dynamic_register_tool")
+    async def register_dynamic_tool(
+        name: str,
+        version: str,
+        description: str,
+        author: str,
+        capabilities: str,
+        parameters: str,
+        returns: str,
+        source_code: str,
+        examples: Optional[str] = None,
+        tags: Optional[str] = None,
+    ) -> list[TextContent]:
+        """Register a new dynamic tool."""
+        result = await proxy.call(
+            "dynamic_register_tool",
+            name=name,
+            version=version,
+            description=description,
+            author=author,
+            capabilities=capabilities,
+            parameters=parameters,
+            returns=returns,
+            source_code=source_code,
+            examples=examples,
+            tags=tags,
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="dynamic_update_tool")
+    async def update_dynamic_tool(
+        name: str,
+        version: str,
+        description: Optional[str] = None,
+        capabilities: Optional[str] = None,
+        parameters: Optional[str] = None,
+        returns: Optional[str] = None,
+        source_code: Optional[str] = None,
+        examples: Optional[str] = None,
+        tags: Optional[str] = None,
+    ) -> list[TextContent]:
+        """Update an existing dynamic tool."""
+        result = await proxy.call(
+            "dynamic_update_tool",
+            name=name,
+            version=version,
+            description=description,
+            capabilities=capabilities,
+            parameters=parameters,
+            returns=returns,
+            source_code=source_code,
+            examples=examples,
+            tags=tags,
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="dynamic_revoke_tool")
+    async def revoke_dynamic_tool(
+        name: str, reason: Optional[str] = None
+    ) -> list[TextContent]:
+        """Revoke (delete) a dynamic tool."""
+        result = await proxy.call("dynamic_revoke_tool", name=name, reason=reason)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="dynamic_list_tools")
+    async def list_dynamic_tools(
+        tag: Optional[str] = None,
+        capability: Optional[str] = None,
+        author: Optional[str] = None,
+    ) -> list[TextContent]:
+        """List all registered dynamic tools with optional filtering."""
+        result = await proxy.call(
+            "dynamic_list_tools", tag=tag, capability=capability, author=author
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="dynamic_inspect_tool")
+    async def inspect_dynamic_tool(name: str) -> list[TextContent]:
+        """Inspect a dynamic tool's complete specification."""
+        result = await proxy.call("dynamic_inspect_tool", name=name)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="dynamic_registry_stats")
+    async def get_dynamic_registry_stats() -> list[TextContent]:
+        """Get statistics about the dynamic tool registry."""
+        result = await proxy.call("dynamic_registry_stats")
         return [TextContent(type="text", text=str(result))]
 
     return mcp

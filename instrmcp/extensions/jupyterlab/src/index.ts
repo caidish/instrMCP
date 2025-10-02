@@ -13,15 +13,21 @@ import { NotebookPanel } from '@jupyterlab/notebook';
 import { ICellModel } from '@jupyterlab/cells';
 import { NotebookActions } from '@jupyterlab/notebook';
 
+import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { Widget } from '@lumino/widgets';
+
+import { Change, diffLines } from 'diff';
+
 /**
  * MCP Active Cell Bridge Extension
- * 
+ *
  * Tracks the currently editing cell in JupyterLab and sends updates
  * to the kernel via comm protocol for consumption by the MCP server.
+ * Also provides user consent dialogs for dynamic tool registration.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'mcp-active-cell-bridge:plugin',
-  description: 'Bridge active cell content to MCP server via kernel comm',
+  description: 'Bridge active cell content to MCP server and handle consent dialogs',
   autoStart: true,
   requires: [INotebookTracker],
   activate: (app: JupyterFrontEnd, notebooks: INotebookTracker) => {
@@ -29,12 +35,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Keep track of comm connections per kernel
     const comms = new WeakMap<Kernel.IKernelConnection, any>();
-    
+
     // Track which comms have been successfully opened
     const openedComms = new WeakMap<Kernel.IKernelConnection, boolean>();
-    
+
     // Track pending comm initialization to prevent race conditions
     const commInitializing = new WeakMap<Kernel.IKernelConnection, Promise<any>>();
+
+    // Track consent comms opened by backend
+    const consentComms = new WeakMap<Kernel.IKernelConnection, Set<any>>();
     
     // Debounce utility function
     const debounce = (fn: () => void, delay: number) => {
@@ -639,6 +648,401 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Generate unified diff display using the 'diff' library
+    const generateDiffDisplay = (cellContent: string, oldText: string, newText: string): { html: string, found: boolean } => {
+      // Check if pattern exists using indexOf
+      const index = cellContent.indexOf(oldText);
+      if (index === -1) {
+        return {
+          html: `<div style="color: #d32f2f; padding: 10px; background: #ffebee; border-radius: 4px;">
+            <strong>⚠️ Warning:</strong> Pattern not found in current cell content.
+          </div>`,
+          found: false
+        };
+      }
+
+      // Create the modified content by replacing oldText with newText
+      const modifiedContent = cellContent.replace(oldText, newText);
+
+      // Use the 'diff' library to generate line-by-line diff
+      const changes: Change[] = diffLines(cellContent, modifiedContent);
+
+      // Build HTML from diff changes
+      let diffHtml = '<div style="font-family: monospace; font-size: 12px; line-height: 1.4;">';
+      let lineNum = 1;
+
+      for (const change of changes) {
+        const lines = change.value.split('\n');
+        // Remove empty last line if value ends with newline
+        if (lines[lines.length - 1] === '') {
+          lines.pop();
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+
+          if (change.added) {
+            // Added line (green)
+            diffHtml += `<div style="background: #e8f5e9; padding: 2px 8px; border-left: 3px solid #66bb6a;">
+              <span style="color: #999; margin-right: 8px;">+</span><span style="background: #a5d6a7;">${escapeHtml(line)}</span>
+            </div>`;
+          } else if (change.removed) {
+            // Removed line (red)
+            diffHtml += `<div style="background: #ffebee; padding: 2px 8px; border-left: 3px solid #ef5350;">
+              <span style="color: #999; margin-right: 8px;">-</span><span style="background: #ef9a9a; text-decoration: line-through;">${escapeHtml(line)}</span>
+            </div>`;
+          } else {
+            // Unchanged line (grey)
+            diffHtml += `<div style="color: #666; background: #f8f9fa; padding: 2px 8px; border-left: 3px solid #e0e0e0;">
+              <span style="color: #999; margin-right: 8px;">${lineNum}</span>${escapeHtml(line)}
+            </div>`;
+            lineNum++;
+          }
+        }
+      }
+
+      diffHtml += '</div>';
+      return { html: diffHtml, found: true };
+    };
+
+    // HTML escape utility
+    const escapeHtml = (text: string): string => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+
+    // Handle patch consent request from kernel
+    const handlePatchConsentRequest = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const operation = data.operation || 'apply_patch';
+      const toolName = data.tool_name || 'notebook_apply_patch';
+      const author = data.author || 'MCP Server';
+      const details = data.details || {};
+
+      console.log(`MCP Consent: Received patch consent request for tool '${toolName}'`);
+
+      try {
+        // Create consent dialog body with diff visualization
+        const dialogBody = document.createElement('div');
+        dialogBody.style.maxWidth = '700px';
+
+        // Header section
+        const headerSection = document.createElement('div');
+        headerSection.style.marginBottom = '15px';
+        headerSection.innerHTML = `
+          <div style="margin-bottom: 10px;">
+            <strong>Cell Type:</strong> ${details.cell_type || 'code'}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Cell Index:</strong> ${details.cell_index || 'unknown'}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Description:</strong> ${details.description || 'Apply text patch to current cell'}
+          </div>
+        `;
+        dialogBody.appendChild(headerSection);
+
+        // Stats section
+        const statsSection = document.createElement('div');
+        statsSection.style.marginBottom = '15px';
+        statsSection.style.padding = '10px';
+        statsSection.style.background = '#f5f5f5';
+        statsSection.style.borderRadius = '4px';
+
+        const oldLength = (details.old_text || '').length;
+        const newLength = (details.new_text || '').length;
+        const delta = newLength - oldLength;
+        const deltaSign = delta >= 0 ? '+' : '';
+
+        statsSection.innerHTML = `
+          <div style="display: flex; gap: 20px; font-size: 13px;">
+            <div><strong>Remove:</strong> <span style="color: #d32f2f;">${oldLength} chars</span></div>
+            <div><strong>Add:</strong> <span style="color: #388e3c;">${newLength} chars</span></div>
+            <div><strong>Delta:</strong> <span style="color: ${delta >= 0 ? '#388e3c' : '#d32f2f'};">${deltaSign}${delta} chars</span></div>
+          </div>
+        `;
+        dialogBody.appendChild(statsSection);
+
+        // Diff section
+        const diffSection = document.createElement('div');
+        diffSection.style.marginTop = '15px';
+
+        const diffLabel = document.createElement('div');
+        diffLabel.innerHTML = '<strong>Changes Preview:</strong>';
+        diffLabel.style.marginBottom = '8px';
+        diffSection.appendChild(diffLabel);
+
+        const { html: diffHtml, found } = generateDiffDisplay(
+          details.cell_content || '',
+          details.old_text || '',
+          details.new_text || ''
+        );
+
+        const diffContainer = document.createElement('div');
+        diffContainer.style.maxHeight = '400px';
+        diffContainer.style.overflow = 'auto';
+        diffContainer.style.border = '1px solid #ddd';
+        diffContainer.style.borderRadius = '4px';
+        diffContainer.style.background = 'white';
+        diffContainer.innerHTML = diffHtml;
+        diffSection.appendChild(diffContainer);
+
+        dialogBody.appendChild(diffSection);
+
+        // Add warning if pattern not found
+        if (!found) {
+          const warningSection = document.createElement('div');
+          warningSection.style.marginTop = '10px';
+          warningSection.style.padding = '10px';
+          warningSection.style.background = '#fff3cd';
+          warningSection.style.border = '1px solid #ffc107';
+          warningSection.style.borderRadius = '4px';
+          warningSection.style.color = '#856404';
+          warningSection.innerHTML = `
+            <strong>⚠️ Warning:</strong> The pattern to be replaced was not found in the current cell content.
+            The patch will have no effect if you proceed.
+          `;
+          dialogBody.appendChild(warningSection);
+        }
+
+        // Wrap in a Widget for JupyterLab Dialog
+        const bodyWidget = new Widget({ node: dialogBody });
+
+        // Show dialog with three buttons: Decline, Allow, Always Allow
+        const result = await showDialog({
+          title: 'Apply Patch Consent',
+          body: bodyWidget,
+          buttons: [
+            Dialog.cancelButton({ label: 'Decline' }),
+            Dialog.okButton({ label: 'Allow' }),
+            Dialog.warnButton({ label: 'Always Allow' })
+          ],
+          defaultButton: 1  // Default to "Allow"
+        });
+
+        // Determine which button was clicked and send response
+        let approved = false;
+        let alwaysAllow = false;
+        let reason = '';
+
+        if (result.button.label === 'Allow') {
+          approved = true;
+          alwaysAllow = false;
+          reason = 'User approved patch';
+        } else if (result.button.label === 'Always Allow') {
+          approved = true;
+          alwaysAllow = true;
+          reason = 'User approved patch with always allow';
+        } else {
+          approved = false;
+          alwaysAllow = false;
+          reason = 'User declined patch';
+        }
+
+        // Send consent response back to kernel
+        comm.send({
+          type: 'consent_response',
+          approved: approved,
+          always_allow: alwaysAllow,
+          reason: reason
+        });
+
+        console.log(`MCP Consent: Sent patch response - approved: ${approved}`);
+
+      } catch (error) {
+        console.error('MCP Consent: Failed to show patch consent dialog:', error);
+
+        // Send error response
+        comm.send({
+          type: 'consent_response',
+          approved: false,
+          always_allow: false,
+          reason: `Dialog error: ${error}`
+        });
+      }
+    };
+
+    // Handle consent request from kernel
+    const handleConsentRequest = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const operation = data.operation || 'unknown';
+      const toolName = data.tool_name || 'Unnamed Tool';
+      const author = data.author || 'Unknown Author';
+      const details = data.details || {};
+
+      console.log(`MCP Consent: Received consent request for ${operation} of tool '${toolName}' by '${author}'`);
+
+      try {
+        // Create consent dialog body with tool details
+        const dialogBody = document.createElement('div');
+        dialogBody.style.maxWidth = '600px';
+
+        // Tool information section
+        const infoSection = document.createElement('div');
+        infoSection.style.marginBottom = '15px';
+        infoSection.innerHTML = `
+          <div style="margin-bottom: 10px;">
+            <strong>Operation:</strong> ${operation}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Tool:</strong> ${toolName}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Author:</strong> ${author}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Version:</strong> ${details.version || 'N/A'}
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Description:</strong> ${details.description || 'No description provided'}
+          </div>
+        `;
+
+        // Capabilities section
+        if (details.capabilities && details.capabilities.length > 0) {
+          const capsSection = document.createElement('div');
+          capsSection.style.marginBottom = '10px';
+          capsSection.innerHTML = `
+            <div style="margin-bottom: 5px;"><strong>Capabilities:</strong></div>
+            <ul style="margin: 0; padding-left: 20px;">
+              ${details.capabilities.map((cap: string) => `<li>${cap}</li>`).join('')}
+            </ul>
+          `;
+          infoSection.appendChild(capsSection);
+        }
+
+        dialogBody.appendChild(infoSection);
+
+        // Source code section
+        if (details.source_code) {
+          const codeSection = document.createElement('div');
+          codeSection.style.marginTop = '15px';
+
+          const codeLabel = document.createElement('div');
+          codeLabel.innerHTML = '<strong>Source Code:</strong>';
+          codeLabel.style.marginBottom = '5px';
+          codeSection.appendChild(codeLabel);
+
+          const codeBlock = document.createElement('pre');
+          codeBlock.style.maxHeight = '300px';
+          codeBlock.style.overflow = 'auto';
+          codeBlock.style.padding = '10px';
+          codeBlock.style.backgroundColor = '#f5f5f5';
+          codeBlock.style.border = '1px solid #ddd';
+          codeBlock.style.borderRadius = '4px';
+          codeBlock.style.fontSize = '12px';
+          codeBlock.style.fontFamily = 'monospace';
+          codeBlock.textContent = details.source_code;
+          codeSection.appendChild(codeBlock);
+
+          dialogBody.appendChild(codeSection);
+        }
+
+        // Wrap in a Widget for JupyterLab Dialog
+        const bodyWidget = new Widget({ node: dialogBody });
+
+        // Show dialog with three buttons: Allow, Always Allow, Decline
+        const result = await showDialog({
+          title: `Tool ${operation.charAt(0).toUpperCase() + operation.slice(1)} Consent`,
+          body: bodyWidget,
+          buttons: [
+            Dialog.cancelButton({ label: 'Decline' }),
+            Dialog.okButton({ label: 'Allow' }),
+            Dialog.warnButton({ label: 'Always Allow' })
+          ],
+          defaultButton: 1  // Default to "Allow"
+        });
+
+        // Determine which button was clicked and send response
+        let approved = false;
+        let alwaysAllow = false;
+        let reason = '';
+
+        if (result.button.label === 'Allow') {
+          approved = true;
+          alwaysAllow = false;
+          reason = 'User approved';
+        } else if (result.button.label === 'Always Allow') {
+          approved = true;
+          alwaysAllow = true;
+          reason = 'User approved with always allow';
+        } else {
+          approved = false;
+          alwaysAllow = false;
+          reason = 'User declined';
+        }
+
+        // Send consent response back to kernel
+        comm.send({
+          type: 'consent_response',
+          approved: approved,
+          always_allow: alwaysAllow,
+          reason: reason
+        });
+
+        console.log(`MCP Consent: Sent response - approved: ${approved}, always_allow: ${alwaysAllow}`);
+
+      } catch (error) {
+        console.error('MCP Consent: Failed to show consent dialog:', error);
+
+        // Send error response
+        comm.send({
+          type: 'consent_response',
+          approved: false,
+          always_allow: false,
+          reason: `Dialog error: ${error}`
+        });
+      }
+    };
+
+    // Register comm target for consent requests from backend
+    const registerConsentCommTarget = (kernel: Kernel.IKernelConnection) => {
+      if (!kernel || !kernel.status || kernel.status === 'dead') {
+        return;
+      }
+
+      // Register target to receive comms opened by backend
+      kernel.registerCommTarget('mcp:capcall', (comm: any, msg: any) => {
+        console.log('MCP Consent: Backend opened consent comm channel');
+
+        // Track this comm
+        let comms = consentComms.get(kernel);
+        if (!comms) {
+          comms = new Set();
+          consentComms.set(kernel, comms);
+        }
+        comms.add(comm);
+
+        // Handle incoming consent requests
+        comm.onMsg = (msg: any) => {
+          const data = msg?.content?.data || {};
+          const msgType = data.type;
+
+          if (msgType === 'consent_request') {
+            // Check if this is a patch operation - use special handler
+            const operation = data.operation || 'unknown';
+            if (operation === 'apply_patch') {
+              handlePatchConsentRequest(kernel, comm, data);
+            } else {
+              handleConsentRequest(kernel, comm, data);
+            }
+          } else {
+            console.warn(`MCP Consent: Unknown message type: ${msgType}`);
+          }
+        };
+
+        // Handle comm close
+        comm.onClose = (msg: any) => {
+          console.log('MCP Consent: Comm closed by backend');
+          const comms = consentComms.get(kernel);
+          if (comms) {
+            comms.delete(comm);
+          }
+        };
+      });
+
+      console.log('MCP Consent: Registered comm target mcp:capcall');
+    };
+
     // Ensure comm connection exists for a kernel
     const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
@@ -854,8 +1258,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
         ensureComm(kernel);
-        console.log('MCP Active Cell Bridge: Kernel ready, setting up comm');
+        if (kernel) {
+          registerConsentCommTarget(kernel);  // Register consent comm target
+        }
+        console.log('MCP Active Cell Bridge: Kernel ready, setting up comms');
       });
+    });
+
+    // Initialize consent comm target for existing notebooks
+    notebooks.forEach((panel: NotebookPanel) => {
+      const kernel = panel.sessionContext.session?.kernel ?? null;
+      if (kernel) {
+        registerConsentCommTarget(kernel);
+      }
     });
 
     console.log('MCP Active Cell Bridge: Event listeners registered');

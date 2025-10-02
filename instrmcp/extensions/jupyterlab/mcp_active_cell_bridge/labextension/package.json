@@ -37,12 +37,15 @@
   },
   "dependencies": {
     "@jupyterlab/application": "^4.2.0",
+    "@jupyterlab/apputils": "^4.2.0",
     "@jupyterlab/cells": "^4.2.0",
     "@jupyterlab/notebook": "^4.2.0",
-    "@jupyterlab/services": "^7.2.0"
+    "@jupyterlab/services": "^7.2.0",
+    "diff": "^8.0.2"
   },
   "devDependencies": {
     "@jupyterlab/builder": "^4.2.0",
+    "@types/diff": "^8.0.0",
     "rimraf": "^5.0.1",
     "typescript": "~5.1.6"
   },
@@ -52,7 +55,7 @@
   "jupyterlab": {
     "extension": true,
     "_build": {
-      "load": "static/remoteEntry.2d22fa1bf62c43fcd6ee.js",
+      "load": "static/remoteEntry.7fed27a45bdd007ff050.js",
       "extension": "./extension",
       "style": "./style"
     }

@@ -21,6 +21,7 @@ from .registrars import (
     DatabaseToolRegistrar,
     ResourceRegistrar,
 )
+from .dynamic_registrar import DynamicToolRegistrar
 
 # MeasureIt integration (optional)
 try:
@@ -104,8 +105,19 @@ class JupyterMCPServer:
         notebook_registrar.register_all()
 
         # Unsafe mode tools (if enabled)
+        # Create consent manager for unsafe tools
+        consent_manager_for_unsafe = None
         if not self.safe_mode:
-            unsafe_registrar = UnsafeToolRegistrar(self.mcp, self.tools)
+            from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
+
+            # Use infinite timeout for consent requests
+            # User will wait as long as needed to review and approve
+            consent_manager_for_unsafe = ConsentManager(
+                self.ipython, timeout_seconds=None
+            )
+            unsafe_registrar = UnsafeToolRegistrar(
+                self.mcp, self.tools, consent_manager_for_unsafe
+            )
             unsafe_registrar.register_all()
 
         # Optional: MeasureIt tools
@@ -117,6 +129,20 @@ class JupyterMCPServer:
         if DATABASE_AVAILABLE and "database" in self.enabled_options:
             database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
             database_registrar.register_all()
+
+        # Dynamic tool creation (meta-tools)
+        # Only available in unsafe mode
+        if not self.safe_mode:
+            auto_correct_json = "auto_correct_json" in self.enabled_options
+            # Consent is enabled by default, can be bypassed via INSTRMCP_CONSENT_BYPASS=1
+            require_consent = True
+            dynamic_registrar = DynamicToolRegistrar(
+                self.mcp,
+                self.ipython,
+                auto_correct_json=auto_correct_json,
+                require_consent=require_consent,
+            )
+            dynamic_registrar.register_all()
 
         # Commented out: Parameter subscription tools (future feature)
         # @self.mcp.tool()
