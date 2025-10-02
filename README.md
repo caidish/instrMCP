@@ -18,11 +18,11 @@ https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 - **Database Integration**: Read-only access to QCodes databases with intelligent code generation
 - **MeasureIt Templates**: Comprehensive measurement pattern library and code generation
 - **JupyterLab Native**: Seamless integration with JupyterLab
+- **Dynamic Tool Creation**: Create custom MCP tools at runtime using LLM-powered tool registration
 - **Safe mode**: Read-only mode with optional unsafe execution
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI
-
 ## Quick Start
 
 ### Installation
