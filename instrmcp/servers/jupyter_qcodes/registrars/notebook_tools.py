@@ -6,9 +6,11 @@ Registers tools for interacting with Jupyter notebook variables and cells.
 
 import json
 import logging
+import time
 from typing import List, Optional
 
 from mcp.types import TextContent
+from ..active_cell_bridge import get_cell_outputs, get_cached_cell_output
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,35 @@ class NotebookToolRegistrar:
         self.mcp = mcp_server
         self.tools = tools
         self.ipython = ipython
+
+    def _get_frontend_output(
+        self, cell_number: int, timeout_s: float = 0.5
+    ) -> Optional[dict]:
+        """
+        Request and retrieve cell output from JupyterLab frontend.
+
+        Args:
+            cell_number: Execution count of the cell
+            timeout_s: Timeout for waiting for response
+
+        Returns:
+            Dictionary with output data or None if not available
+        """
+        # First check cache
+        cached = get_cached_cell_output(cell_number)
+        if cached:
+            return cached
+
+        # Request from frontend
+        result = get_cell_outputs([cell_number], timeout_s=timeout_s)
+        if not result.get("success"):
+            return None
+
+        # Wait a bit for response to arrive and be cached
+        time.sleep(0.1)
+
+        # Check cache again
+        return get_cached_cell_output(cell_number)
 
     def register_all(self):
         """Register all notebook tools."""
@@ -200,6 +231,36 @@ class NotebookToolRegistrar:
                         # Find the most recent completed cell (has both input and output)
                         for i in range(len(In) - 1, 0, -1):  # Start from most recent
                             if In[i]:  # Skip empty entries
+                                # Try to get output from JupyterLab frontend
+                                try:
+                                    frontend_output = self._get_frontend_output(i)
+                                    if frontend_output and frontend_output.get(
+                                        "has_output"
+                                    ):
+                                        # Return the complete output structure
+                                        cell_info = {
+                                            "cell_number": i,
+                                            "execution_count": i,
+                                            "input": In[i],
+                                            "status": "completed",
+                                            "outputs": frontend_output.get(
+                                                "outputs", []
+                                            ),
+                                            "has_output": True,
+                                            "has_error": False,
+                                        }
+                                        return [
+                                            TextContent(
+                                                type="text",
+                                                text=json.dumps(cell_info, indent=2),
+                                            )
+                                        ]
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Error extracting frontend output for cell {i}: {e}"
+                                    )
+
+                                # Check Out dictionary (for expression return values)
                                 if i in Out:
                                     # Cell completed with output
                                     cell_info = {
@@ -363,6 +424,25 @@ class NotebookToolRegistrar:
                                 }
 
                                 if include_output:
+                                    # Try to get output from JupyterLab frontend
+                                    try:
+                                        frontend_output = self._get_frontend_output(i)
+                                        if frontend_output and frontend_output.get(
+                                            "has_output"
+                                        ):
+                                            # Return complete output structure
+                                            cell_info["outputs"] = frontend_output.get(
+                                                "outputs", []
+                                            )
+                                            cell_info["has_output"] = True
+                                            cells.append(cell_info)
+                                            continue  # Skip other checks for this cell
+                                    except Exception as e:
+                                        logger.warning(
+                                            f"Error getting frontend output for cell {i}: {e}"
+                                        )
+
+                                    # Check Out dictionary (expression return values)
                                     if i in Out:
                                         # Cell has output
                                         cell_info["output"] = str(Out[i])

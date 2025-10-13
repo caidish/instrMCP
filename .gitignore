@@ -123,9 +123,6 @@ temp/
 docs/build/
 docs/source/_build/
 
-# QDevBench simulation data
-qdevbench/
-
 # Node.js general (catch any missed Node.js artifacts)
 .npm
 .node_repl_history

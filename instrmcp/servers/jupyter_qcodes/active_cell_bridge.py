@@ -18,6 +18,7 @@ _STATE_LOCK = threading.Lock()
 _LAST_SNAPSHOT: Optional[Dict[str, Any]] = None
 _LAST_TS = 0.0
 _ACTIVE_COMMS = set()
+_CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}  # {exec_count: output_data}
 
 
 def _on_comm_open(comm, open_msg):
@@ -57,6 +58,21 @@ def _on_comm_open(comm, open_msg):
         elif msg_type == "pong":
             # Response to our ping request
             logger.debug("Received pong from frontend")
+
+        elif msg_type == "get_cell_outputs_response":
+            # Response from frontend with cell outputs
+            outputs = data.get("outputs", {})
+
+            # Store outputs in cache
+            with _STATE_LOCK:
+                for cell_num_str, output_data in outputs.items():
+                    try:
+                        cell_num = int(cell_num_str)
+                        _CELL_OUTPUTS_CACHE[cell_num] = output_data
+                    except ValueError:
+                        pass
+
+            logger.debug(f"Cached outputs for {len(outputs)} cells")
 
         elif msg_type in [
             "update_response",
@@ -217,7 +233,6 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         }
 
     request_id = str(uuid.uuid4())
-    responses = {}
 
     # Send update request to all active comms
     successful_sends = 0
@@ -371,7 +386,7 @@ def add_new_cell(
                     f"✅ Successfully sent add_cell request to comm {comm.comm_id}"
                 )
             else:
-                logger.warning(f"⚠️ Comm appears invalid, removing from active list")
+                logger.warning("⚠️ Comm appears invalid, removing from active list")
                 _ACTIVE_COMMS.discard(comm)
         except Exception as e:
             logger.error(
@@ -579,6 +594,83 @@ def delete_cells_by_number(
         "active_comms": len(_ACTIVE_COMMS),
         "successful_sends": successful_sends,
         "warning": "UNSAFE: Cells deletion requested - check notebook for results",
+    }
+
+
+def get_cached_cell_output(cell_number: int) -> Optional[Dict[str, Any]]:
+    """
+    Get cached output for a specific cell from the frontend response cache.
+
+    Args:
+        cell_number: Execution count number of the cell
+
+    Returns:
+        Dictionary with output data if available, None otherwise
+    """
+    with _STATE_LOCK:
+        return _CELL_OUTPUTS_CACHE.get(cell_number)
+
+
+def get_cell_outputs(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Get outputs for specific cells from the JupyterLab frontend.
+
+    Retrieves cell outputs (stdout, stderr, execute_result, errors) from
+    the notebook model in the JupyterLab frontend.
+
+    Args:
+        cell_numbers: List of execution count numbers to get outputs for (e.g., [1, 2, 5])
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with outputs for each requested cell number
+    """
+    import uuid
+
+    if not _ACTIVE_COMMS:
+        return {
+            "success": False,
+            "error": "No active comm connections to frontend",
+            "active_comms": 0,
+        }
+
+    if not isinstance(cell_numbers, list) or len(cell_numbers) == 0:
+        return {"success": False, "error": "cell_numbers must be a non-empty list"}
+
+    request_id = str(uuid.uuid4())
+
+    # Send get outputs request to all active comms
+    successful_sends = 0
+    for comm in list(_ACTIVE_COMMS):
+        try:
+            comm.send(
+                {
+                    "type": "get_cell_outputs",
+                    "cell_numbers": cell_numbers,
+                    "request_id": request_id,
+                }
+            )
+            successful_sends += 1
+            logger.debug(f"Sent get_cell_outputs request to comm {comm.comm_id}")
+        except Exception as e:
+            logger.debug(
+                f"Failed to send get_cell_outputs request to comm {comm.comm_id}: {e}"
+            )
+
+    if successful_sends == 0:
+        return {
+            "success": False,
+            "error": "Failed to send get outputs request to any frontend",
+            "active_comms": len(_ACTIVE_COMMS),
+        }
+
+    return {
+        "success": True,
+        "message": f"Get outputs request sent to {successful_sends} frontend(s)",
+        "cell_numbers": cell_numbers,
+        "request_id": request_id,
+        "active_comms": len(_ACTIVE_COMMS),
+        "successful_sends": successful_sends,
     }
 
 

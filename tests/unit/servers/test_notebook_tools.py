@@ -428,6 +428,157 @@ class TestNotebookToolRegistrar:
             response_data = json.loads(result[0].text)
             assert response_data["error_count"] >= 0
 
+    @pytest.mark.asyncio
+    async def test_get_editing_cell_output_with_stdout_capture(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test getting cell output with captured stdout from print statements."""
+        # Setup IPython with no Out dict entry (print returns None)
+        mock_ipython.user_ns = {"In": ["", 'print("hello world")'], "Out": {}}
+        mock_ipython.execution_count = 2
+
+        # Mock the frontend output response
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {"type": "stream", "name": "stdout", "text": "hello world\n"}
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func()
+
+        response_data = json.loads(result[0].text)
+        assert response_data["cell_number"] == 1
+        assert response_data["status"] == "completed"
+        assert response_data["outputs"][0]["type"] == "stream"
+        assert response_data["outputs"][0]["text"] == "hello world\n"
+        assert response_data["has_output"] is True
+        assert response_data["has_error"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_editing_cell_output_with_stderr_capture(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test getting cell output with captured stderr."""
+        # Setup IPython with no Out dict entry
+        mock_ipython.user_ns = {
+            "In": ["", 'print("error", file=sys.stderr)'],
+            "Out": {},
+        }
+        mock_ipython.execution_count = 2
+
+        # Mock the frontend output response
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {"type": "stream", "name": "stderr", "text": "error\n"}
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func()
+
+        response_data = json.loads(result[0].text)
+        assert response_data["cell_number"] == 1
+        assert response_data["status"] == "completed"
+        assert response_data["outputs"][0]["type"] == "stream"
+        assert response_data["outputs"][0]["name"] == "stderr"
+        assert response_data["has_output"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_notebook_cells_with_stdout_capture(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test getting notebook cells with captured stdout."""
+        # Setup IPython with print statements
+        mock_ipython.user_ns = {
+            "In": ["", 'print("first")', 'print("second")'],
+            "Out": {},
+        }
+        mock_ipython.execution_count = 3
+
+        # Mock the frontend output response
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {"type": "stream", "name": "stdout", "text": "first\n"}
+                    ],
+                }
+            elif cell_number == 2:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {"type": "stream", "name": "stdout", "text": "second\n"}
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
+        result = await get_cells_func(num_cells=2, include_output=True)
+
+        response_data = json.loads(result[0].text)
+        cells = response_data["cells"]
+
+        assert len(cells) == 2
+        assert cells[0]["outputs"][0]["text"] == "first\n"
+        assert cells[0]["has_output"] is True
+        assert cells[1]["outputs"][0]["text"] == "second\n"
+        assert cells[1]["has_output"] is True
+
+    @pytest.mark.asyncio
+    async def test_frontend_output_priority_over_out_dict(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test that frontend output takes priority over Out dictionary."""
+        # Setup IPython with both Out entry and frontend output
+        mock_ipython.user_ns = {
+            "In": ["", 'print("stdout"); 42'],
+            "Out": {1: 42},  # Out has return value
+        }
+        mock_ipython.execution_count = 2
+
+        # Mock frontend output - should take priority
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {"type": "stream", "name": "stdout", "text": "stdout\n"},
+                        {"type": "execute_result", "data": {"text/plain": "42"}},
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func()
+
+        response_data = json.loads(result[0].text)
+        # Should return outputs from frontend, not just Out value
+        assert len(response_data["outputs"]) == 2
+        assert response_data["outputs"][0]["text"] == "stdout\n"
+        assert response_data["has_output"] is True
+
     def test_all_tools_are_async(self, registrar, mock_mcp_server):
         """Test that all registered tools are async functions."""
         import asyncio

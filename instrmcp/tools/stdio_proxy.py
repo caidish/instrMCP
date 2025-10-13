@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 from fastmcp import FastMCP
-from mcp.types import TextContent
+from mcp.types import TextContent, Resource, TextResourceContents
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class HttpMCPProxy:
         self.client = httpx.AsyncClient(timeout=30.0)
         self.working_endpoint: Optional[str] = None
         self.session_id: Optional[str] = None
+        self._resource_cache: dict = {}  # Cache for resource list
 
     async def _find_working_endpoint(self) -> str:
         if self.working_endpoint:
@@ -156,6 +157,85 @@ class HttpMCPProxy:
             return {"error": "Invalid JSON-RPC response"}
         except Exception as e:
             return {"error": f"Proxy request failed: {e}"}
+
+    async def list_resources(self) -> list:
+        """List available resources from the HTTP MCP server."""
+        try:
+            await self._ensure_session()
+            endpoint = await self._find_working_endpoint()
+
+            req = {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "resources/list",
+                "params": {},
+            }
+
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            }
+            if self.session_id:
+                headers["mcp-session-id"] = self.session_id
+
+            resp = await self.client.post(endpoint, json=req, headers=headers)
+            resp.raise_for_status()
+
+            text = resp.text
+            if "data: " in text:
+                payload = json.loads(text.split("data: ")[1].strip())
+            else:
+                payload = resp.json()
+
+            if "error" in payload:
+                logger.error(f"Error listing resources: {payload['error']}")
+                return []
+            if "result" in payload:
+                result = payload["result"]
+                if isinstance(result, dict) and "resources" in result:
+                    return result["resources"]
+                return []
+            return []
+        except Exception as e:
+            logger.error(f"Failed to list resources: {e}")
+            return []
+
+    async def read_resource(self, uri: str) -> dict:
+        """Read a specific resource from the HTTP MCP server."""
+        try:
+            await self._ensure_session()
+            endpoint = await self._find_working_endpoint()
+
+            req = {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "resources/read",
+                "params": {"uri": uri},
+            }
+
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            }
+            if self.session_id:
+                headers["mcp-session-id"] = self.session_id
+
+            resp = await self.client.post(endpoint, json=req, headers=headers)
+            resp.raise_for_status()
+
+            text = resp.text
+            if "data: " in text:
+                payload = json.loads(text.split("data: ")[1].strip())
+            else:
+                payload = resp.json()
+
+            if "error" in payload:
+                return {"error": f"MCP error: {payload['error']}"}
+            if "result" in payload:
+                return payload["result"]
+            return {"error": "Invalid JSON-RPC response"}
+        except Exception as e:
+            return {"error": f"Failed to read resource: {e}"}
 
 
 async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bool:
@@ -467,5 +547,265 @@ def create_stdio_proxy_server(
         """Get statistics about the dynamic tool registry."""
         result = await proxy.call("dynamic_registry_stats")
         return [TextContent(type="text", text=str(result))]
+
+    # Register resources
+    # Core QCodes resources
+    @mcp.resource("resource://available_instruments")
+    async def available_instruments() -> Resource:
+        """Resource providing list of available QCodes instruments."""
+        result = await proxy.read_resource("resource://available_instruments")
+        if "error" in result:
+            error_content = json.dumps({"error": result["error"]}, indent=2)
+            return Resource(
+                uri="resource://available_instruments",
+                name="Available Instruments (Error)",
+                description="Error retrieving available instruments",
+                mimeType="application/json",
+                contents=[
+                    TextResourceContents(
+                        uri="resource://available_instruments",
+                        mimeType="application/json",
+                        text=error_content,
+                    )
+                ],
+            )
+
+        # Extract content from result
+        contents_data = result.get("contents", [])
+        if contents_data and isinstance(contents_data, list):
+            text_content = contents_data[0].get("text", "{}")
+        else:
+            text_content = "{}"
+
+        return Resource(
+            uri="resource://available_instruments",
+            name="Available Instruments",
+            description=(
+                "List of QCodes instruments available in the namespace "
+                "with hierarchical parameter structure"
+            ),
+            mimeType="application/json",
+            contents=[
+                TextResourceContents(
+                    uri="resource://available_instruments",
+                    mimeType="application/json",
+                    text=text_content,
+                )
+            ],
+        )
+
+    @mcp.resource("resource://station_state")
+    async def station_state() -> Resource:
+        """Resource providing current QCodes station snapshot."""
+        result = await proxy.read_resource("resource://station_state")
+        if "error" in result:
+            error_content = json.dumps({"error": result["error"]}, indent=2)
+            return Resource(
+                uri="resource://station_state",
+                name="Station State (Error)",
+                description="Error retrieving station state",
+                mimeType="application/json",
+                contents=[
+                    TextResourceContents(
+                        uri="resource://station_state",
+                        mimeType="application/json",
+                        text=error_content,
+                    )
+                ],
+            )
+
+        # Extract content from result
+        contents_data = result.get("contents", [])
+        if contents_data and isinstance(contents_data, list):
+            text_content = contents_data[0].get("text", "{}")
+        else:
+            text_content = "{}"
+
+        return Resource(
+            uri="resource://station_state",
+            name="QCodes Station State",
+            description="Current QCodes station snapshot without parameter values",
+            mimeType="application/json",
+            contents=[
+                TextResourceContents(
+                    uri="resource://station_state",
+                    mimeType="application/json",
+                    text=text_content,
+                )
+            ],
+        )
+
+    # MeasureIt resources (optional - only available if measureit option is enabled on server)
+    measureit_resources = [
+        (
+            "measureit_sweep0d_template",
+            "MeasureIt Sweep0D Template",
+            "Sweep0D code examples and patterns for time-based monitoring",
+        ),
+        (
+            "measureit_sweep1d_template",
+            "MeasureIt Sweep1D Template",
+            "Sweep1D code examples and patterns for single parameter sweeps",
+        ),
+        (
+            "measureit_sweep2d_template",
+            "MeasureIt Sweep2D Template",
+            "Sweep2D code examples and patterns for 2D parameter mapping",
+        ),
+        (
+            "measureit_simulsweep_template",
+            "MeasureIt SimulSweep Template",
+            "SimulSweep code examples for simultaneous parameter sweeping",
+        ),
+        (
+            "measureit_sweepqueue_template",
+            "MeasureIt SweepQueue Template",
+            "SweepQueue code examples for sequential measurement workflows",
+        ),
+        (
+            "measureit_common_patterns",
+            "MeasureIt Common Patterns",
+            "Common MeasureIt patterns and best practices",
+        ),
+        (
+            "measureit_code_examples",
+            "MeasureIt Code Examples",
+            "Complete collection of ALL MeasureIt patterns in structured format",
+        ),
+    ]
+
+    for uri_suffix, name, description in measureit_resources:
+        # Create a closure to capture the current values
+        def make_measureit_resource(
+            uri_suffix=uri_suffix, name=name, description=description
+        ):
+            uri = f"resource://{uri_suffix}"
+
+            @mcp.resource(uri)
+            async def measureit_resource() -> Resource:
+                result = await proxy.read_resource(uri)
+                if "error" in result:
+                    error_content = json.dumps({"error": result["error"]}, indent=2)
+                    return Resource(
+                        uri=uri,
+                        name=f"{name} (Error)",
+                        description=f"Error retrieving {name}",
+                        mimeType="application/json",
+                        contents=[
+                            TextResourceContents(
+                                uri=uri,
+                                mimeType="application/json",
+                                text=error_content,
+                            )
+                        ],
+                    )
+
+                # Extract content from result
+                contents_data = result.get("contents", [])
+                if contents_data and isinstance(contents_data, list):
+                    text_content = contents_data[0].get("text", "{}")
+                else:
+                    text_content = "{}"
+
+                return Resource(
+                    uri=uri,
+                    name=name,
+                    description=description,
+                    mimeType="application/json",
+                    contents=[
+                        TextResourceContents(
+                            uri=uri,
+                            mimeType="application/json",
+                            text=text_content,
+                        )
+                    ],
+                )
+
+            return measureit_resource
+
+        make_measureit_resource()
+
+    # Database resources (optional - only available if database option is enabled on server)
+    @mcp.resource("resource://database_config")
+    async def database_config() -> Resource:
+        """Resource providing current QCodes database configuration."""
+        result = await proxy.read_resource("resource://database_config")
+        if "error" in result:
+            error_content = json.dumps({"error": result["error"]}, indent=2)
+            return Resource(
+                uri="resource://database_config",
+                name="Database Configuration (Error)",
+                description="Error retrieving database configuration",
+                mimeType="application/json",
+                contents=[
+                    TextResourceContents(
+                        uri="resource://database_config",
+                        mimeType="application/json",
+                        text=error_content,
+                    )
+                ],
+            )
+
+        # Extract content from result
+        contents_data = result.get("contents", [])
+        if contents_data and isinstance(contents_data, list):
+            text_content = contents_data[0].get("text", "{}")
+        else:
+            text_content = "{}"
+
+        return Resource(
+            uri="resource://database_config",
+            name="Database Configuration",
+            description="Current QCodes database configuration, path, and connection status",
+            mimeType="application/json",
+            contents=[
+                TextResourceContents(
+                    uri="resource://database_config",
+                    mimeType="application/json",
+                    text=text_content,
+                )
+            ],
+        )
+
+    @mcp.resource("resource://recent_measurements")
+    async def recent_measurements() -> Resource:
+        """Resource providing metadata for recent measurements."""
+        result = await proxy.read_resource("resource://recent_measurements")
+        if "error" in result:
+            error_content = json.dumps({"error": result["error"]}, indent=2)
+            return Resource(
+                uri="resource://recent_measurements",
+                name="Recent Measurements (Error)",
+                description="Error retrieving recent measurements",
+                mimeType="application/json",
+                contents=[
+                    TextResourceContents(
+                        uri="resource://recent_measurements",
+                        mimeType="application/json",
+                        text=error_content,
+                    )
+                ],
+            )
+
+        # Extract content from result
+        contents_data = result.get("contents", [])
+        if contents_data and isinstance(contents_data, list):
+            text_content = contents_data[0].get("text", "[]")
+        else:
+            text_content = "[]"
+
+        return Resource(
+            uri="resource://recent_measurements",
+            name="Recent Measurements",
+            description="Metadata for recent measurements across all experiments",
+            mimeType="application/json",
+            contents=[
+                TextResourceContents(
+                    uri="resource://recent_measurements",
+                    mimeType="application/json",
+                    text=text_content,
+                )
+            ],
+        )
 
     return mcp

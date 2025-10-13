@@ -513,6 +513,152 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Handle get cell outputs requests from kernel
+    const handleGetCellOutputs = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const cellNumbers = data.cell_numbers || [];  // Array of execution counts
+
+      try {
+        const panel = notebooks.currentWidget;
+
+        if (!panel) {
+          comm.send({
+            type: 'get_cell_outputs_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+
+        const notebook = panel.content;
+        const cells = notebook.model?.cells;
+
+        if (!cells) {
+          comm.send({
+            type: 'get_cell_outputs_response',
+            request_id: requestId,
+            success: false,
+            message: 'Cannot access notebook cells'
+          });
+          return;
+        }
+
+        // Map execution counts to cells
+        const executionCountToCell = new Map<number, ICellModel>();
+        for (let i = 0; i < cells.length; i++) {
+          const cellModel = cells.get(i);
+          const execCount = (cellModel as any).executionCount;
+          if (execCount != null && cellModel.type === 'code') {
+            executionCountToCell.set(execCount, cellModel);
+          }
+        }
+
+        const outputs: any = {};
+
+        // Get outputs for each requested cell number
+        for (const cellNum of cellNumbers) {
+          const cellModel = executionCountToCell.get(cellNum);
+
+          if (!cellModel) {
+            outputs[cellNum] = {
+              success: false,
+              message: `Cell with execution count ${cellNum} not found`
+            };
+            continue;
+          }
+
+          // Get outputs from the cell model
+          const cellOutputs = (cellModel as any).outputs;
+          const outputData: any[] = [];
+
+          if (cellOutputs && cellOutputs.length > 0) {
+            for (let i = 0; i < cellOutputs.length; i++) {
+              const output = cellOutputs.get(i);
+              const outputType = output.type;
+
+              if (outputType === 'stream') {
+                // stdout/stderr output
+                // Access the raw data from the output model
+                const rawData = output._raw || {};
+                const streamName = rawData.name || 'stdout';
+
+                // Text can be in _raw.text or _text._text
+                let textValue = rawData.text;
+                if (!textValue && output._text) {
+                  textValue = output._text._text || output._text;
+                }
+
+                // Handle array format (though JupyterLab usually normalizes this)
+                if (Array.isArray(textValue)) {
+                  textValue = textValue.join('');
+                }
+
+                outputData.push({
+                  type: 'stream',
+                  name: streamName,
+                  text: textValue || ''
+                });
+              } else if (outputType === 'execute_result') {
+                // Expression result
+                // Access data from _rawData or data property
+                const resultData = output._rawData || output.data || {};
+                outputData.push({
+                  type: 'execute_result',
+                  execution_count: output.executionCount,
+                  data: resultData
+                });
+              } else if (outputType === 'display_data') {
+                // Rich display
+                const displayData = output._rawData || output.data || {};
+                outputData.push({
+                  type: 'display_data',
+                  data: displayData
+                });
+              } else if (outputType === 'error') {
+                // Error/traceback - access from _raw
+                const rawError = output._raw || {};
+                outputData.push({
+                  type: 'error',
+                  ename: rawError.ename || output.ename || '',
+                  evalue: rawError.evalue || output.evalue || '',
+                  traceback: rawError.traceback || output.traceback || []
+                });
+              }
+            }
+          }
+
+          outputs[cellNum] = {
+            success: true,
+            execution_count: cellNum,
+            has_output: outputData.length > 0,
+            outputs: outputData
+          };
+        }
+
+        // Send success response with all outputs
+        comm.send({
+          type: 'get_cell_outputs_response',
+          request_id: requestId,
+          success: true,
+          outputs: outputs,
+          message: `Retrieved outputs for ${Object.keys(outputs).length} cell(s)`
+        });
+
+        console.log(`MCP Active Cell Bridge: Retrieved outputs for ${cellNumbers.length} cell(s)`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to get cell outputs:', error);
+
+        comm.send({
+          type: 'get_cell_outputs_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to get cell outputs: ${error}`
+        });
+      }
+    };
+
     // Handle delete cells by number requests from kernel
     const handleDeleteCellsByNumber = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
@@ -1092,6 +1238,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleDeleteCellsByNumber(kernel, comm, data);
               } else if (msgType === 'move_cursor') {
                 handleMoveCursor(kernel, comm, data);
+              } else if (msgType === 'get_cell_outputs') {
+                handleGetCellOutputs(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
               } else {
