@@ -6,15 +6,12 @@ for the STDIO↔HTTP MCP proxy functionality.
 """
 
 import pytest
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, patch, Mock
 from instrmcp.tools.stdio_proxy import (
     HttpMCPProxy,
     check_http_mcp_server,
     create_stdio_proxy_server,
 )
-from mcp.types import TextContent
 
 
 class TestHttpMCPProxy:
@@ -315,7 +312,7 @@ class TestHttpMCPProxy:
         mock_response.raise_for_status = Mock()
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
-        result = await proxy.call("test_tool")
+        await proxy.call("test_tool")
 
         call_args = mock_httpx_client.post.call_args
         assert call_args.kwargs["json"]["params"]["arguments"] == {}
@@ -723,5 +720,5 @@ class TestCreateStdioProxyServer:
 
             # Verify all tools are created
             tools = await mcp.get_tools()
-            # 19 original tools + 6 dynamic tool meta-tools = 25
-            assert len(tools) == 25
+            # 19 original tools + 6 dynamic tool meta-tools + 2 resource tools = 27
+            assert len(tools) == 27

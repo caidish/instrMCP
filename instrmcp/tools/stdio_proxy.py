@@ -387,6 +387,41 @@ def create_stdio_proxy_server(
         }
         return [TextContent(type="text", text=str(info))]
 
+    @mcp.tool(name="mcp_list_resources")
+    async def list_resources() -> list[TextContent]:
+        """
+        List all available MCP resources and guide on when to use them.
+
+        MCP Resources provide READ-ONLY reference data and templates,
+        while Tools perform active operations. Use this tool to discover
+        what context and documentation is available.
+        """
+        result = await proxy.call("mcp_list_resources")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="mcp_get_resource")
+    async def get_resource(uri: str) -> list[TextContent]:
+        """
+        Retrieve the content of a specific MCP resource by its URI.
+
+        Use this tool to access resource content when you need the actual data
+        (e.g., instrument list, templates, configuration). This is a fallback
+        when direct resource access is not available.
+
+        Args:
+            uri: Resource URI (e.g., "resource://available_instruments")
+
+        Returns:
+            Resource content as JSON or text.
+
+        Examples:
+            - mcp_get_resource("resource://available_instruments")
+            - mcp_get_resource("resource://measureit_sweep1d_template")
+            - mcp_get_resource("resource://database_config")
+        """
+        result = await proxy.call("mcp_get_resource", uri=uri)
+        return [TextContent(type="text", text=str(result))]
+
     # Unsafe notebook tools
     @mcp.tool(name="notebook_execute_cell")
     async def execute_editing_cell() -> list[TextContent]:

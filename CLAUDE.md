@@ -85,6 +85,17 @@ The system uses a proxy pattern where:
 
 All tools use underscore naming convention for better compatibility.
 
+**Resource Discovery Tools:**
+- `mcp_list_resources()` - List all available MCP resources with guidance on when to use resources vs tools
+  - Returns comprehensive guide including all resource URIs, descriptions, use cases, and common patterns
+  - Use this FIRST to discover what context and documentation is available
+  - Helps decide when to use resources (read-only reference) vs tools (active operations)
+- `mcp_get_resource(uri)` - Retrieve content of a specific MCP resource by URI
+  - Fallback tool for accessing resource content when direct resource access is unavailable
+  - Accepts any resource URI (e.g., "resource://available_instruments", "resource://measureit_sweep1d_template")
+  - Returns resource content as JSON or text
+  - Provides error messages with available URIs if URI is invalid
+
 **QCodes Instrument Tools:**
 - `qcodes_instrument_info(name, with_values)` - Get instrument details and parameter values
 - `qcodes_get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)

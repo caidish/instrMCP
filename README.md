@@ -182,7 +182,43 @@ Codex expects MCP servers over STDIO. Use the Codex launcher to proxy STDIO call
 
 ## V2.0.0 Features (Current Release)
 
-### 1. Visual Diff Consent for Notebook Patching
+### 1. Resource Discovery Tool
+The `mcp_list_resources()` tool helps LLMs discover and effectively use MCP resources:
+
+**Features:**
+- **Comprehensive Resource Listing**: All available MCP resources with URIs, descriptions, and use cases
+- **Context-Aware**: Only shows resources based on enabled options (core, MeasureIt, database)
+- **Resources vs Tools Guidance**: Educates LLMs on when to use read-only resources vs active tools
+- **Common Patterns**: Examples like "Check available_instruments → Use qcodes_instrument_info"
+- **First-Use Recommendation**: Use this tool FIRST to discover what context is available
+
+**Example Response:**
+```json
+{
+  "total_resources": 8,
+  "resources": [
+    {
+      "uri": "resource://available_instruments",
+      "name": "Available Instruments",
+      "use_when": "Need to know what instruments exist BEFORE calling qcodes_instrument_info",
+      "example": "Check this first to see instrument names..."
+    }
+  ],
+  "guidance": {
+    "resources_vs_tools": {
+      "resources": "Provide READ-ONLY reference data, templates, and documentation",
+      "tools": "Perform ACTIVE operations like reading live values, executing code"
+    },
+    "when_to_use_resources": [
+      "Before using tools - check available_instruments first",
+      "For code templates - get MeasureIt examples",
+      "For configuration - check database_config"
+    ]
+  }
+}
+```
+
+### 2. Visual Diff Consent for Notebook Patching
 Enhanced `notebook_apply_patch` with visual diff dialog showing exactly what will change:
 
 **Features:**
@@ -198,7 +234,7 @@ Enhanced `notebook_apply_patch` with visual diff dialog showing exactly what wil
 + x = 20  ← Green background
 ```
 
-### 2. Line Range Parameters for Context Management
+### 3. Line Range Parameters for Context Management
 Control LLM context window consumption with line range selection:
 
 **Features:**
@@ -216,7 +252,7 @@ get_editing_cell(line_start=1, line_end=50)
 get_editing_cell(line_start=100, line_end=200)
 ```
 
-### 3. Dynamic Tool Creation
+### 4. Dynamic Tool Creation
 Create custom MCP tools at runtime using LLM-powered tool registration:
 
 ```python
