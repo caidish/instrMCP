@@ -100,7 +100,7 @@ s = Sweep1D(
     gate.voltage,           # Parameter to sweep
     start=-1.0,             # Start value
     stop=1.0,               # Stop value
-    rate=0.01,              # Sweep rate (units/second)
+    step=0.01,              # Step size between measurements
     inter_delay=0.1,        # Delay between measurements
     save_data=True,
     bidirectional=True,     # Sweep back and forth
@@ -131,7 +131,7 @@ s.start()
 s = Sweep1D(
     freq_source.frequency,
     start=1e6, stop=10e6,   # 1-10 MHz
-    rate=1e5,               # 100 kHz/s
+    step=1e5,               # 100 kHz steps
     inter_delay=0.01,       # Fast measurements
     save_data=True,
     bidirectional=False,
@@ -145,7 +145,7 @@ s.start()
 s = Sweep1D(
     temperature.setpoint,
     start=4.0, stop=300.0,  # 4K to 300K
-    rate=0.1,               # 0.1 K/s
+    step=0.5,               # 0.5 K steps
     inter_delay=5.0,        # 5s between measurements
     save_data=True,
     bidirectional=False
@@ -162,7 +162,7 @@ s.start()
 s = Sweep1D(
     gate.voltage,
     start=-2.0, stop=2.0,
-    rate=0.05,
+    step=0.05,
     inter_delay=0.1,
     save_data=True,
     bidirectional=True,
@@ -178,7 +178,7 @@ s.start()
             "parameter": "QCoDeS parameter object to sweep",
             "start": "Starting value for sweep",
             "stop": "Ending value for sweep",
-            "rate": "Sweep rate in parameter_units/second",
+            "step": "Step size between measured datapoints",
             "inter_delay": "Delay between measurements (seconds)",
             "bidirectional": "True: sweep back and forth, False: one direction",
             "continual": "True: sweep continuously, False: stop after completion",
@@ -188,7 +188,7 @@ s.start()
             "Parameter will safely ramp to start value if not already there",
             "Use spacebar during sweep to reverse direction",
             "Bidirectional sweeps are useful for hysteresis measurements",
-            "Set appropriate rate to avoid damaging instruments",
+            "Set appropriate step size to avoid damaging instruments",
             "continual=True useful for real-time monitoring",
             "To see if the sweep is finished or not, check s.is_running",
         ],
@@ -520,7 +520,7 @@ exp_name = "measurement_sequence"
 
 # Step 1: Initial characterization sweep
 s1 = Sweep1D(
-    gate.voltage, start=-1.0, stop=1.0, rate=0.02,
+    gate.voltage, start=-1.0, stop=1.0, step=0.02,
     inter_delay=0.1, save_data=True, bidirectional=True
 )
 s1.follow_param(*follow_params)
@@ -538,7 +538,7 @@ sq += (adjust_settings,)
 
 # Step 3: Fine measurement at interesting region
 s2 = Sweep1D(
-    gate.voltage, start=-0.1, stop=0.1, rate=0.005,
+    gate.voltage, start=-0.1, stop=0.1, step=0.005,
     inter_delay=0.2, save_data=True, bidirectional=False
 )
 s2.follow_param(*follow_params)
@@ -615,7 +615,7 @@ for i, bias in enumerate(bias_points):
 
     # Measure at this bias point
     s = Sweep1D(
-        gate.voltage, start=-1, stop=1, rate=0.02,
+        gate.voltage, start=-1, stop=1, step=0.02,
         inter_delay=0.1, save_data=True, bidirectional=True
     )
     s.follow_param(*follow_params)
@@ -648,7 +648,7 @@ for device, channel in zip(devices, switch_channels):
 
     # Characterize device
     s = Sweep1D(
-        gate.voltage, start=-0.5, stop=0.5, rate=0.01,
+        gate.voltage, start=-0.5, stop=0.5, step=0.01,
         inter_delay=0.1, save_data=True
     )
     s.follow_param(lockin.x, lockin.y)
@@ -759,7 +759,7 @@ sweep2d.follow_heatmap_param([primary_signal, secondary_signal])
 """,
             "performance": """# Optimized plotting for performance
 sweep = Sweep1D(
-    parameter, start, stop, rate,
+    parameter, start, stop, step,
     plot_bin=10,        # Plot every 10th point
     inter_delay=0.05    # Fast measurements
 )
@@ -789,7 +789,7 @@ current_value = gate.voltage()
 if abs(current_value - start_value) > 0.1:
     print(f"Will ramp from {current_value}V to {start_value}V")
 
-sweep = Sweep1D(gate.voltage, start_value, stop_value, safe_rate)
+sweep = Sweep1D(gate.voltage, start_value, stop_value, safe_step_size)
 """,
             "limits_check": """# Check parameter limits before sweeping
 param_limits = gate.voltage.vals
@@ -802,7 +802,7 @@ if start_value < param_limits.min or stop_value > param_limits.max:
             "instrument_settling": """# Allow for instrument settling
 sweep = Sweep1D(
     slow_instrument.parameter,
-    start, stop, rate,
+    start, stop, step,
     inter_delay=2.0,        # 2s settling time
     outer_delay=5.0         # 5s for outer parameter (2D sweeps)
 )
@@ -947,7 +947,7 @@ sweep2d.follow_heatmap_param([primary_signal])
             "sweep1d": {
                 "when_to_use": "Sweep one parameter while monitoring others",
                 "examples": ["Gate voltage sweeps", "Frequency response", "IV curves"],
-                "key_parameters": ["start", "stop", "rate", "bidirectional"],
+                "key_parameters": ["start", "stop", "step", "bidirectional"],
             },
             "sweep2d": {
                 "when_to_use": "Create 2D maps by sweeping two parameters",
@@ -981,7 +981,7 @@ sweep2d.follow_heatmap_param([primary_signal])
             "ai_instructions": [
                 "Always use appropriate sweep type based on user requirements",
                 "Include proper database initialization with meaningful names",
-                "Set realistic sweep rates and delays for instrument safety",
+                "Set realistic step sizes and delays for instrument safety",
                 "Add parameter following for relevant measurements",
                 "Include plotting setup for real-time monitoring",
                 "Consider using SweepQueue for complex measurement protocols",
@@ -990,7 +990,7 @@ sweep2d.follow_heatmap_param([primary_signal])
             ],
             "safety_guidelines": [
                 "Check instrument parameter limits before sweeping",
-                "Use safe sweep rates to avoid damaging equipment",
+                "Use safe step sizes to avoid damaging equipment",
                 "Include proper settling delays (inter_delay, outer_delay)",
                 "Validate sweep ranges against instrument specifications",
                 "Consider using bidirectional=False for sensitive parameters",
