@@ -107,15 +107,25 @@ This is controlled via the `safe_mode` parameter in server initialization and th
 
 The package includes a JupyterLab extension for active cell bridging:
 - Located in `instrmcp/extensions/jupyterlab/`
-- **Build workflow:**
-  ```bash
-  cd instrmcp/extensions/jupyterlab
-  jlpm run build
-  ```
-  - The build automatically copies files to `mcp_active_cell_bridge/labextension/`
-  - This ensures `pip install -e .` will find the latest built files
-- Automatically installed with the main package
-- Enables real-time cell content access for MCP tools
+- **Pre-built extension included**: Users don't need Node.js for installation
+- **For development only**: Node.js and jlpm required to modify TypeScript source
+
+**User Installation (No Node.js needed):**
+```bash
+pip install -e .
+instrmcp-setup  # Installs pre-built extension
+```
+
+**Development Build Workflow (Requires Node.js):**
+```bash
+# Install dependencies (first time only)
+cd instrmcp/extensions/jupyterlab
+jlpm install
+
+# Build after modifying TypeScript
+jlpm run build
+# The build automatically copies files to mcp_active_cell_bridge/labextension/
+```
 
 **Important for development:** After modifying TypeScript files, you must:
 1. Run `jlpm run build` in the extension directory

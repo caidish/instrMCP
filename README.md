@@ -25,9 +25,21 @@ https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI
 ## Quick Start
 
+### Prerequisites
+
+- **Python 3.10+** (automatically checked during install)
+- **Node.js and npm** (required for JupyterLab extension installation)
+  - Check if installed: `node --version && npm --version`
+  - Install via conda: `conda install nodejs`
+  - Or download from: https://nodejs.org
+
 ### Installation
 
 ```bash
+# Install Node.js (if not already installed)
+conda install nodejs  # Recommended for conda users
+# OR download from https://nodejs.org
+
 # Install from source
 git clone https://github.com/caidish/instrMCP.git
 cd instrMCP
@@ -41,10 +53,15 @@ source ~/.zshrc
 
 # For Windows (PowerShell):
 $env:instrMCP_PATH = (Get-Location).Path
-[System.Environment]::SetEnvironmentVariable('instrMCP_PATH', (Get-Location).Path, 'User') 
+[System.Environment]::SetEnvironmentVariable('instrMCP_PATH', (Get-Location).Path, 'User')
+
+# Setup JupyterLab extension (required for cell access), you may need adminstrative rights. (run powershell as administrator on Windows)
+instrmcp-setup
 ```
 
-**That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
+**That's it!** QCodes, JupyterLab, and all Python dependencies are automatically installed.
+
+> **Why Node.js?** While the JupyterLab extension comes pre-built, `instrmcp-setup` needs Node.js to run `jupyter lab build`, which integrates the extension into your JupyterLab installation. Node.js is NOT needed to modify the extension source - only to install it.
 
 ### Extension: MeasureIt
 
