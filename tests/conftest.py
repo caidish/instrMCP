@@ -138,6 +138,8 @@ def sample_notebook_cells():
 def mock_database_path(temp_dir):
     """Create a mock database path for testing."""
     db_path = temp_dir / "test_database.db"
+    # Create the actual file so path resolution doesn't fail
+    db_path.touch()
     return str(db_path)
 
 

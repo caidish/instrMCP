@@ -34,8 +34,8 @@ class TestResolveDatabasePath:
 
         resolved_path, resolution_info = _resolve_database_path(explicit_path)
         assert resolved_path == explicit_path
-        assert resolution_info['source'] == 'explicit'
-        assert resolution_info['tried_path'] == explicit_path
+        assert resolution_info["source"] == "explicit"
+        assert resolution_info["tried_path"] == explicit_path
 
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
         """Test MeasureIt get_path() is used (via measureit.get_path)."""
@@ -51,7 +51,7 @@ class TestResolveDatabasePath:
             resolved_path, resolution_info = _resolve_database_path(None)
             expected = str(db_dir / "Example_database.db")
             assert resolved_path == expected
-            assert resolution_info['source'] == 'measureit_default'
+            assert resolution_info["source"] == "measureit_default"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_resolve_qcodes_default(self, monkeypatch, temp_dir):
@@ -65,7 +65,7 @@ class TestResolveDatabasePath:
                 mock_qc.config.core.db_location = str(qcodes_db)
                 resolved_path, resolution_info = _resolve_database_path(None)
                 assert resolved_path == str(qcodes_db)
-                assert resolution_info['source'] == 'qcodes_config'
+                assert resolution_info["source"] == "qcodes_config"
 
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
@@ -83,7 +83,7 @@ class TestResolveDatabasePath:
 
             resolved_path, resolution_info = _resolve_database_path(explicit_path)
             assert resolved_path == explicit_path
-            assert resolution_info['source'] == 'explicit'
+            assert resolution_info["source"] == "explicit"
 
 
 class TestFormatFileSize:
@@ -459,8 +459,10 @@ class TestGetDatabaseStats:
         db_path = temp_dir / "nonexistent.db"
         result = json.loads(get_database_stats(str(db_path)))
 
-        assert result["database_exists"] is False
-        assert result["database_size_bytes"] is None
+        # Should return error for nonexistent path
+        assert "error" in result
+        assert "error_type" in result
+        assert result["error_type"] == "database_not_found"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_database_stats_existing_database(self, temp_dir):
@@ -620,17 +622,26 @@ class TestQueryToolsIntegration:
     ):
         """Test all tools use consistent path resolution."""
         mock_experiments.return_value = []
-        monkeypatch.setenv("MeasureItHome", str(temp_dir))
 
-        experiments_result = json.loads(list_experiments())
-        stats_result = json.loads(get_database_stats())
+        # Create the expected database file
+        db_dir = temp_dir / "Databases"
+        db_dir.mkdir()
+        expected_db = db_dir / "Example_database.db"
+        expected_db.touch()
 
-        expected_path = str(temp_dir / "Databases" / "Example_database.db")
-        # Check if database_path exists (may be in error dict)
-        if "database_path" in experiments_result:
-            assert experiments_result["database_path"] == expected_path
-        if "database_path" in stats_result:
-            assert stats_result["database_path"] == expected_path
+        # Mock measureit.get_path to return our temp directory
+        with patch("measureit.get_path") as mock_get_path:
+            mock_get_path.return_value = db_dir
+
+            experiments_result = json.loads(list_experiments())
+            stats_result = json.loads(get_database_stats())
+
+            expected_path = str(expected_db)
+            # Check if database_path exists (may be in error dict)
+            if "database_path" in experiments_result:
+                assert experiments_result["database_path"] == expected_path
+            if "database_path" in stats_result:
+                assert stats_result["database_path"] == expected_path
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_all_tools_return_valid_json(self):
