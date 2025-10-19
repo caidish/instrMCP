@@ -24,8 +24,8 @@ def get_sweep0d_template() -> str:
         ],
         "basic_pattern": """# Sweep0D - Monitor parameters vs time
 import os
-from MeasureIt.sweep0d import Sweep0D
-from MeasureIt.util import init_database
+from measureit.sweep0d import Sweep0D
+from measureit.util import init_database
 
 # Configure time-based monitoring
 s = Sweep0D(
@@ -91,8 +91,8 @@ def get_sweep1d_template() -> str:
         ],
         "basic_pattern": """# Sweep1D - Single parameter sweep
 import os
-from MeasureIt.sweep1d import Sweep1D
-from MeasureIt.util import init_database
+from measureit.sweep1d import Sweep1D
+from measureit.util import init_database
 
 # Configure sweep
 s = Sweep1D(
@@ -213,8 +213,8 @@ def get_sweep2d_template() -> str:
         ],
         "basic_pattern": """# Sweep2D - 2D parameter mapping
 import os
-from MeasureIt.sweep2d import Sweep2D
-from MeasureIt.util import init_database
+from measureit.sweep2d import Sweep2D
+from measureit.util import init_database
 
 # Define sweep parameters
 inner_param = gate1.voltage     # Fast axis (swept back/forth)
@@ -357,8 +357,8 @@ def get_simulsweep_template() -> str:
         ],
         "basic_pattern": """# SimulSweep - Simultaneous parameter sweeping
 import os
-from MeasureIt.simul_sweep import SimulSweep
-from MeasureIt.util import init_database
+from measureit.simul_sweep import SimulSweep
+from measureit.util import init_database
 
 # Define parameter sweep dictionary
 parameter_dict = {
@@ -498,10 +498,10 @@ def get_sweepqueue_template() -> str:
         "basic_pattern": """# SweepQueue - Sequential measurement workflow
 import os
 from pathlib import Path
-from MeasureIt.sweep_queue import SweepQueue, DatabaseEntry
-from MeasureIt.sweep1d import Sweep1D
-from MeasureIt.sweep2d import Sweep2D
-from MeasureIt.util import init_database
+from measureit.sweep_queue import SweepQueue, DatabaseEntry
+from measureit.sweep1d import Sweep1D
+from measureit.sweep2d import Sweep2D
+from measureit.util import init_database
 
 # Initialize sweep queue
 sq = SweepQueue()
@@ -689,7 +689,7 @@ def get_common_patterns_template() -> str:
         "database_setup": {
             "description": "Standard database initialization patterns",
             "basic": """# Basic database setup
-from MeasureIt.util import init_database
+from measureit.util import init_database
 
 database_name = "measurements.db"
 exp_name = "experiment_001"
@@ -706,7 +706,7 @@ exp_name = "gate_characterization"
 sample_name = "device_001"
 
 # For SweepQueue
-from MeasureIt.sweep_queue import DatabaseEntry
+from measureit.sweep_queue import DatabaseEntry
 db_entry = DatabaseEntry(db_path, exp_name, sample_name)
 """,
             "organized": """# Organized database structure
@@ -906,12 +906,12 @@ def get_measureit_code_examples() -> str:
             "basic_imports": """# Essential MeasureIt imports
 import os
 from pathlib import Path
-from MeasureIt.sweep0d import Sweep0D
-from MeasureIt.sweep1d import Sweep1D
-from MeasureIt.sweep2d import Sweep2D
-from MeasureIt.simul_sweep import SimulSweep
-from MeasureIt.sweep_queue import SweepQueue, DatabaseEntry
-from MeasureIt.util import init_database
+from measureit.sweep0d import Sweep0D
+from measureit.sweep1d import Sweep1D
+from measureit.sweep2d import Sweep2D
+from measureit.simul_sweep import SimulSweep
+from measureit.sweep_queue import SweepQueue, DatabaseEntry
+from measureit.util import init_database
 """,
             "database_setup": """# Standard database initialization
 database_name = "measurements.db"
