@@ -21,7 +21,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="InstrMCP Contributors",
-    url="https://github.com/caijiaqi/instrMCP",
+    url="https://github.com/caidish/instrMCP",
     license="MIT",
     platforms=["Linux", "Mac OS X", "Windows"],
     keywords=["Jupyter", "JupyterLab", "MCP"],

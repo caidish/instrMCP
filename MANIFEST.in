@@ -1,0 +1,2 @@
+global-include *.yaml *.yml *.json *.ini *.md
+recursive-include instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/labextension *

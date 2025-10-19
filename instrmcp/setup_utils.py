@@ -52,28 +52,32 @@ def setup_jupyter_extension():
         lab_ext_dir.mkdir(parents=True, exist_ok=True)
         extension_link = lab_ext_dir / "mcp-active-cell-bridge"
 
-        # Remove existing link if it exists
+        # Remove existing link/directory if it exists
         if extension_link.exists() or extension_link.is_symlink():
-            extension_link.unlink()
+            if extension_link.is_dir() and not extension_link.is_symlink():
+                shutil.rmtree(extension_link)
+            else:
+                extension_link.unlink()
 
-        # Create new symlink
-        extension_link.symlink_to(extension_path)
-        print(f"✅ Extension linked to: {extension_link}")
+        # Try to create symlink, fallback to copy on Windows if permission denied
+        import platform
 
-        # Build JupyterLab
-        print("🔨 Building JupyterLab with extension...")
-        build_result = subprocess.run(
-            ["jupyter", "lab", "build", "--minimize=False"],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            extension_link.symlink_to(extension_path)
+            print(f"✅ Extension linked to: {extension_link}")
+        except (OSError, NotImplementedError) as e:
+            # Symlink failed (likely Windows without Developer Mode)
+            # Fallback to copying files
+            if platform.system() == "Windows":
+                print("⚠️  Symlink failed (Windows requires Developer Mode or Admin)")
+                print("📁 Copying extension files instead...")
+                shutil.copytree(extension_path, extension_link)
+                print(f"✅ Extension copied to: {extension_link}")
+            else:
+                raise  # Re-raise on non-Windows systems
 
-        if build_result.returncode == 0:
-            print("✅ JupyterLab built successfully")
-            return True
-        else:
-            print(f"⚠️  JupyterLab build failed: {build_result.stderr}")
-            return False
+        print("✅ JupyterLab extension setup completed (no rebuild required)")
+        return True
 
     except Exception as e:
         print(f"❌ Error setting up extension: {e}")

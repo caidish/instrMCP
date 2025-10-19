@@ -48,7 +48,24 @@ $env:instrMCP_PATH = (Get-Location).Path
 
 ### Extension: MeasureIt
 
-To install MeasureIt, visit https://github.com/nanophys/MeasureIt and follow the installation instructions.
+MeasureIt provides comprehensive measurement pattern templates for common physics experiments.
+
+**Installation:**
+```bash
+pip install qmeasure
+```
+
+**Important Notes:**
+- Import as `measureit` (not `qmeasure`): `import measureit`
+- Python 3.8+ required
+- For source installation or advanced configuration, see the [MeasureIt GitHub repository](https://github.com/nanophys/MeasureIt)
+
+**Enable in InstrMCP:**
+```python
+# In Jupyter notebook
+%mcp_option add measureit
+%mcp_restart
+```
 
 ### Usage
 

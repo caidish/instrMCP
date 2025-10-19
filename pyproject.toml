@@ -9,10 +9,10 @@ description = "MCP server suite for physics laboratory instrumentation control"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Jiaqi Cai", email = "caidish1234@gmail.com"}
+    {name = "Jiaqi Cai", email = "jiaqic@mit.edu"}
 ]
 maintainers = [
-    {name = "Jiaqi Cai", email = "caidish1234@gmail.com"}
+    {name = "Jiaqi Cai", email = "jiaqic@mit.edu"}
 ]
 keywords = [
     "mcp",
@@ -121,6 +121,8 @@ exclude = ["tests*", "docs*", "servers*", "tools*"]
 "instrmcp.config" = ["data/**/*", "templates/**/*"]
 "instrmcp.extensions.jupyterlab" = ["install.json"]
 "instrmcp.extensions.jupyterlab.mcp_active_cell_bridge" = ["labextension/**/*"]
+
+# data_files now handled by setup.py for dynamic recursive copy
 
 [tool.black]
 line-length = 88

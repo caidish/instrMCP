@@ -8,7 +8,7 @@ and measurement systems through standardized MCP interfaces.
 
 __version__ = "2.0.0"
 __author__ = "Jiaqi Cai"
-__email__ = "caidish1234@gmail.com"
+__email__ = "jiaqic@mit.edu"
 __license__ = "MIT"
 
 # Lazy imports to avoid loading heavy dependencies at import time

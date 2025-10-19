@@ -7,11 +7,11 @@
     "jupyterlab",
     "jupyterlab-extension"
   ],
-  "homepage": "https://github.com/caijiaqi/instrMCP",
+  "homepage": "https://github.com/caidish/instrMCP",
   "license": "MIT",
   "author": {
     "name": "Jiaqi Cai",
-    "email": "caidish1234@gmail.com"
+    "email": "jiaqic@mit.edu"
   },
   "files": [
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
@@ -22,7 +22,7 @@
   "style": "style/index.css",
   "repository": {
     "type": "git",
-    "url": "https://github.com/caijiaqi/instrMCP.git"
+    "url": "https://github.com/caidish/instrMCP.git"
   },
   "scripts": {
     "build": "jlpm build:lib && jlpm build:labextension && jlpm postbuild",

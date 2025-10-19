@@ -3,7 +3,7 @@
 MCP server implementations for instrument control.
 """
 
-__version__ = "0.3.0"
+__version__ = "2.0.0"
 
 # Import all servers (required dependencies)
 from .qcodes.server import QCodesStationServer
