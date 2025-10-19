@@ -7,7 +7,6 @@ Rewritten based on databaseExample.ipynb patterns.
 """
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -21,30 +20,151 @@ except ImportError:
     QCODES_AVAILABLE = False
 
 
-def _resolve_database_path(database_path: Optional[str] = None) -> str:
+def _resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dict]:
     """
     Resolve the database path using the following priority:
     1. Provided database_path parameter
-    2. MeasureItHome environment variable (if set) -> use Example_database.db
+    2. MeasureIt get_path("databases") -> Example_database.db
     3. QCodes default configuration
 
     Args:
         database_path: Explicit database path
 
     Returns:
-        Resolved database path
+        tuple: (resolved_path, resolution_info)
+            resolved_path: Absolute path to database file
+            resolution_info: Dict with 'source', 'available_databases', 'tried_path'
+
+    Raises:
+        FileNotFoundError: If database path doesn't exist, with helpful suggestions
     """
+    resolution_info = {"source": None, "available_databases": [], "tried_path": None}
+
+    # Case 1: Explicit path provided
     if database_path:
-        return database_path
+        db_path = Path(database_path)
+        resolution_info["tried_path"] = str(db_path)
 
-    # Check if MeasureIt is available and use its default databases
-    measureit_home = os.environ.get("MeasureItHome")
-    if measureit_home:
-        # Default to Example_database.db in MeasureIt/Databases/
-        return str(Path(measureit_home) / "Databases" / "Example_database.db")
+        if db_path.exists():
+            resolution_info["source"] = "explicit"
+            return str(db_path), resolution_info
+        else:
+            # Path doesn't exist - provide helpful error
+            resolution_info["available_databases"] = _list_available_databases()
+            raise FileNotFoundError(
+                f"Database not found: {database_path}\n\n"
+                "Available databases:\n"
+                + _format_available_databases(resolution_info["available_databases"])
+                + "\n\nTip: Use database_list_available() to discover all databases"
+            )
 
-    # Fall back to QCodes default
-    return str(qc.config.core.db_location)
+    # Case 2: Try MeasureIt default
+    try:
+        from measureit import get_path
+
+        db_dir = get_path("databases")
+        default_db = db_dir / "Example_database.db"
+        resolution_info["tried_path"] = str(default_db)
+
+        if default_db.exists():
+            resolution_info["source"] = "measureit_default"
+            return str(default_db), resolution_info
+    except (ImportError, ValueError, Exception):
+        # MeasureIt not available or get_path failed
+        pass
+
+    # Case 3: Fall back to QCodes config
+    qcodes_db = Path(qc.config.core.db_location)
+    resolution_info["tried_path"] = str(qcodes_db)
+
+    if qcodes_db.exists():
+        resolution_info["source"] = "qcodes_config"
+        return str(qcodes_db), resolution_info
+
+    # No database found - provide comprehensive error
+    resolution_info["available_databases"] = _list_available_databases()
+
+    # Build error message with tried paths
+    tried_paths = []
+    try:
+        from measureit import get_path
+
+        db_dir = get_path("databases")
+        tried_paths.append(f"  1. MeasureIt default: {db_dir / 'Example_database.db'}")
+    except Exception:
+        tried_paths.append("  1. MeasureIt default: N/A (MeasureIt not available)")
+
+    tried_paths.append(f"  2. QCodes config: {qcodes_db}")
+
+    raise FileNotFoundError(
+        "No database found. Tried:\n"
+        + "\n".join(tried_paths)
+        + "\n\n"
+        + "Available databases:\n"
+        + _format_available_databases(resolution_info["available_databases"])
+        + "\n\nTip: Set MeasureItHome environment variable or provide explicit path"
+    )
+
+
+def _list_available_databases() -> list[dict]:
+    """
+    List available databases by searching common locations.
+
+    Returns:
+        List of dicts with 'name', 'path', 'source', 'size_mb', 'accessible'
+    """
+    databases = []
+
+    # Check MeasureIt databases directory
+    try:
+        from measureit import get_path
+
+        db_dir = get_path("databases")
+
+        if db_dir.exists():
+            for db_file in db_dir.glob("*.db"):
+                databases.append(
+                    {
+                        "name": db_file.name,
+                        "path": str(db_file),
+                        "source": "measureit",
+                        "size_mb": round(db_file.stat().st_size / 1024 / 1024, 2),
+                        "accessible": True,
+                    }
+                )
+    except (ImportError, ValueError, Exception):
+        pass
+
+    # Check QCodes config location
+    try:
+        qcodes_db = Path(qc.config.core.db_location)
+        if qcodes_db.exists():
+            databases.append(
+                {
+                    "name": qcodes_db.name,
+                    "path": str(qcodes_db),
+                    "source": "qcodes_config",
+                    "size_mb": round(qcodes_db.stat().st_size / 1024 / 1024, 2),
+                    "accessible": True,
+                }
+            )
+    except Exception:
+        pass
+
+    return databases
+
+
+def _format_available_databases(databases: list[dict]) -> str:
+    """Format database list for error messages."""
+    if not databases:
+        return "  (none found)"
+
+    lines = []
+    for db in databases:
+        lines.append(f"  - {db['name']} ({db['size_mb']} MB) [{db['source']}]")
+        lines.append(f"    {db['path']}")
+
+    return "\n".join(lines)
 
 
 def list_experiments(database_path: Optional[str] = None) -> str:
@@ -65,8 +185,15 @@ def list_experiments(database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path = _resolve_database_path(database_path)
+        resolved_path, resolution_info = _resolve_database_path(database_path)
+    except FileNotFoundError as e:
+        # Database path not found - return error with details
+        return json.dumps(
+            {"error": str(e), "error_type": "database_not_found"},
+            indent=2,
+        )
 
+    try:
         # Temporarily set the database location
         original_db_location = qc.config.core.db_location
         qc.config.core.db_location = resolved_path
@@ -76,6 +203,7 @@ def list_experiments(database_path: Optional[str] = None) -> str:
 
         result = {
             "database_path": resolved_path,
+            "path_resolved_via": resolution_info["source"],
             "experiment_count": len(exp_list),
             "experiments": [],
         }
@@ -142,8 +270,15 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path = _resolve_database_path(database_path)
+        resolved_path, resolution_info = _resolve_database_path(database_path)
+    except FileNotFoundError as e:
+        # Database path not found - return error with details
+        return json.dumps(
+            {"error": str(e), "error_type": "database_not_found"},
+            indent=2,
+        )
 
+    try:
         # Temporarily set the database location
         original_db_location = qc.config.core.db_location
         qc.config.core.db_location = resolved_path
@@ -153,6 +288,8 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
 
         # Extract detailed information
         result = {
+            "database_path": resolved_path,
+            "path_resolved_via": resolution_info["source"],
             "basic_info": {
                 "run_id": dataset.run_id,
                 "captured_run_id": dataset.captured_run_id,
@@ -296,8 +433,15 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path = _resolve_database_path(database_path)
+        resolved_path, resolution_info = _resolve_database_path(database_path)
+    except FileNotFoundError as e:
+        # Database path not found - return error with details
+        return json.dumps(
+            {"error": str(e), "error_type": "database_not_found"},
+            indent=2,
+        )
 
+    try:
         # Temporarily set the database location
         original_db_location = qc.config.core.db_location
         qc.config.core.db_location = resolved_path
@@ -307,6 +451,7 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
 
         result = {
             "database_path": str(db_path),
+            "path_resolved_via": resolution_info["source"],
             "database_exists": db_path.exists(),
             "database_size_bytes": None,
             "database_size_readable": None,
@@ -408,3 +553,64 @@ def _format_file_size(size_bytes: int) -> str:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.1f} TB"
+
+
+def list_available_databases() -> str:
+    """
+    List all available QCodes databases across common locations.
+
+    Searches:
+    - MeasureIt databases directory (via measureit.get_path("databases"))
+    - QCodes config location
+
+    Returns:
+        JSON string with available databases, their locations, and metadata
+    """
+    if not QCODES_AVAILABLE:
+        return json.dumps({"error": "QCodes not available"}, indent=2)
+
+    try:
+        databases = _list_available_databases()
+
+        # Try to get experiment counts for each database
+        for db_info in databases:
+            try:
+                # Temporarily set database location
+                original_db_location = qc.config.core.db_location
+                qc.config.core.db_location = db_info["path"]
+
+                exp_list = experiments()
+                db_info["experiment_count"] = len(exp_list)
+
+                # Restore original location
+                qc.config.core.db_location = original_db_location
+
+            except Exception as e:
+                db_info["experiment_count"] = None
+                db_info["accessible"] = False
+                db_info["error"] = str(e)
+
+        # Get MeasureIt config info
+        measureit_info = {}
+        try:
+            from measureit import get_data_dir, get_path
+
+            measureit_info = {
+                "data_dir": str(get_data_dir()),
+                "databases_dir": str(get_path("databases")),
+                "available": True,
+            }
+        except (ImportError, Exception):
+            measureit_info = {"available": False}
+
+        result = {
+            "databases": databases,
+            "total_count": len(databases),
+            "measureit_config": measureit_info,
+            "qcodes_default": str(qc.config.core.db_location),
+        }
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)}, indent=2)

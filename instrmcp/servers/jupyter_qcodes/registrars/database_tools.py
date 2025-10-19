@@ -32,6 +32,7 @@ class DatabaseToolRegistrar:
         self._register_list_experiments()
         self._register_get_dataset_info()
         self._register_get_database_stats()
+        self._register_list_available_databases()
 
     def _register_list_experiments(self):
         """Register the database/list_experiments tool."""
@@ -43,7 +44,8 @@ class DatabaseToolRegistrar:
             """List all experiments in the specified QCodes database.
 
             Args:
-                database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+                database_path: Path to database file. If None, uses MeasureIt
+                    default or QCodes config.
 
             Returns JSON containing experiment information including ID, name,
             sample name, and format string for each experiment.
@@ -70,7 +72,8 @@ class DatabaseToolRegistrar:
 
             Args:
                 id: Dataset run ID to load (e.g., load_by_id(2))
-                database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+                database_path: Path to database file. If None, uses MeasureIt
+                    default or QCodes config.
             """
             try:
                 result = self.db.get_dataset_info(id=id, database_path=database_path)
@@ -93,7 +96,8 @@ class DatabaseToolRegistrar:
             """Get database statistics and health information.
 
             Args:
-                database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+                database_path: Path to database file. If None, uses MeasureIt
+                    default or QCodes config.
 
             Returns JSON containing database statistics including path, size,
             experiment count, dataset count, and last modified time.
@@ -103,6 +107,30 @@ class DatabaseToolRegistrar:
                 return [TextContent(type="text", text=result)]
             except Exception as e:
                 logger.error(f"Error in database/get_database_stats: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_list_available_databases(self):
+        """Register the database_list_available tool."""
+
+        @self.mcp.tool(name="database_list_available")
+        async def list_available_databases() -> List[TextContent]:
+            """List all available QCodes databases.
+
+            Searches common locations including MeasureIt databases directory
+            and QCodes configuration paths.
+
+            Returns JSON containing available databases with metadata including
+            name, path, size, source, and experiment count.
+            """
+            try:
+                result = self.db.list_available_databases()
+                return [TextContent(type="text", text=result)]
+            except Exception as e:
+                logger.error(f"Error in database_list_available: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

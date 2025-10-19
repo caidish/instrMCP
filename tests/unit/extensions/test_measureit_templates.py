@@ -5,7 +5,6 @@ Tests template generation for Sweep0D, Sweep1D, Sweep2D, SimulSweep,
 SweepQueue, common patterns, and comprehensive code examples.
 """
 
-import pytest
 import json
 from instrmcp.extensions.MeasureIt.measureit_templates import (
     get_sweep0d_template,
@@ -54,7 +53,7 @@ class TestSweep0DTemplate:
         """Test Sweep0D basic pattern contains executable code."""
         template = json.loads(get_sweep0d_template())
         code = template["basic_pattern"]
-        assert "from MeasureIt.sweep0d import Sweep0D" in code
+        assert "from measureit import Sweep0D" in code
         assert "s = Sweep0D(" in code
         assert "s.follow_param(" in code
         assert "init_database" in code
@@ -115,7 +114,7 @@ class TestSweep1DTemplate:
         """Test Sweep1D basic pattern contains executable code."""
         template = json.loads(get_sweep1d_template())
         code = template["basic_pattern"]
-        assert "from MeasureIt.sweep1d import Sweep1D" in code
+        assert "from measureit import Sweep1D" in code
         assert "s = Sweep1D(" in code
         assert "start=" in code
         assert "stop=" in code
@@ -190,7 +189,7 @@ class TestSweep2DTemplate:
         """Test Sweep2D basic pattern contains executable code."""
         template = json.loads(get_sweep2d_template())
         code = template["basic_pattern"]
-        assert "from MeasureIt.sweep2d import Sweep2D" in code
+        assert "from measureit import Sweep2D" in code
         assert "s = Sweep2D(" in code
         assert "inner_param" in code
         assert "outer_param" in code
@@ -254,7 +253,7 @@ class TestSimulSweepTemplate:
         """Test SimulSweep basic pattern contains executable code."""
         template = json.loads(get_simulsweep_template())
         code = template["basic_pattern"]
-        assert "from MeasureIt.simul_sweep import SimulSweep" in code
+        assert "from measureit import SimulSweep" in code
         assert "parameter_dict" in code
         assert "SimulSweep(parameter_dict" in code
         assert "start" in code
@@ -319,7 +318,7 @@ class TestSweepQueueTemplate:
         """Test SweepQueue basic pattern contains executable code."""
         template = json.loads(get_sweepqueue_template())
         code = template["basic_pattern"]
-        assert "from MeasureIt.sweep_queue import SweepQueue" in code
+        assert "from measureit.tools.sweep_queue import SweepQueue" in code
         assert "DatabaseEntry" in code
         assert "sq = SweepQueue()" in code
         assert "sq +=" in code

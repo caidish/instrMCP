@@ -331,3 +331,4 @@ The package includes a JupyterLab extension for active cell bridging:
 - whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.tools.stdio_proxy
 - when removing features, update readme.md
 - Format code when wrapping up: black instrmcp/ tests/. Check linter.
+- After change the resources, check homogeneity between resources and the tool list_resources, etc. 

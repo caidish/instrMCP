@@ -25,38 +25,65 @@ from instrmcp.extensions.database.query_tools import (
 class TestResolveDatabasePath:
     """Test database path resolution logic."""
 
-    def test_resolve_explicit_path(self):
+    def test_resolve_explicit_path(self, tmp_path):
         """Test explicit path takes precedence."""
-        explicit_path = "/explicit/path/to/database.db"
-        result = _resolve_database_path(explicit_path)
-        assert result == explicit_path
+        # Create a temporary database file
+        db_file = tmp_path / "database.db"
+        db_file.touch()
+        explicit_path = str(db_file)
+
+        resolved_path, resolution_info = _resolve_database_path(explicit_path)
+        assert resolved_path == explicit_path
+        assert resolution_info['source'] == 'explicit'
+        assert resolution_info['tried_path'] == explicit_path
 
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
-        """Test MeasureItHome environment variable is used."""
-        measureit_home = str(temp_dir)
-        monkeypatch.setenv("MeasureItHome", measureit_home)
+        """Test MeasureIt get_path() is used (via measureit.get_path)."""
+        # Create database file
+        db_dir = temp_dir / "Databases"
+        db_dir.mkdir()
+        db_file = db_dir / "Example_database.db"
+        db_file.touch()
 
-        result = _resolve_database_path(None)
-        expected = str(temp_dir / "Databases" / "Example_database.db")
-        assert result == expected
+        with patch("measureit.get_path") as mock_get_path:
+            mock_get_path.return_value = db_dir
+
+            resolved_path, resolution_info = _resolve_database_path(None)
+            expected = str(db_dir / "Example_database.db")
+            assert resolved_path == expected
+            assert resolution_info['source'] == 'measureit_default'
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    def test_resolve_qcodes_default(self, monkeypatch):
+    def test_resolve_qcodes_default(self, monkeypatch, temp_dir):
         """Test falls back to QCodes config."""
-        monkeypatch.delenv("MeasureItHome", raising=False)
+        # Create qcodes database file
+        qcodes_db = temp_dir / "qcodes.db"
+        qcodes_db.touch()
 
-        with patch("instrmcp.extensions.database.query_tools.qc") as mock_qc:
-            mock_qc.config.core.db_location = "/qcodes/default.db"
-            result = _resolve_database_path(None)
-            assert result == "/qcodes/default.db"
+        with patch("measureit.get_path", side_effect=ImportError):
+            with patch("instrmcp.extensions.database.query_tools.qc") as mock_qc:
+                mock_qc.config.core.db_location = str(qcodes_db)
+                resolved_path, resolution_info = _resolve_database_path(None)
+                assert resolved_path == str(qcodes_db)
+                assert resolution_info['source'] == 'qcodes_config'
 
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
-        monkeypatch.setenv("MeasureItHome", str(temp_dir))
-        explicit_path = "/explicit/database.db"
+        # Create explicit database file
+        explicit_db = temp_dir / "explicit.db"
+        explicit_db.touch()
+        explicit_path = str(explicit_db)
 
-        result = _resolve_database_path(explicit_path)
-        assert result == explicit_path
+        # Create measureit database directory
+        db_dir = temp_dir / "Databases"
+        db_dir.mkdir()
+
+        with patch("measureit.get_path") as mock_get_path:
+            mock_get_path.return_value = db_dir
+
+            resolved_path, resolution_info = _resolve_database_path(explicit_path)
+            assert resolved_path == explicit_path
+            assert resolution_info['source'] == 'explicit'
 
 
 class TestFormatFileSize:

@@ -494,6 +494,11 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
+    @mcp.tool(name="database_list_available")
+    async def list_available_databases() -> list[TextContent]:
+        result = await proxy.call("database_list_available")
+        return [TextContent(type="text", text=str(result))]
+
     # Dynamic tool meta-tools (only available in unsafe mode)
     @mcp.tool(name="dynamic_register_tool")
     async def register_dynamic_tool(
