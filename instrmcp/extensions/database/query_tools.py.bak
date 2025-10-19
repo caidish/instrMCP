@@ -10,10 +10,10 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Any, Optional
 
 try:
-    from qcodes.dataset import experiments, load_by_id
+    from qcodes.dataset import experiments, load_by_id, load_by_guid, load_by_run_spec
     import qcodes as qc
 
     QCODES_AVAILABLE = True
@@ -91,7 +91,7 @@ def list_experiments(database_path: Optional[str] = None) -> str:
                         ds = load_by_id(dataset_id)
                         if ds.exp_id == exp.exp_id:
                             run_ids.append(dataset_id)
-                    except Exception:
+                    except:
                         continue
                     # Stop if we haven't found any for a while
                     if len(run_ids) == 0 and dataset_id > 100:
@@ -202,7 +202,7 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
                     result["metadata"] = dict(dataset.metadata)
                 else:
                     result["metadata"] = {"raw": str(dataset.metadata)}
-        except Exception:
+        except:
             pass
 
         # Extract MeasureIt metadata specifically
@@ -267,7 +267,7 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
                 result["basic_info"]["timestamp_readable"] = datetime.fromtimestamp(
                     dataset.run_timestamp_raw
                 ).isoformat()
-        except Exception:
+        except:
             pass
 
         return json.dumps(result, indent=2, default=str)
@@ -360,11 +360,11 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
                                 measurement_types["qcodes"] = (
                                     measurement_types.get("qcodes", 0) + 1
                                 )
-                        except Exception:
+                        except:
                             measurement_types["unknown"] = (
                                 measurement_types.get("unknown", 0) + 1
                             )
-                    except Exception:
+                    except:
                         continue
 
                 result["total_dataset_count"] = total_datasets

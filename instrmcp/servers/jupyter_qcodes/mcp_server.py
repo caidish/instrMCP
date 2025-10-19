@@ -268,5 +268,5 @@ class JupyterMCPServer:
             "removed_options": sorted(removed),
             "server_running": self.running,
             "restart_required": True,
-            "message": f"Server options updated. Restart required for resource changes to take effect.",
+            "message": "Server options updated. Restart required for resource changes to take effect.",
         }

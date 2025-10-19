@@ -5,7 +5,6 @@ These templates provide structured code examples that AI can use to generate
 appropriate MeasureIt measurement code in Jupyter cells.
 """
 
-from typing import Dict, List, Any
 import json
 
 

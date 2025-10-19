@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-import qcodes as qc
 from qcodes import Station
 from qcodes.instrument.base import Instrument
 

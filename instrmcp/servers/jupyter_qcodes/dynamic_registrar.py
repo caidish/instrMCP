@@ -4,7 +4,7 @@ This module provides meta-tools that allow LLMs to create, update, revoke,
 list, and inspect dynamically created tools at runtime.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional
 import json
 import logging
 
@@ -88,7 +88,7 @@ class DynamicToolRegistrar:
         from typing import Optional as TypingOptional
 
         # Compile the tool
-        tool_func = self.runtime.compile_tool(spec)
+        _ = self.runtime.compile_tool(spec)  # Verify compilation works
 
         # Create a dynamic wrapper with proper signature for FastMCP
         # FastMCP requires explicit parameters, not **kwargs
@@ -726,7 +726,7 @@ Corrected JSON:"""
                 self._unregister_tool_from_fastmcp(name)
                 try:
                     self._register_tool_with_fastmcp(updated_spec)
-                except Exception as e:
+                except Exception:
                     # Roll back: re-register the old version
                     self._register_tool_with_fastmcp(existing_spec)
                     raise  # Re-raise to be caught by outer exception handler

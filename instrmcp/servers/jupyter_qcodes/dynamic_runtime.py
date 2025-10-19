@@ -4,8 +4,7 @@ This module handles the execution of dynamically created tools in the Jupyter ke
 """
 
 import logging
-from typing import Any, Dict, Optional
-from pathlib import Path
+from typing import Any, Dict
 
 from instrmcp.tools.dynamic import ToolSpec
 

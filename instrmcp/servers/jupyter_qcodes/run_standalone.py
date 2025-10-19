@@ -9,7 +9,6 @@ Useful for testing the server without requiring Jupyter setup.
 
 import sys
 import os
-import asyncio
 import logging
 
 # Add the parent directory to sys.path to import our modules

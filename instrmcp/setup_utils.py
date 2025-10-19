@@ -3,16 +3,14 @@
 InstrMCP setup utilities for post-installation configuration.
 """
 
-import os
-import shutil
-import subprocess
 from pathlib import Path
-from jupyter_core.paths import jupyter_config_dir
 
 
 def setup_jupyter_extension():
     """Link and build JupyterLab extension."""
     try:
+        import sys
+
         # Get the path to the extension
         package_dir = Path(__file__).parent
         extension_path = (
@@ -29,52 +27,64 @@ def setup_jupyter_extension():
 
         print("🔧 Linking JupyterLab extension...")
 
-        # Create symlink in labextensions directory
-        import site
-        import sys
+        # Use Jupyter's system data directory (in conda env/venv)
+        # Prefer env-specific over user-specific installation
+        from jupyter_core.paths import jupyter_data_dir, ENV_JUPYTER_PATH
 
-        # Try to find the jupyter labextensions directory
-        if hasattr(sys, "real_prefix") or (
-            hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
-        ):
-            # We're in a virtual environment
-            lab_ext_dir = Path(sys.prefix) / "share" / "jupyter" / "labextensions"
-        else:
-            # Use site-packages location
-            site_packages = Path(site.getsitepackages()[0])
-            lab_ext_dir = (
-                site_packages.parent.parent.parent
-                / "share"
-                / "jupyter"
-                / "labextensions"
-            )
+        # Get list of data directories, prefer the one in sys.prefix
+        data_dirs = ENV_JUPYTER_PATH
+        env_data_dir = None
+        for d in data_dirs:
+            if str(sys.prefix) in str(d):
+                env_data_dir = Path(d)
+                break
+
+        # Fallback to jupyter_data_dir if not found
+        if env_data_dir is None:
+            env_data_dir = Path(jupyter_data_dir())
+
+        lab_ext_dir = env_data_dir / "labextensions"
+
+        print(f"🔍 Jupyter data dir: {env_data_dir}")
+        print(f"🔍 Installing to: {lab_ext_dir}")
 
         lab_ext_dir.mkdir(parents=True, exist_ok=True)
         extension_link = lab_ext_dir / "mcp-active-cell-bridge"
 
-        # Remove existing link/directory if it exists
-        if extension_link.exists() or extension_link.is_symlink():
-            if extension_link.is_dir() and not extension_link.is_symlink():
-                shutil.rmtree(extension_link)
-            else:
+        # Remove existing extension
+        if extension_link.exists():
+            if extension_link.is_symlink():
                 extension_link.unlink()
+            else:
+                import shutil
 
-        # Try to create symlink, fallback to copy on Windows if permission denied
-        import platform
+                shutil.rmtree(extension_link)
 
+        # Try symlink first (better for development)
+        symlink_success = False
         try:
             extension_link.symlink_to(extension_path)
-            print(f"✅ Extension linked to: {extension_link}")
-        except (OSError, NotImplementedError) as e:
-            # Symlink failed (likely Windows without Developer Mode)
-            # Fallback to copying files
-            if platform.system() == "Windows":
-                print("⚠️  Symlink failed (Windows requires Developer Mode or Admin)")
-                print("📁 Copying extension files instead...")
-                shutil.copytree(extension_path, extension_link)
-                print(f"✅ Extension copied to: {extension_link}")
+            # Verify it worked
+            if (extension_link / "package.json").exists():
+                print(f"✅ Extension symlinked to: {extension_link}")
+                symlink_success = True
             else:
-                raise  # Re-raise on non-Windows systems
+                extension_link.unlink()
+                print("   Symlink verification failed, trying copy...")
+        except (OSError, NotImplementedError, PermissionError) as e:
+            print(f"   Symlink not available ({type(e).__name__}), trying copy...")
+
+        # Fallback to copy if symlink failed
+        if not symlink_success:
+            import shutil
+
+            shutil.copytree(extension_path, extension_link, symlinks=True)
+            if (extension_link / "package.json").exists():
+                print(f"✅ Extension copied to: {extension_link}")
+                print("   (Using copy instead of symlink)")
+            else:
+                print("❌ Extension copy failed - files not accessible")
+                return False
 
         print("✅ JupyterLab extension setup completed (no rebuild required)")
         return True

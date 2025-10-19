@@ -1,6 +1,5 @@
 """JupyterLab extension registration for InstrMCP."""
 
-import os
 from pathlib import Path
 
 

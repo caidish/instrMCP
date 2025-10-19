@@ -10,7 +10,6 @@ import logging
 from typing import Optional
 
 from IPython.core.magic import Magics, line_magic, magics_class
-from IPython.core.magic_arguments import magic_arguments, parse_argstring, argument
 
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
@@ -386,7 +385,6 @@ def load_ipython_extension(ipython):
             except Exception as e:
                 logger.error(f"Could not create event loop: {e}")
                 # Still register magic commands even without event loop
-                pass
 
         # Register comm target for active cell tracking
         register_comm_target()

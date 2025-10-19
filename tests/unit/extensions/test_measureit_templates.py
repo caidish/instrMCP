@@ -119,7 +119,7 @@ class TestSweep1DTemplate:
         assert "s = Sweep1D(" in code
         assert "start=" in code
         assert "stop=" in code
-        assert "rate=" in code
+        assert "step=" in code
         assert "s.start()" in code
 
     def test_sweep1d_advanced_patterns(self):
@@ -142,7 +142,7 @@ class TestSweep1DTemplate:
         params = template["common_parameters"]
         assert "start" in params
         assert "stop" in params
-        assert "rate" in params
+        assert "step" in params
         assert "bidirectional" in params
 
     def test_sweep1d_tips_include_safety(self):

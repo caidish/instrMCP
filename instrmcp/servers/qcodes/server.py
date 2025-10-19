@@ -5,15 +5,13 @@ Station-based FastMCP HTTP server for QCodes instrument control.
 
 import os
 import json
-import asyncio
 import logging
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+from typing import List
 
 # Removed nest_asyncio - not needed for normal Python environments
 
 from fastmcp import FastMCP
-from mcp.types import Resource, TextResourceContents, Tool, TextContent
+from mcp.types import Resource, TextResourceContents, TextContent
 
 from .station_init import station_manager
 
@@ -180,7 +178,7 @@ class QCodesStationServer:
                 name: Instrument name
                 update: Whether to update from hardware (default: True)
             """
-            logger.info(f"Using typo-tolerant alias 'inst_healtn' -> 'inst_health'")
+            logger.info("Using typo-tolerant alias 'inst_healtn' -> 'inst_health'")
             return await inst_health(name, update)
 
         @self.mcp.tool()
@@ -393,7 +391,7 @@ class QCodesStationServer:
 
             asyncio.run(self.initialize_server())
 
-            logger.info(f"Starting QCodes Station MCP Server")
+            logger.info("Starting QCodes Station MCP Server")
             logger.info(f"Host: {self.host}:{self.port}")
             logger.info(f"MCP Endpoint: http://{self.host}:{self.port}{self.mcp_path}")
 

@@ -5,18 +5,15 @@ in the ~/.instrmcp/registry/ directory.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from .tool_spec import ToolSpec, ValidationError
+from .tool_spec import ToolSpec
 
 
 class RegistryError(Exception):
     """Raised when registry operations fail."""
-
-    pass
 
 
 class ToolRegistry:

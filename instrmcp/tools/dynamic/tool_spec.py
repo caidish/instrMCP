@@ -3,7 +3,7 @@
 This module defines the ToolSpec dataclass and JSON schema validation for dynamic tools.
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import json
@@ -221,8 +221,6 @@ TOOL_SPEC_SCHEMA = {
 
 class ValidationError(Exception):
     """Raised when tool spec validation fails."""
-
-    pass
 
 
 def validate_tool_spec(spec: ToolSpec) -> None:

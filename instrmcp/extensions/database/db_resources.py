@@ -196,7 +196,7 @@ def get_recent_measurements(
                         dataset_info["timestamp_readable"] = datetime.fromtimestamp(
                             dataset.run_timestamp_raw
                         ).isoformat()
-                except:
+                except Exception:
                     pass
 
                 all_datasets.append(dataset_info)
