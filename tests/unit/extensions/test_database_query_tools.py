@@ -21,6 +21,14 @@ from instrmcp.extensions.database.query_tools import (
     QCODES_AVAILABLE,
 )
 
+# Check if MeasureIt is available
+try:
+    import measureit  # noqa: F401
+
+    MEASUREIT_AVAILABLE = True
+except ImportError:
+    MEASUREIT_AVAILABLE = False
+
 
 class TestResolveDatabasePath:
     """Test database path resolution logic."""
@@ -37,6 +45,7 @@ class TestResolveDatabasePath:
         assert resolution_info["source"] == "explicit"
         assert resolution_info["tried_path"] == explicit_path
 
+    @pytest.mark.skipif(not MEASUREIT_AVAILABLE, reason="MeasureIt not available")
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
         """Test MeasureIt get_path() is used (via measureit.get_path)."""
         # Create database file
@@ -67,6 +76,7 @@ class TestResolveDatabasePath:
                 assert resolved_path == str(qcodes_db)
                 assert resolution_info["source"] == "qcodes_config"
 
+    @pytest.mark.skipif(not MEASUREIT_AVAILABLE, reason="MeasureIt not available")
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
         # Create explicit database file
@@ -118,6 +128,7 @@ class TestFormatFileSize:
         assert "0.0 B" in result
 
 
+@pytest.mark.usefixtures("mock_qcodes_db_config")
 class TestListExperiments:
     """Test list_experiments functionality."""
 
@@ -214,6 +225,7 @@ class TestListExperiments:
         assert "Failed to list experiments" in result["error"]
 
 
+@pytest.mark.usefixtures("mock_qcodes_db_config")
 class TestGetDatasetInfo:
     """Test get_dataset_info functionality."""
 
@@ -433,6 +445,7 @@ class TestGetDatasetInfo:
         return mock_dataset
 
 
+@pytest.mark.usefixtures("mock_qcodes_db_config")
 class TestGetDatabaseStats:
     """Test get_database_stats functionality."""
 
@@ -616,6 +629,7 @@ class TestQueryToolsIntegration:
     """Test integration between query tools."""
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
+    @pytest.mark.skipif(not MEASUREIT_AVAILABLE, reason="MeasureIt not available")
     @patch("instrmcp.extensions.database.query_tools.experiments")
     def test_all_tools_use_same_path_resolution(
         self, mock_experiments, temp_dir, monkeypatch

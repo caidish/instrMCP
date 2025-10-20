@@ -144,6 +144,21 @@ def mock_database_path(temp_dir):
 
 
 @pytest.fixture
+def mock_qcodes_db_config(temp_dir, monkeypatch):
+    """Configure QCodes to use a test database that exists."""
+    db_path = temp_dir / "qcodes_test.db"
+    db_path.touch()
+
+    # Use monkeypatch to set qc.config.core.db_location
+    import instrmcp.extensions.database.query_tools as query_tools
+
+    if hasattr(query_tools, "qc") and hasattr(query_tools.qc, "config"):
+        monkeypatch.setattr(query_tools.qc.config.core, "db_location", str(db_path))
+
+    yield str(db_path)
+
+
+@pytest.fixture
 def sample_experiment_data():
     """Sample experiment data for database testing."""
     return {
