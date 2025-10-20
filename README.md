@@ -1,6 +1,6 @@
 # InstrMCP: Instrumentation Control MCP Server
 
-[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](https://github.com/caidish/instrMCP/releases)
+[![PyPI version](https://img.shields.io/pypi/v/instrmcp.svg)](https://pypi.org/project/instrmcp/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
@@ -27,13 +27,25 @@ https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
 
 ### Installation
 
+**From PyPI (Recommended):**
+
 ```bash
-# Install from source
+pip install instrmcp
+```
+
+**That's it!** QCodes, JupyterLab, and all dependencies are automatically installed. The JupyterLab extension is automatically enabled (no Node.js or rebuild required).
+
+**From Source (For Development):**
+
+```bash
 git clone https://github.com/caidish/instrMCP.git
 cd instrMCP
 pip install -e .
 
-# Set required environment variable
+# Run setup to enable JupyterLab extension (only needed for editable install)
+instrmcp-setup
+
+# Set required environment variable for development
 # For macOS/Linux:
 export instrMCP_PATH="$(pwd)"
 echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc  # or ~/.bashrc
@@ -41,10 +53,8 @@ source ~/.zshrc
 
 # For Windows (PowerShell):
 $env:instrMCP_PATH = (Get-Location).Path
-[System.Environment]::SetEnvironmentVariable('instrMCP_PATH', (Get-Location).Path, 'User') 
+[System.Environment]::SetEnvironmentVariable('instrMCP_PATH', (Get-Location).Path, 'User')
 ```
-
-**That's it!** QCodes, JupyterLab, and all dependencies are automatically installed.
 
 ### Extension: MeasureIt
 
