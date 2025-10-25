@@ -10,7 +10,8 @@
 
 MCP server suite for quantum device physics laboratory's instrumentation control, enabling Large Language Models to interact directly with physics instruments and measurement systems through QCodes and JupyterLab.
 
-https://github.com/user-attachments/assets/1d4d6e42-138c-4f49-90ef-803eb6c01488
+https://github.com/user-attachments/assets/e7d0a441-36b2-4fec-9c54-1427310b7698
+
 
 ## Features
 
