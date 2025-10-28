@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instrmcp"
-version = "2.0.0"
+version = "2.0.1"
 description = "MCP server suite for physics laboratory instrumentation control"
 readme = "README.md"
 license = {file = "LICENSE"}

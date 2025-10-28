@@ -368,10 +368,19 @@ class QCodesReadOnlyTools:
         """Get detailed information about an instrument with hierarchical parameter structure.
 
         Args:
-            name: Instrument name
+            name: Instrument name or "*" to list all instruments
             with_values: Include cached parameter values
             max_depth: Maximum hierarchy depth to search (default: 4, prevents infinite loops)
         """
+        # Handle wildcard to list all instruments
+        if name == "*":
+            instruments = await self.list_instruments(max_depth=max_depth)
+            return {
+                "instruments": instruments,
+                "count": len(instruments),
+                "note": "Use specific instrument name for detailed info with cached values",
+            }
+
         instr = self._get_instrument(name)
 
         # Get basic snapshot
