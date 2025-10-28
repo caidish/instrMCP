@@ -30,6 +30,8 @@ class MeasureItToolRegistrar:
     def register_all(self):
         """Register all MeasureIt tools."""
         self._register_get_status()
+        self._register_wait_for_all_sweeps()
+        self._register_wait_for_sweep()
 
     def _register_get_status(self):
         """Register the measureit/get_status tool."""
@@ -55,6 +57,48 @@ class MeasureItToolRegistrar:
                 ]
             except Exception as e:
                 logger.error(f"Error in measureit/get_status: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_wait_for_all_sweeps(self):
+        """Register the measureit/wait_for_all_sweeps tool."""
+
+        @self.mcp.tool(name="measureit_wait_for_all_sweeps")
+        async def wait_for_all_sweeps() -> List[TextContent]:
+            """Wait until all currently running MeasureIt sweeps finish."""
+            try:
+                result = await self.tools.wait_for_all_sweeps()
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                logger.error(f"Error in measureit/wait_for_all_sweeps: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_wait_for_sweep(self):
+        """Register the measureit/wait_for_sweep tool."""
+
+        @self.mcp.tool(name="measureit_wait_for_sweep")
+        async def wait_for_sweep(variable_name: str) -> List[TextContent]:
+            """Wait until the specified MeasureIt sweep finishes."""
+            try:
+                result = await self.tools.wait_for_sweep(variable_name)
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                logger.error(f"Error in measureit/wait_for_sweep: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

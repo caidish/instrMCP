@@ -16,7 +16,7 @@ instrmcp/
 ├── extensions/        # Jupyter/IPython extensions
 │   ├── jupyterlab/    # JupyterLab extension for active cell bridging
 │   ├── database/      # Database integration tools and resources
-│   └── measureit/     # MeasureIt template resources
+│   └── MeasureIt/     # MeasureIt template resources
 ├── tools/             # Helper utilities
 │   └── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
 ├── config/            # Configuration management
@@ -93,6 +93,8 @@ All tools now use hierarchical naming with `/` separator for better organization
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
 - `measureit/get_status()` - Check if any MeasureIt sweep is currently running
+- `measureit/wait_for_sweep(variable_name)` - Wait for the given sweep to finish
+- `measureit/wait_for_all_sweeps()` - Wait for all currently running sweeps to finish
 
 ### Database Integration Tools (`database/*` - requires `%mcp_option database`)
 

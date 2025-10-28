@@ -60,7 +60,7 @@ Time-based monitoring patterns (Sweep0D):
 
 .. code-block:: python
 
-   from MeasureIt import Sweep0D
+   from measureit import Sweep0D
 
    sweep = Sweep0D(dmm.voltage, delay=1.0)
    sweep.follow_param(dmm.current)
@@ -84,7 +84,7 @@ Single parameter sweep patterns (Sweep1D):
 
 .. code-block:: python
 
-   from MeasureIt import Sweep1D
+   from measureit import Sweep1D
 
    sweep = Sweep1D(
        gate.voltage,
@@ -112,7 +112,7 @@ measureit_sweep2d_template
 
 .. code-block:: python
 
-   from MeasureIt import Sweep2D
+   from measureit import Sweep2D
 
    sweep = Sweep2D(
        gate1.voltage, np.linspace(-2, 2, 101),
@@ -138,7 +138,7 @@ Simultaneous parameter sweep patterns:
 
 .. code-block:: python
 
-   from MeasureIt import SimulSweep
+   from measureit import SimulSweep
 
    sweep = SimulSweep(
        [gate1.voltage, gate2.voltage],
@@ -165,7 +165,7 @@ Sequential measurement workflow patterns:
 
 .. code-block:: python
 
-   from MeasureIt import SweepQueue, Sweep1D
+   from measureit import SweepQueue, Sweep1D
 
    queue = SweepQueue()
 
@@ -223,7 +223,7 @@ Pattern-Based Generation
    Claude: [Accesses measureit_sweep1d_template resource]
    Claude: "Here's the code for your IV curve:
            ```python
-           from MeasureIt import Sweep1D
+           from measureit import Sweep1D
            import numpy as np
 
            sweep = Sweep1D(
@@ -450,7 +450,7 @@ Example:
 
    CUSTOM_TEMPLATE = '''
    # My Custom Measurement Pattern
-   from MeasureIt import Sweep1D
+   from measureit import Sweep1D
 
    def my_custom_measurement(device):
        sweep = Sweep1D(
@@ -488,8 +488,8 @@ Verify import:
 
 .. code-block:: python
 
-   import MeasureIt
-   print(MeasureIt.__version__)
+   import measureit
+   print(measureit.__version__)
 
 Templates Not Loading
 ~~~~~~~~~~~~~~~~~~~~~
@@ -519,7 +519,7 @@ Combine sweep types:
 
 .. code-block:: python
 
-   from MeasureIt import Sweep1D, Sweep2D
+   from measureit import Sweep1D, Sweep2D
 
    # Outer: Temperature
    for temp in [4, 10, 20]:

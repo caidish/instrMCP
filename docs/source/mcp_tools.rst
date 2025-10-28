@@ -333,6 +333,32 @@ Check if any MeasureIt sweep is currently running.
 
 "Is a measurement running?"
 
+wait_for_sweep
+~~~~~~~~~~~~~~~~~~~~
+
+Wait until the sweep with the given name finishes.
+
+**Parameters**: ``variable_name```(str): Name of the sweep
+
+**Returns**: JSON with sweep details if active
+
+**Example usage via Claude**:
+
+"Wait for sweep [name] to finish"
+
+wait_for_all_sweeps
+~~~~~~~~~~~~~~~~~~~~
+
+Wait for all currently running sweeps to finish.
+
+**Parameters**: None
+
+**Returns**: JSON with sweep details if active
+
+**Example usage via Claude**:
+
+"Wait for all sweeps to finish"
+
 Tool Call Examples
 ------------------
 

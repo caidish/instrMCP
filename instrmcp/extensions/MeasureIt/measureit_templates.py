@@ -25,7 +25,7 @@ def get_sweep0d_template() -> str:
         "basic_pattern": """# Sweep0D - Monitor parameters vs time
 import os
 from measureit import Sweep0D
-from measureit.tools import init_database
+from measureit.tools import ensure_qt, init_database
 
 # Configure time-based monitoring
 s = Sweep0D(
@@ -49,7 +49,7 @@ sample_name = "sample_001"
 init_database(database_name, exp_name, sample_name, s)
 
 # Start monitoring
-%gui qt
+ensure_qt()
 s.start()
 
 # To stop: s.stop() or press ESC
@@ -66,7 +66,7 @@ s.start()
             "Larger plot_bin values improve plotting performance",
             "inter_delay controls sampling rate (0.1s = 10 Hz max)",
             "Always call init_database before s.start()",
-            "Use %gui qt for interactive plots",
+            "Use ensure_qt() for interactive plots",
             "To see if the sweep is finished or not, check s.is_running",
         ],
     }
@@ -92,7 +92,7 @@ def get_sweep1d_template() -> str:
         "basic_pattern": """# Sweep1D - Single parameter sweep
 import os
 from measureit import Sweep1D
-from measureit.tools import init_database
+from measureit.tools import ensure_qt, init_database
 
 # Configure sweep
 s = Sweep1D(
@@ -120,7 +120,7 @@ sample_name = "sample_001"
 init_database(database_name, exp_name, sample_name, s)
 
 # Start sweep
-%gui qt
+ensure_qt()
 s.start()
 
 # To stop: s.stop() or press ESC, spacebar to reverse direction
@@ -214,7 +214,7 @@ def get_sweep2d_template() -> str:
         "basic_pattern": """# Sweep2D - 2D parameter mapping
 import os
 from measureit import Sweep2D
-from measureit.tools import init_database
+from measureit.tools import ensure_qt, init_database
 
 # Define sweep parameters
 inner_param = gate1.voltage     # Fast axis (swept back/forth)
@@ -256,7 +256,7 @@ sample_name = "sample_001"
 init_database(database_name, exp_name, sample_name, s)
 
 # Start 2D sweep
-%gui qt
+ensure_qt()
 s.start()
 
 # To stop: s.stop() or press ESC
@@ -358,7 +358,7 @@ def get_simulsweep_template() -> str:
         "basic_pattern": """# SimulSweep - Simultaneous parameter sweeping
 import os
 from measureit import SimulSweep
-from measureit.tools import init_database
+from measureit.tools import ensure_qt, init_database
 
 # Define parameter sweep dictionary
 parameter_dict = {
@@ -391,7 +391,7 @@ sample_name = "sample_001"
 init_database(database_name, exp_name, sample_name, s)
 
 # Start simultaneous sweep
-%gui qt
+ensure_qt()
 s.start()
 
 # To stop: s.stop() or press ESC
@@ -500,7 +500,7 @@ import os
 from pathlib import Path
 from measureit.tools.sweep_queue import SweepQueue, DatabaseEntry
 from measureit import Sweep1D, Sweep2D
-from measureit.tools import init_database
+from measureit.tools import ensure_qt, init_database
 
 # Initialize sweep queue
 sq = SweepQueue()
@@ -548,7 +548,7 @@ for n, item in enumerate(sq):
     print(f"{n}. {item}")
 
 # Start sequential execution
-%gui qt
+ensure_qt()
 sq.start()
 
 # To stop: sq.stop()
@@ -750,7 +750,7 @@ sweep.follow_param(lockin.x, lockin.y, current_meter.current)
         "plotting_setup": {
             "description": "Plotting configuration patterns",
             "basic": """# Basic plotting setup
-%gui qt
+ensure_qt()
 
 # For 2D measurements, set heatmap parameters
 sweep2d.follow_heatmap_param([primary_signal, secondary_signal])
@@ -769,7 +769,7 @@ sweep = Sweep0D(
 )
 """,
             "multiple_plots": """# Multiple plot windows
-%gui qt
+ensure_qt()
 
 # Start first measurement
 sweep1.start()
@@ -856,7 +856,7 @@ if not sweep.is_running and sweep.continual:
         ],
         "troubleshooting": {
             "slow_measurements": "Increase plot_bin, reduce inter_delay if safe",
-            "plot_not_updating": "Check %gui qt is set, restart kernel if needed",
+            "plot_not_updating": "Check ensure_qt() is set, restart kernel if needed",
             "database_errors": "Check file permissions and disk space",
             "instrument_errors": "Verify connections and parameter limits",
             "memory_issues": "Use plot_bin parameter for long measurements",
@@ -923,7 +923,7 @@ sweep.follow_param(
 )
 """,
             "plotting_setup": """# Enable interactive plotting
-%gui qt
+ensure_qt()
 
 # For 2D measurements, enable heatmap
 sweep2d.follow_heatmap_param([primary_signal])

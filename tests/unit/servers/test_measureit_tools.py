@@ -40,6 +40,8 @@ class TestMeasureItToolRegistrar:
         """Create a mock QCodesReadOnlyTools instance."""
         tools = MagicMock()
         tools.get_measureit_status = AsyncMock()
+        tools.wait_for_all_sweeps = AsyncMock()
+        tools.wait_for_sweep = AsyncMock()
         return tools
 
     @pytest.fixture
@@ -57,9 +59,14 @@ class TestMeasureItToolRegistrar:
         """Test registering all MeasureIt tools."""
         registrar.register_all()
 
-        # Check that the get_status tool was registered
-        assert "measureit_get_status" in mock_mcp_server._tools
-        assert callable(mock_mcp_server._tools["measureit_get_status"])
+        # Check that all MeasureIt tools were registered
+        for tool_name in [
+            "measureit_get_status",
+            "measureit_wait_for_all_sweeps",
+            "measureit_wait_for_sweep",
+        ]:
+            assert tool_name in mock_mcp_server._tools
+            assert callable(mock_mcp_server._tools[tool_name])
 
     @pytest.mark.asyncio
     async def test_get_status_no_sweeps_running(
@@ -119,6 +126,38 @@ class TestMeasureItToolRegistrar:
         assert len(response_data["sweeps"]) == 1
         assert response_data["sweeps"][0]["sweep_type"] == "Sweep1D"
         assert response_data["sweeps"][0]["status"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_wait_for_all_sweeps_tool(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
+        """Test wait_for_all_sweeps tool registration and execution."""
+        mock_tools.wait_for_all_sweeps.return_value = {"sweeps": []}
+
+        registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_all_sweeps"]
+        result = await wait_tool()
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], TextContent)
+        payload = json.loads(result[0].text)
+        assert payload["sweeps"] == []
+        mock_tools.wait_for_all_sweeps.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_wait_for_sweep_tool(self, registrar, mock_tools, mock_mcp_server):
+        """Test wait_for_sweep tool registration and execution."""
+        mock_tools.wait_for_sweep.return_value = {"sweep": {"variable_name": "s1"}}
+
+        registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        result = await wait_tool("s1")
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], TextContent)
+        payload = json.loads(result[0].text)
+        assert payload["sweep"]["variable_name"] == "s1"
+        mock_tools.wait_for_sweep.assert_called_once_with("s1")
 
     @pytest.mark.asyncio
     async def test_get_status_with_multiple_sweeps(
@@ -351,8 +390,8 @@ class TestMeasureItToolRegistrar:
         response_data = json.loads(result[0].text)
         assert response_data["running"] is True
 
-    def test_only_one_tool_registered(self, registrar, mock_mcp_server):
-        """Test that only the get_status tool is registered."""
+    def test_three_tools_registered(self, registrar, mock_mcp_server):
+        """Test that the get_status, wait_for_sweep, and wait_for_all_sweeps tools are registered."""
         registrar.register_all()
 
         # Should only have one MeasureIt tool
@@ -361,8 +400,10 @@ class TestMeasureItToolRegistrar:
             for name in mock_mcp_server._tools.keys()
             if name.startswith("measureit_")
         ]
-        assert len(measureit_tools) == 1
+        assert len(measureit_tools) == 3
         assert "measureit_get_status" in measureit_tools
+        assert "measureit_wait_for_sweep" in measureit_tools
+        assert "measureit_wait_for_all_sweeps" in measureit_tools
 
     @pytest.mark.asyncio
     async def test_get_status_with_simul_sweep(

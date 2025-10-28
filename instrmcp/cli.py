@@ -98,7 +98,7 @@ def main():
         import importlib.util
         import subprocess
 
-        measureit_spec = importlib.util.find_spec("MeasureIt")
+        measureit_spec = importlib.util.find_spec("measureit")
         if measureit_spec is not None:
             # Try to import in subprocess to avoid crashing main process
             try:
@@ -106,17 +106,17 @@ def main():
                     [
                         sys.executable,
                         "-c",
-                        "import MeasureIt; print(getattr(MeasureIt, '__version__', 'unknown'))",
+                        "import measureit; print(getattr(measureit, '__version__', 'unknown'))",
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=1,  # Reduced timeout since imports should be fast
+                    timeout=10,  # Reduced timeout since imports should be fast
                 )
                 if result.returncode == 0:
                     measureit_version = result.stdout.strip()
-                    print(f"  ✅ MeasureIt: {measureit_version}")
+                    print(f"  ✅ measureit: {measureit_version}")
                 else:
-                    print("  ⚠️  MeasureIt: Installed but failed to import")
+                    print("  ⚠️  measureit: Installed but failed to import")
                     # Extract first meaningful error line
                     errors = [
                         line
@@ -128,13 +128,13 @@ def main():
                         error_msg = error_msg[:70] + "..."
                     print(f"     Error: {error_msg}")
             except subprocess.TimeoutExpired:
-                print("  ⚠️  MeasureIt: Installed but import timed out")
+                print("  ⚠️  measureit: Installed but import timed out")
                 print("     Possible dependency issue (e.g., NumPy compatibility)")
             except Exception as e:
-                print("  ⚠️  MeasureIt: Installed but check failed")
+                print("  ⚠️  measureit: Installed but check failed")
                 print(f"     Error: {str(e)[:70]}")
         else:
-            print("  ❌ MeasureIt: Not installed")
+            print("  ❌ measureit: Not installed")
             print("     Install from: https://github.com/nanophys/MeasureIt")
     elif args.command == "version":
         from . import __version__
