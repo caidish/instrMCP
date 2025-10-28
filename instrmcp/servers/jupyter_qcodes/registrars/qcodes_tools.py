@@ -42,8 +42,8 @@ class QCodesToolRegistrar:
             """Get detailed information about a QCodes instrument.
 
             Args:
-                name: Instrument name
-                with_values: Include cached parameter values
+                name: Instrument name, or "*" to list all instruments
+                with_values: Include cached parameter values (only for specific instruments, not with "*")
             """
             try:
                 info = await self.tools.instrument_info(name, with_values)
