@@ -475,7 +475,9 @@ def create_stdio_proxy_server(
     @mcp.tool(name="measureit_wait_for_sweep")
     async def wait_for_sweep(variable_name: str) -> list[TextContent]:
         """Wait until the specified MeasureIt sweep finishes."""
-        result = await proxy.call("measureit_wait_for_sweep", variable_name=variable_name)
+        result = await proxy.call(
+            "measureit_wait_for_sweep", variable_name=variable_name
+        )
         return [TextContent(type="text", text=str(result))]
 
     # Database integration tools (optional - only if database option enabled)

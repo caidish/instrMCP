@@ -99,9 +99,9 @@ class ParameterPoller:
     def __init__(self, cache: ReadCache, rate_limiter: RateLimiter):
         self.cache = cache
         self.rate_limiter = rate_limiter
-        self.subscriptions: Dict[Tuple[str, str], float] = (
-            {}
-        )  # (inst, param) -> interval_s
+        self.subscriptions: Dict[
+            Tuple[str, str], float
+        ] = {}  # (inst, param) -> interval_s
         self.tasks: Dict[Tuple[str, str], asyncio.Task] = {}
         self.running = False
 

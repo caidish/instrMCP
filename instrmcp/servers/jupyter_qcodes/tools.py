@@ -120,7 +120,7 @@ class QCodesReadOnlyTools:
                 # This should be a parameter
                 if not hasattr(current_obj, "parameters"):
                     raise ValueError(
-                        f"Object '{'.'.join(path_parts[:i+1])}' has no parameters"
+                        f"Object '{'.'.join(path_parts[: i + 1])}' has no parameters"
                     )
 
                 if part not in current_obj.parameters:
@@ -130,7 +130,7 @@ class QCodesReadOnlyTools:
                         else []
                     )
                     raise ValueError(
-                        f"Parameter '{part}' not found in '{'.'.join(path_parts[:i+1])}'. Available parameters: {available_params}"
+                        f"Parameter '{part}' not found in '{'.'.join(path_parts[: i + 1])}'. Available parameters: {available_params}"
                     )
 
                 return current_obj.parameters[part]
@@ -160,7 +160,7 @@ class QCodesReadOnlyTools:
                                 available_subs.append(attr_name)
 
                     raise ValueError(
-                        f"Submodule/channel '{part}' not found in '{'.'.join(path_parts[:i+1])}'. Available: {available_subs}"
+                        f"Submodule/channel '{part}' not found in '{'.'.join(path_parts[: i + 1])}'. Available: {available_subs}"
                     )
 
         # If we get here with no path parts, it's a direct parameter
@@ -1122,7 +1122,7 @@ class QCodesReadOnlyTools:
             Dict containing:
                 sweeps: List of Dicts of information about the initially running sweeps (as in get_measureit_status, without the "running" / "is_running" attributes), or None if no sweeps were running.
                 error: str (if any error occurred)
-        """ 
+        """
         try:
             status = await self.get_measureit_status()
         except Exception as exc:  # pragma: no cover - defensive
@@ -1178,7 +1178,7 @@ class QCodesReadOnlyTools:
 
         return {"sweeps": initial_info}
 
-    async def wait_for_sweep(self, var_name : str) -> Dict[str, Any]:
+    async def wait_for_sweep(self, var_name: str) -> Dict[str, Any]:
         """Wait for a measureit sweep with a given variable name to finish.
 
         Waits for the sweep with the given name to finish and returns information about it.
@@ -1201,7 +1201,11 @@ class QCodesReadOnlyTools:
         sweeps = status.get("sweeps") or []
 
         target = next(
-            (s for s in sweeps if isinstance(s, dict) and s.get("variable_name") == var_name),
+            (
+                s
+                for s in sweeps
+                if isinstance(s, dict) and s.get("variable_name") == var_name
+            ),
             None,
         )
 
@@ -1262,9 +1266,7 @@ class QCodesReadOnlyTools:
                 # Check if this is a MeasureIt sweep object
                 type_name = type(var_value).__name__
                 module_name = (
-                    var_value.__module__
-                    if hasattr(var_value, "__module__")
-                    else ""
+                    var_value.__module__ if hasattr(var_value, "__module__") else ""
                 )
 
                 # Look for MeasureIt sweep types

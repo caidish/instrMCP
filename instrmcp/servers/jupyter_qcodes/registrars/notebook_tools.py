@@ -211,7 +211,6 @@ class NotebookToolRegistrar:
                             and latest_cell_num == current_execution_count
                             and In[latest_cell_num]
                         ):
-
                             cell_info = {
                                 "cell_number": latest_cell_num,
                                 "execution_count": latest_cell_num,

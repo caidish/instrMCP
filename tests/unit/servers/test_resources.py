@@ -107,18 +107,15 @@ class TestResourceRegistrar:
             measureit_module=mock_measureit_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
-
             registrar.register_all()
 
             # Core resources
@@ -337,21 +334,18 @@ class TestResourceRegistrar:
             indent=2,
         )
 
-        with patch(
-            "instrmcp.extensions.MeasureIt.get_sweep0d_template",
-            return_value=mock_template,
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep2d_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch(
+                "instrmcp.extensions.MeasureIt.get_sweep0d_template",
+                return_value=mock_template,
+            ),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
-
             registrar.register_all()
             sweep0d_func = mock_mcp_server._resources[
                 "resource://measureit_sweep0d_template"
@@ -379,18 +373,15 @@ class TestResourceRegistrar:
             db_module=mock_db_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
-
             registrar.register_all()
 
             # Count all registered resources
@@ -592,16 +583,14 @@ class TestResourceDiscoveryTools:
             measureit_module=mock_measureit_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
             registrar.register_all()
 
@@ -666,16 +655,14 @@ class TestResourceDiscoveryTools:
             db_module=mock_db_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
             registrar.register_all()
 
@@ -727,27 +714,35 @@ class TestResourceDiscoveryTools:
         mock_template = json.dumps({"examples": [{"name": "test", "code": "# test"}]})
 
         # Patch at the point where get_resource imports the functions
-        with patch(
-            "instrmcp.extensions.MeasureIt.get_sweep0d_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep2d_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template",
-            return_value=mock_template,
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples",
-            return_value=mock_template,
+        with (
+            patch(
+                "instrmcp.extensions.MeasureIt.get_sweep0d_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_sweep1d_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_sweep2d_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_simulsweep_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_sweepqueue_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_common_patterns_template",
+                return_value=mock_template,
+            ),
+            patch(
+                "instrmcp.extensions.MeasureIt.get_measureit_code_examples",
+                return_value=mock_template,
+            ),
         ):
             registrar = ResourceRegistrar(
                 mock_mcp_server,
@@ -828,16 +823,14 @@ class TestResourceDiscoveryTools:
             db_module=mock_db_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
             registrar.register_all()
 
@@ -869,16 +862,14 @@ class TestResourceDiscoveryTools:
             db_module=mock_db_module,
         )
 
-        with patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_sweep1d_template"
-        ), patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"), patch(
-            "instrmcp.extensions.MeasureIt.get_simulsweep_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_sweepqueue_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_common_patterns_template"
-        ), patch(
-            "instrmcp.extensions.MeasureIt.get_measureit_code_examples"
+        with (
+            patch("instrmcp.extensions.MeasureIt.get_sweep0d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep1d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweep2d_template"),
+            patch("instrmcp.extensions.MeasureIt.get_simulsweep_template"),
+            patch("instrmcp.extensions.MeasureIt.get_sweepqueue_template"),
+            patch("instrmcp.extensions.MeasureIt.get_common_patterns_template"),
+            patch("instrmcp.extensions.MeasureIt.get_measureit_code_examples"),
         ):
             registrar.register_all()
 

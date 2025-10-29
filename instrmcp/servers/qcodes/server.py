@@ -397,7 +397,9 @@ class QCodesStationServer:
 
             # Start FastMCP server - let it handle asyncio
             self.mcp.run(
-                transport="http", host=self.host, port=self.port  # HTTP transport
+                transport="http",
+                host=self.host,
+                port=self.port,  # HTTP transport
             )
 
         except Exception as e:

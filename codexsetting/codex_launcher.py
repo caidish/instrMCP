@@ -41,9 +41,7 @@ def main() -> None:
     async def check_and_setup():
         running = await check_http_mcp_server(host=host, port=port)
         if not running:
-            raise RuntimeError(
-                f"Jupyter MCP server not reachable at {jupyter_url}/mcp"
-            )
+            raise RuntimeError(f"Jupyter MCP server not reachable at {jupyter_url}/mcp")
         return create_stdio_proxy_server(jupyter_url, server_name="InstrMCP Proxy")
 
     try:

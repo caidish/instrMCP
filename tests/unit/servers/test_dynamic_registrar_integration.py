@@ -1,9 +1,7 @@
 """Integration tests for DynamicToolRegistrar with FastMCP."""
 
 import pytest
-import json
-from unittest.mock import Mock, MagicMock, patch, call
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 from instrmcp.servers.jupyter_qcodes.dynamic_registrar import DynamicToolRegistrar
 from instrmcp.tools.dynamic import create_tool_spec

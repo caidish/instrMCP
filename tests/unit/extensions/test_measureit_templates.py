@@ -605,6 +605,6 @@ class TestTemplateIntegration:
         for template_str in templates:
             template_lower = template_str.lower()
             for term in forbidden_terms:
-                assert (
-                    term.lower() not in template_lower
-                ), f"Found placeholder '{term}' in template"
+                assert term.lower() not in template_lower, (
+                    f"Found placeholder '{term}' in template"
+                )
