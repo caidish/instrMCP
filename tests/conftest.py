@@ -187,15 +187,10 @@ def sample_dataset_data():
 def mock_measureit_sweep():
     """Mock MeasureIt sweep for testing."""
     sweep = MagicMock()
-    sweep.is_running = MagicMock(return_value=False)
-    sweep.status = "idle"
-    sweep.config = {
-        "sweep_type": "1D",
-        "parameter": "gate_voltage",
-        "start": 0,
-        "stop": 1,
-        "num_points": 100,
-    }
+    sweep.is_running = False
+    sweep.progress_state = MagicMock(
+        progress=0.0, elapsed_time=0.0, time_remaining=None
+    )
     return sweep
 
 

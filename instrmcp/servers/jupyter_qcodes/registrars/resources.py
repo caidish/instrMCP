@@ -227,7 +227,7 @@ class ResourceRegistrar:
 
             # Add MeasureIt resources if enabled
             if "measureit" in self.enabled_options:
-                from ....extensions.MeasureIt import (
+                from ....extensions.measureit import (
                     get_sweep0d_template,
                     get_sweep1d_template,
                     get_sweep2d_template,
@@ -388,7 +388,7 @@ class ResourceRegistrar:
         """Register MeasureIt template resources."""
 
         # Import MeasureIt template functions
-        from ....extensions.MeasureIt import (
+        from ....extensions.measureit import (
             get_sweep0d_template,
             get_sweep1d_template,
             get_sweep2d_template,

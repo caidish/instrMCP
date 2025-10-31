@@ -103,14 +103,12 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "my_sweep1d",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
-                    "config": {
-                        "parameter": "gate_voltage",
-                        "start": 0.0,
-                        "stop": 1.0,
-                        "num_points": 100,
-                    },
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "is_running": True,
+                    "progress": 0.45,
+                    "elapsed_time": 12.0,
+                    "time_remaining": 15.0,
                 }
             ],
             "checked_variables": ["my_sweep1d", "other_sweep"],
@@ -124,8 +122,11 @@ class TestMeasureItToolRegistrar:
         response_data = json.loads(result[0].text)
         assert response_data["running"] is True
         assert len(response_data["sweeps"]) == 1
-        assert response_data["sweeps"][0]["sweep_type"] == "Sweep1D"
-        assert response_data["sweeps"][0]["status"] == "running"
+        sweep = response_data["sweeps"][0]
+        assert sweep["type"] == "Sweep1D"
+        assert sweep["module"] == "measureit.sweep.sweep1d"
+        assert sweep["is_running"] is True
+        assert sweep["progress"] == 0.45
 
     @pytest.mark.asyncio
     async def test_wait_for_all_sweeps_tool(
@@ -169,18 +170,24 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "sweep1d",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "is_running": True,
+                    "progress": 0.2,
                 },
                 {
                     "variable_name": "sweep2d",
-                    "sweep_type": "Sweep2D",
-                    "status": "paused",
+                    "type": "Sweep2D",
+                    "module": "measureit.sweep.sweep2d",
+                    "is_running": False,
+                    "progress": 0.75,
                 },
                 {
                     "variable_name": "sweep0d",
-                    "sweep_type": "Sweep0D",
-                    "status": "completed",
+                    "type": "Sweep0D",
+                    "module": "measureit.sweep.sweep0d",
+                    "is_running": False,
+                    "progress": 1.0,
                 },
             ],
             "checked_variables": ["sweep1d", "sweep2d", "sweep0d"],
@@ -194,9 +201,9 @@ class TestMeasureItToolRegistrar:
         response_data = json.loads(result[0].text)
         assert response_data["running"] is True
         assert len(response_data["sweeps"]) == 3
-        assert response_data["sweeps"][0]["sweep_type"] == "Sweep1D"
-        assert response_data["sweeps"][1]["status"] == "paused"
-        assert response_data["sweeps"][2]["status"] == "completed"
+        assert response_data["sweeps"][0]["type"] == "Sweep1D"
+        assert response_data["sweeps"][1]["is_running"] is False
+        assert response_data["sweeps"][2]["progress"] == 1.0
 
     @pytest.mark.asyncio
     async def test_get_status_error(self, registrar, mock_tools, mock_mcp_server):
@@ -223,25 +230,12 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "complex_sweep",
-                    "sweep_type": "Sweep2D",
-                    "status": "running",
-                    "config": {
-                        "outer_parameter": "gate_voltage",
-                        "outer_start": -1.0,
-                        "outer_stop": 1.0,
-                        "outer_points": 50,
-                        "inner_parameter": "bias_voltage",
-                        "inner_start": -0.5,
-                        "inner_stop": 0.5,
-                        "inner_points": 100,
-                        "delay": 0.001,
-                        "measured_parameters": ["current", "conductance"],
-                    },
-                    "progress": {
-                        "current_point": 1234,
-                        "total_points": 5000,
-                        "percentage": 24.68,
-                    },
+                    "type": "Sweep2D",
+                    "module": "measureit.sweep.sweep2d",
+                    "is_running": True,
+                    "progress": 0.2468,
+                    "elapsed_time": 120.0,
+                    "time_remaining": 360.0,
                 }
             ],
             "checked_variables": ["complex_sweep"],
@@ -254,10 +248,11 @@ class TestMeasureItToolRegistrar:
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"][0]
-        assert "config" in sweep
-        assert "progress" in sweep
-        assert sweep["config"]["outer_parameter"] == "gate_voltage"
-        assert sweep["progress"]["percentage"] == 24.68
+        assert sweep["type"] == "Sweep2D"
+        assert sweep["is_running"] is True
+        assert sweep["progress"] == 0.2468
+        assert sweep["elapsed_time"] == 120.0
+        assert sweep["time_remaining"] == 360.0
 
     @pytest.mark.asyncio
     async def test_get_status_with_sweep_queue(
@@ -269,17 +264,14 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "my_queue",
-                    "sweep_type": "SweepQueue",
-                    "status": "running",
-                    "config": {
-                        "queue_length": 5,
-                        "current_sweep_index": 2,
-                        "sweeps": [
-                            {"type": "Sweep1D", "parameter": "gate"},
-                            {"type": "Sweep2D", "parameter": "bias"},
-                            {"type": "Sweep1D", "parameter": "field"},
-                        ],
-                    },
+                    "type": "SweepQueue",
+                    "module": "measureit.sweep.queue",
+                    "is_running": True,
+                    "progress": 0.5,
+                    "elapsed_time": 90.0,
+                    "time_remaining": 30.0,
+                    "queue_length": 5,
+                    "current_sweep_index": 2,
                 }
             ],
             "checked_variables": ["my_queue"],
@@ -292,9 +284,9 @@ class TestMeasureItToolRegistrar:
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"][0]
-        assert sweep["sweep_type"] == "SweepQueue"
-        assert sweep["config"]["queue_length"] == 5
-        assert sweep["config"]["current_sweep_index"] == 2
+        assert sweep["type"] == "SweepQueue"
+        assert sweep["queue_length"] == 5
+        assert sweep["current_sweep_index"] == 2
 
     @pytest.mark.asyncio
     async def test_get_status_with_empty_checked_variables(
@@ -322,13 +314,13 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "completed_sweep",
-                    "sweep_type": "Sweep1D",
-                    "status": "idle",
-                    "config": {
-                        "parameter": "voltage",
-                        "completed": True,
-                        "data_saved": True,
-                    },
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "is_running": False,
+                    "progress": 1.0,
+                    "elapsed_time": 240.0,
+                    "time_remaining": 0.0,
+                    "completed": True,
                 }
             ],
             "checked_variables": ["completed_sweep"],
@@ -341,7 +333,7 @@ class TestMeasureItToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["running"] is False
-        assert response_data["sweeps"][0]["status"] == "idle"
+        assert response_data["sweeps"][0]["is_running"] is False
 
     @pytest.mark.asyncio
     async def test_get_status_returns_text_content(
@@ -373,8 +365,9 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "sweep",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "is_running": True,
                     "timestamp": datetime(2024, 1, 1, 12, 0, 0),
                 }
             ],
@@ -415,14 +408,14 @@ class TestMeasureItToolRegistrar:
             "sweeps": [
                 {
                     "variable_name": "simul_sweep",
-                    "sweep_type": "SimulSweep",
-                    "status": "running",
-                    "config": {
-                        "parameters": ["gate1", "gate2", "gate3"],
-                        "simultaneous": True,
-                        "sweep_range": [0, 1],
-                        "num_points": 100,
-                    },
+                    "type": "SimulSweep",
+                    "module": "measureit.sweep.simulsweep",
+                    "is_running": True,
+                    "progress": 0.33,
+                    "elapsed_time": 45.0,
+                    "time_remaining": 90.0,
+                    "parameters": ["gate1", "gate2", "gate3"],
+                    "simultaneous": True,
                 }
             ],
             "checked_variables": ["simul_sweep"],
@@ -435,6 +428,6 @@ class TestMeasureItToolRegistrar:
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"][0]
-        assert sweep["sweep_type"] == "SimulSweep"
-        assert len(sweep["config"]["parameters"]) == 3
-        assert sweep["config"]["simultaneous"] is True
+        assert sweep["type"] == "SimulSweep"
+        assert len(sweep["parameters"]) == 3
+        assert sweep["simultaneous"] is True

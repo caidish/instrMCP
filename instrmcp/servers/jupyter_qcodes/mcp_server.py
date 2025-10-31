@@ -25,7 +25,7 @@ from .dynamic_registrar import DynamicToolRegistrar
 
 # MeasureIt integration (optional)
 try:
-    from ...extensions import MeasureIt as measureit_module
+    from ...extensions import measureit as measureit_module
 
     MEASUREIT_AVAILABLE = True
 except ImportError:

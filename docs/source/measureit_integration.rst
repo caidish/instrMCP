@@ -339,11 +339,17 @@ Via Python:
 
 .. code-block:: python
 
-   from instrmcp.extensions.MeasureIt import get_sweep_status
+   from instrmcp.extensions.measureit import get_sweep_status
 
    status = get_sweep_status()
-   print(f"Running: {status['is_running']}")
-   print(f"Progress: {status['progress']}%")
+   for sweep in status.get("sweeps", []):
+       print(
+           f"{sweep['variable_name']}: "
+           f"running={sweep['is_running']}, "
+           f"progress={sweep.get('progress')}, "
+           f"elapsed={sweep.get('elapsed_time')}s, "
+           f"eta={sweep.get('time_remaining')}s"
+       )
 
 Best Practices
 --------------
@@ -442,7 +448,7 @@ Custom Sweep Templates
 
 Add your own templates in:
 
-``instrmcp/extensions/MeasureIt/measureit_templates.py``
+``instrmcp/extensions/measureit/measureit_templates.py``
 
 Example:
 

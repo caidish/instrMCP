@@ -327,7 +327,7 @@ Check if any MeasureIt sweep is currently running.
 
 **Parameters**: None
 
-**Returns**: JSON with running status, sweep details if active
+**Returns**: JSON with ``running`` flag, ``checked_variables``, and ``sweeps`` containing ``variable_name``, ``type``, ``module``, ``is_running``, and optional progress timing fields.
 
 **Example usage via Claude**:
 
