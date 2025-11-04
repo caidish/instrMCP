@@ -345,7 +345,7 @@ Via Python:
    for sweep in status.get("sweeps", []):
        print(
            f"{sweep['variable_name']}: "
-           f"running={sweep['is_running']}, "
+           f"state={sweep['state']}, "
            f"progress={sweep.get('progress')}, "
            f"elapsed={sweep.get('elapsed_time')}s, "
            f"eta={sweep.get('time_remaining')}s"

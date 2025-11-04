@@ -52,7 +52,7 @@ init_database(database_name, exp_name, sample_name, s)
 ensure_qt()
 s.start()
 
-# To stop: s.stop() or press ESC
+# To pause: s.pause() or press ESC
 """,
         "advanced_patterns": {},
         "common_parameters": {
@@ -67,7 +67,7 @@ s.start()
             "inter_delay controls sampling rate (0.1s = 10 Hz max)",
             "Always call init_database before s.start()",
             "Use ensure_qt() for interactive plots",
-            "To see if the sweep is finished or not, check s.is_running",
+            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -123,7 +123,7 @@ init_database(database_name, exp_name, sample_name, s)
 ensure_qt()
 s.start()
 
-# To stop: s.stop() or press ESC, spacebar to reverse direction
+# To pause: s.pause() or press ESC, spacebar to reverse direction
 """,
         "advanced_patterns": {
             "fast_sweep": """# Fast sweep with reduced plotting
@@ -189,7 +189,7 @@ s.start()
             "Bidirectional sweeps are useful for hysteresis measurements",
             "Set appropriate step size to avoid damaging instruments",
             "continual=True useful for real-time monitoring",
-            "To see if the sweep is finished or not, check s.is_running",
+            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -259,7 +259,7 @@ init_database(database_name, exp_name, sample_name, s)
 ensure_qt()
 s.start()
 
-# To stop: s.stop() or press ESC
+# To pause: s.pause() or press ESC
 """,
         "advanced_patterns": {
             "fine_mapping": """# High-resolution 2D map
@@ -333,7 +333,7 @@ s.start()
             "back_multiplier speeds up return sweeps",
             "Adjust outer_delay for instrument settling time",
             "Large maps can take hours - plan accordingly",
-            "To see if the sweep is finished or not, check s.is_running",
+            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -394,7 +394,7 @@ init_database(database_name, exp_name, sample_name, s)
 ensure_qt()
 s.start()
 
-# To stop: s.stop() or press ESC
+# To pause: s.pause() or press ESC
 """,
         "advanced_patterns": {
             "ratio_sweep": """# Maintain parameter ratio during sweep
@@ -473,7 +473,7 @@ s.start()
             "Useful for diagonal cuts through multi-dimensional parameter space",
             "Parameters sweep simultaneously at each measurement point",
             "Good for maintaining parameter relationships/ratios",
-            "To see if the sweep is finished or not, check s.is_running",
+            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -551,7 +551,7 @@ for n, item in enumerate(sq):
 ensure_qt()
 sq.start()
 
-# To stop: sq.stop()
+# To pause: sq.pause()
 """,
         "advanced_patterns": {
             "overnight_sequence": """# Overnight measurement sequence
@@ -670,7 +670,7 @@ sq.start()
             "Queue is iterable - you can inspect contents before starting",
             "Each sweep in queue can have different parameters",
             "Functions execute immediately when reached in queue",
-            "To see if the sweep is finished or not, check s.is_running",
+            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -814,16 +814,16 @@ try:
     sweep.start()
 except Exception as e:
     print(f"Error during measurement: {e}")
-    if sweep.is_running:
-        sweep.stop()
+    if sweep.progressState.state in (SweepState.RAMPING, SweepState.RUNNING):
+        sweep.pause()
 """,
             "graceful_stop": """# Graceful stopping
 import signal
 
 def signal_handler(sig, frame):
-    print("Received interrupt signal, stopping measurement...")
-    if 'sweep' in globals() and sweep.is_running:
-        sweep.stop()
+    print("Received interrupt signal, pausing measurement...")
+    if 'sweep' in globals() and sweep.progressState.state in (SweepState.RAMPING, SweepState.RUNNING):
+        sweep.pause()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -833,16 +833,16 @@ sweep.start()
 """,
             "recovery": """# Measurement recovery
 # Check if measurement is still running
-if sweep.is_running:
+if sweep.progressState.state in (SweepState.RAMPING, SweepState.RUNNING):
     print("Measurement is running")
     print(f"Current status: {sweep}")
 else:
     print("Measurement stopped")
 
 # Resume if needed (for continual sweeps)
-if not sweep.is_running and sweep.continual:
+if sweep.progressState.state == SweepState.PAUSED and sweep.continual:
     print("Resuming measurement...")
-    sweep.start()
+    sweep.resume()
 """,
         },
         "optimization_tips": [

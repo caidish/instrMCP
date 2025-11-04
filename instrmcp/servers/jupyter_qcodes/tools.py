@@ -12,6 +12,7 @@ from typing import Dict, List, Any, Optional, Union
 
 try:
     from measureit.sweep.base_sweep import BaseSweep
+    from measureit.sweep.progress import SweepState
 except ImportError:  # pragma: no cover - MeasureIt optional
     BaseSweep = None  # type: ignore[assignment]
 
@@ -27,20 +28,6 @@ logger = logging.getLogger(__name__)
 
 # Delay in seconds between checks for wait_for_all_sweeps and wait_for_sweep
 WAIT_DELAY = 1.0
-
-
-def _is_sweep_running(sweep: Optional[Dict[str, Any]]) -> bool:
-    """Return True if the sweep dict indicates that it is currently running."""
-    if not isinstance(sweep, dict):
-        return False
-    return bool(sweep.get("is_running"))
-
-
-def _sanitize_sweep_info(sweep: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a copy of the sweep info without runtime-specific flags."""
-    if not isinstance(sweep, dict):
-        return {}
-    return {k: v for k, v in sweep.items() if k not in {"is_running", "progress", "time_remaining"}}
 
 
 class QCodesReadOnlyTools:
@@ -1121,11 +1108,11 @@ class QCodesReadOnlyTools:
     async def wait_for_all_sweeps(self) -> Dict[str, Any]:
         """Wait until all running measureit sweeps finish.
 
-        Returns an empty dict if no sweep was running, otherwise waits for all currently running sweeps to finish and returns information about them.
+        Waits until all currently running sweeps have stopped running and returns information about them.
 
         Returns:
             Dict containing:
-                sweeps: List of Dicts of information about the initially running sweeps (as in get_measureit_status, without "is_running", "progress", or "time_remaining" attributes), or None if no sweeps were running.
+                sweeps: Dict mapping variable names to Dicts of information about the initially running sweeps as in get_measureit_status, empty if no sweeps were running.
                 error: str (if any error occurred)
         """
         try:
@@ -1137,87 +1124,67 @@ class QCodesReadOnlyTools:
         if status.get("error"):
             return {"sweeps": None, "error": status["error"]}
 
-        sweeps = status.get("sweeps")
-        initial_running = [s for s in sweeps if _is_sweep_running(s)]
+        sweeps = status["sweeps"]
+        initial_running = {
+            k: v for k, v in sweeps.items() if v["state"] in ("ramping", "running")
+        }
 
         if not initial_running:
             return {"sweeps": None}
-
-        tracked_sweeps = {s.get("variable_name") : _sanitize_sweep_info(s) for s in initial_running}
 
         while True:
             await asyncio.sleep(WAIT_DELAY)
             status = await self.get_measureit_status()
 
             if status.get("error"):
-                return {"sweeps": list(tracked_sweeps.values()), "error": status["error"]}
+                return {"sweeps": initial_running, "error": status["error"]}
 
-            current_sweeps = status.get("sweeps")
+            current_sweeps = status["sweeps"]
             still_running = False
-            for s in current_sweeps:
-                if s.get("variable_name") in tracked_sweeps:
-                    still_running = still_running or _is_sweep_running(s)
-                    tracked_sweeps[s.get("variable_name")] = _sanitize_sweep_info(s)
+            for k in initial_running.keys():
+                if k in current_sweeps:
+                    still_running = still_running or (
+                        current_sweeps[k]["state"] in ("ramping", "running")
+                    )
+                    initial_running[k] = current_sweeps[k]
 
             if not still_running:
                 break
 
-        return {"sweeps" : list(tracked_sweeps.values())}
+        return {"sweeps": initial_running}
 
     async def wait_for_sweep(self, var_name: str) -> Dict[str, Any]:
         """Wait for a measureit sweep with a given variable name to finish.
 
-        Waits for the sweep with the given name to finish and returns information about it.
+        Waits for the sweep with the given name to stop running and returns information about it.
 
         Returns:
             Dict containing:
-                sweep: Dict of information about the sweep (as in get_measureit_status, without "is_running", "progress", or "time_remaining" attributes), or None if no
+                sweep: Dict of information about the sweep as in get_measureit_status, or None if no
                 running sweep with this name exists.
                 error: str (if any error occurred)
         """
         status = await self.get_measureit_status()
         if status.get("error"):
             return {"sweep": None, "error": status["error"]}
+        target = status["sweeps"].get(var_name)
 
-        sweeps = status.get("sweeps")
-
-        target = next(
-            (
-                s
-                for s in sweeps
-                if s.get("variable_name") == var_name
-            ),
-            None,
-        )
-
-        if not target or not _is_sweep_running(target):
+        if not target or target["state"] not in ("ramping", "running"):
             return {"sweep": None}
-
-        sweep_info = _sanitize_sweep_info(target)
 
         while True:
             await asyncio.sleep(WAIT_DELAY)
             status = await self.get_measureit_status()
-
             if status.get("error"):
                 return {"sweep": sweep_info, "error": status["error"]}
+            target = status["sweeps"].get(var_name)
 
-            current = next(
-                (
-                    s
-                    for s in status.get("sweeps")
-                    if s.get("variable_name") == var_name
-                ),
-                None,
-            )
-
-            if not current:
+            if not target:
                 break
-            sweep_info = _sanitize_sweep_info(current)
-            if not _is_sweep_running(current):
+            if target["state"] not in ["ramping", "running"]:
                 break
 
-        return {"sweep": sweep_info}
+        return {"sweep": target}
 
     async def get_measureit_status(self) -> Dict[str, Any]:
         """Check if any measureit sweep is currently running.
@@ -1227,21 +1194,20 @@ class QCodesReadOnlyTools:
 
         Returns:
             Dict containing:
-                - is_running: bool - whether any sweep is active
-                - sweeps: List of active sweep information Dicts: 
-                    "variable_name" (str),  "type" (str), "module_name" (str), "is_running" (bool), "progress" (float or None), "time_elapsed" (float or None), "time_remaining" (float or None)
+                - active: bool - whether any sweep is active
+                - sweeps: Dict mapping variable names to Dicts of active sweep information:
+                    "variable_name" (str),  "type" (str), "module_name" (str), "state" (str), "progress" (float or None), "time_elapsed" (float or None), "time_remaining" (float or None)
                 - error: str (if any error occurred)
         """
         try:
             if BaseSweep is None:
                 return {
-                    "is_running": False,
-                    "sweeps": [],
-                    "checked_variables": [],
+                    "active": False,
+                    "sweeps": {},
                     "error": "MeasureIt library not available",
                 }
 
-            result = {"is_running": False, "sweeps": [], "checked_variables": []}
+            result = {"active": False, "sweeps": {}}
 
             # Look for MeasureIt sweep objects in the namespace
             for var_name, var_value in self.namespace.items():
@@ -1255,22 +1221,22 @@ class QCodesReadOnlyTools:
                         "type": type(var_value).__name__,
                         "module": getattr(var_value, "__module__", ""),
                     }
-                    sweep_info["is_running"] = var_value.is_running
-                    result["is_running"] = result["is_running"] or var_value.is_running
                     progress_state = var_value.progressState
-                    if progress_state is not None:
-                        sweep_info["progress"] = progress_state.progress
-                        sweep_info["time_elapsed"] = progress_state.time_elapsed
-                        sweep_info["time_remaining"] = progress_state.time_remaining
+                    sweep_info["state"] = progress_state.state.value
+                    result["active"] = result["active"] or (
+                        sweep_info["state"] in ("ramping", "running")
+                    )
+                    sweep_info["progress"] = progress_state.progress
+                    sweep_info["time_elapsed"] = progress_state.time_elapsed
+                    sweep_info["time_remaining"] = progress_state.time_remaining
 
-                    result["checked_variables"].append(var_name)
-                    result["sweeps"].append(sweep_info)
+                    result["sweeps"][var_name] = sweep_info
 
             return result
 
         except Exception as e:
             logger.error(f"Error checking MeasureIt status: {e}")
-            return {"is_running": False, "sweeps": [], "error": str(e)}
+            return {"active": False, "sweeps": {}, "error": str(e)}
 
     async def cleanup(self):
         """Clean up resources."""

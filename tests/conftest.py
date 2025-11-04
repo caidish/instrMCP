@@ -11,6 +11,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
+from measureit.sweep.progress import SweepState
 
 
 @pytest.fixture(scope="session")
@@ -187,9 +188,8 @@ def sample_dataset_data():
 def mock_measureit_sweep():
     """Mock MeasureIt sweep for testing."""
     sweep = MagicMock()
-    sweep.is_running = False
     sweep.progress_state = MagicMock(
-        progress=0.0, elapsed_time=0.0, time_remaining=None
+        state=SweepState.READY, progress=0.0, elapsed_time=0.0, time_remaining=None
     )
     return sweep
 
