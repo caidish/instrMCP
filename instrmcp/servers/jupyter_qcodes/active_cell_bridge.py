@@ -23,9 +23,9 @@ _CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}  # {exec_count: output_data}
 
 def _on_comm_open(comm, open_msg):
     """Handle new comm connection from frontend."""
-    logger.info(f"🔌 NEW COMM OPENED: {comm.comm_id}")
+    logger.debug(f"🔌 NEW COMM OPENED: {comm.comm_id}")
     _ACTIVE_COMMS.add(comm)
-    logger.info(f"📊 Active comms count: {len(_ACTIVE_COMMS)}")
+    logger.debug(f"📊 Active comms count: {len(_ACTIVE_COMMS)}")
 
     def _on_msg(msg):
         """Handle incoming messages from frontend."""
@@ -91,9 +91,9 @@ def _on_comm_open(comm, open_msg):
             if msg_type == "move_cursor_response" and success:
                 old_index = data.get("old_index")
                 new_index = data.get("new_index")
-                logger.info(f"✅ CURSOR MOVED: {old_index} → {new_index}")
+                logger.debug(f"✅ CURSOR MOVED: {old_index} → {new_index}")
             else:
-                logger.info(
+                logger.debug(
                     f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}"
                 )
             # Note: For now we just log the response, but we could store it for the waiting functions
@@ -120,7 +120,7 @@ def register_comm_target():
 
     try:
         ip.kernel.comm_manager.register_target("mcp:active_cell", _on_comm_open)
-        logger.info("Registered comm target 'mcp:active_cell'")
+        logger.debug("Registered comm target 'mcp:active_cell'")
     except Exception as e:
         logger.error(f"Failed to register comm target: {e}")
 
@@ -333,10 +333,10 @@ def add_new_cell(
     """
     import uuid
 
-    logger.info(
+    logger.debug(
         f"🚀 ADD_NEW_CELL called: type={cell_type}, position={position}, content_len={len(content)}"
     )
-    logger.info(f"📊 Active comms available: {len(_ACTIVE_COMMS)}")
+    logger.debug(f"📊 Active comms available: {len(_ACTIVE_COMMS)}")
 
     if not _ACTIVE_COMMS:
         logger.error("❌ NO ACTIVE COMMS - cannot send add_cell message")
@@ -366,7 +366,7 @@ def add_new_cell(
 
     # Send add cell request to all active comms
     successful_sends = 0
-    logger.info(f"📤 SENDING add_cell message to {len(_ACTIVE_COMMS)} comm(s)")
+    logger.debug(f"📤 SENDING add_cell message to {len(_ACTIVE_COMMS)} comm(s)")
 
     for comm in list(_ACTIVE_COMMS):
         try:
@@ -379,10 +379,10 @@ def add_new_cell(
                     "content": content,
                     "request_id": request_id,
                 }
-                logger.info(f"📤 Sending to comm {comm.comm_id}: {message}")
+                logger.debug(f"📤 Sending to comm {comm.comm_id}: {message}")
                 comm.send(message)
                 successful_sends += 1
-                logger.info(
+                logger.debug(
                     f"✅ Successfully sent add_cell request to comm {comm.comm_id}"
                 )
             else:

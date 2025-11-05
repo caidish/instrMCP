@@ -65,7 +65,7 @@ class DynamicToolRuntime:
             # Store the compiled function
             self._tool_functions[spec.name] = tool_func
 
-            logger.info(f"Successfully compiled dynamic tool: {spec.name}")
+            logger.debug(f"Successfully compiled dynamic tool: {spec.name}")
             return tool_func
 
         except Exception as e:
@@ -108,7 +108,7 @@ class DynamicToolRuntime:
         """
         if tool_name in self._tool_functions:
             del self._tool_functions[tool_name]
-            logger.info(f"Unregistered dynamic tool: {tool_name}")
+            logger.debug(f"Unregistered dynamic tool: {tool_name}")
 
     def list_compiled_tools(self) -> list[str]:
         """Get list of currently compiled tool names.

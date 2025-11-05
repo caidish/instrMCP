@@ -58,7 +58,7 @@ class ConsentManager:
                 "⚠️  CONSENT BYPASS MODE ENABLED - All operations auto-approved!"
             )
 
-        logger.info(
+        logger.debug(
             f"ConsentManager initialized: persist={persist_permissions}, timeout={timeout_seconds}s"
         )
 
@@ -119,7 +119,7 @@ class ConsentManager:
         if operation not in self._always_allow[author]:
             self._always_allow[author].append(operation)
             self._save_always_allow()
-            logger.info(
+            logger.debug(
                 f"Granted always_allow to author '{author}' for operation '{operation}'"
             )
 
@@ -136,13 +136,13 @@ class ConsentManager:
         if operation is None:
             # Revoke all permissions for this author
             del self._always_allow[author]
-            logger.info(f"Revoked all always_allow permissions for author '{author}'")
+            logger.debug(f"Revoked all always_allow permissions for author '{author}'")
         elif operation in self._always_allow[author]:
             # Revoke specific operation
             self._always_allow[author].remove(operation)
             if not self._always_allow[author]:
                 del self._always_allow[author]
-            logger.info(
+            logger.debug(
                 f"Revoked always_allow for author '{author}' operation '{operation}'"
             )
 
@@ -176,14 +176,14 @@ class ConsentManager:
         """
         # Check bypass mode
         if self._bypass_mode:
-            logger.info(
+            logger.debug(
                 f"Consent bypassed for {operation} of tool '{tool_name}' by '{author}'"
             )
             return {"approved": True, "always_allow": False, "reason": "bypass_mode"}
 
         # Check always_allow permissions
         if self.check_always_allow(author, operation):
-            logger.info(
+            logger.debug(
                 f"Auto-approved {operation} of tool '{tool_name}' by '{author}' (always_allow)"
             )
             return {"approved": True, "always_allow": False, "reason": "always_allow"}
@@ -275,7 +275,7 @@ class ConsentManager:
 
             # Send request
             comm.send(request_msg)
-            logger.info(
+            logger.debug(
                 f"Sent consent request for {operation} of tool '{tool_name}' by '{author}'"
             )
 
@@ -325,4 +325,4 @@ class ConsentManager:
         """Clear all always_allow permissions."""
         self._always_allow = {}
         self._save_always_allow()
-        logger.info("Cleared all always_allow permissions")
+        logger.debug("Cleared all always_allow permissions")

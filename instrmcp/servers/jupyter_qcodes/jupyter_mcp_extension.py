@@ -366,7 +366,22 @@ def load_ipython_extension(ipython):
     global _server, _server_task
 
     try:
-        logger.info("Loading Jupyter QCoDeS MCP extension...")
+        logger.debug("Loading Jupyter QCoDeS MCP extension...")
+
+        # Suppress expected ipykernel.comm errors about missing comm target
+        # These are normal before the MCP server starts
+        import logging as _logging
+
+        class MCPCommFilter(_logging.Filter):
+            """Filter to suppress expected comm target errors before MCP server starts."""
+            def filter(self, record):
+                # Suppress only the specific error about mcp:active_cell not being registered
+                if record.levelname == 'ERROR' and 'No such comm target registered: mcp:active_cell' in record.getMessage():
+                    return False  # Don't log this error
+                return True  # Log everything else
+
+        ipykernel_comm_logger = _logging.getLogger('ipykernel.comm')
+        ipykernel_comm_logger.addFilter(MCPCommFilter())
 
         # Check if we're in a Jupyter environment
         shell_type = ipython.__class__.__name__
@@ -378,7 +393,7 @@ def load_ipython_extension(ipython):
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # No event loop running, create one for terminal IPython
-            logger.info("No event loop found, creating one for terminal IPython")
+            logger.debug("No event loop found, creating one for terminal IPython")
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -402,7 +417,7 @@ def load_ipython_extension(ipython):
         )
 
         # Don't create server instance yet - it will be created when started
-        logger.info("Jupyter QCoDeS MCP extension loaded successfully")
+        logger.debug("Jupyter QCoDeS MCP extension loaded successfully")
         print("✅ QCoDeS MCP extension loaded")
         print("🛡️  Default mode: safe")
         print("📋 Use %mcp_status to check server status")
@@ -419,7 +434,7 @@ def unload_ipython_extension(ipython):
     global _server, _server_task
 
     try:
-        logger.info("Unloading Jupyter QCoDeS MCP extension...")
+        logger.debug("Unloading Jupyter QCoDeS MCP extension...")
 
         if _server_task and not _server_task.done():
             _server_task.cancel()
@@ -436,7 +451,7 @@ def unload_ipython_extension(ipython):
         _server = None
         _server_task = None
 
-        logger.info("Jupyter QCoDeS MCP extension unloaded")
+        logger.debug("Jupyter QCoDeS MCP extension unloaded")
         print("🛑 QCoDeS MCP Server stopped")
 
     except Exception as e:

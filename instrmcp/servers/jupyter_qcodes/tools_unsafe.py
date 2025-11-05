@@ -85,7 +85,7 @@ class UnsafeToolRegistrar:
                             )
                         ]
                     else:
-                        logger.info("✅ Cell execution approved")
+                        logger.debug("✅ Cell execution approved")
                         print("✅ Consent granted for cell execution")
 
                 except TimeoutError:
@@ -196,7 +196,7 @@ class UnsafeToolRegistrar:
                             )
                         ]
                     else:
-                        logger.info("✅ Cell deletion approved")
+                        logger.debug("✅ Cell deletion approved")
                         print("✅ Consent granted for cell deletion")
 
                 except TimeoutError:
@@ -317,7 +317,7 @@ class UnsafeToolRegistrar:
                             )
                         ]
                     else:
-                        logger.info(
+                        logger.debug(
                             f"✅ Cells deletion approved ({len(cell_list)} cells)"
                         )
                         print(
@@ -407,7 +407,7 @@ class UnsafeToolRegistrar:
                             )
                         ]
                     else:
-                        logger.info("✅ Patch application approved")
+                        logger.debug("✅ Patch application approved")
                         print("✅ Consent granted for patch application")
 
                 except TimeoutError:

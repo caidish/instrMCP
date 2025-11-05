@@ -48,10 +48,10 @@ class StationManager:
                 self.station = Station()
             else:
                 # Use standard QCoDeS Station initialization with config file
-                logger.info(f"Loading station from {config_path}")
+                logger.debug(f"Loading station from {config_path}")
                 self.station = Station(config_file=str(config_path))
 
-            logger.info("Successfully initialized QCoDeS Station")
+            logger.debug("Successfully initialized QCoDeS Station")
             return self.station
 
         except Exception as e:
@@ -100,13 +100,13 @@ class StationManager:
             raise RuntimeError("Station not initialized")
 
         if name in self.station.components:
-            logger.info(f"Instrument '{name}' already loaded")
+            logger.debug(f"Instrument '{name}' already loaded")
             return self.station.components[name]
 
         try:
             # Use QCoDeS standard load_instrument method
             instrument = self.station.load_instrument(name)
-            logger.info(f"Successfully loaded instrument '{name}'")
+            logger.debug(f"Successfully loaded instrument '{name}'")
             return instrument
 
         except Exception as e:
@@ -124,16 +124,16 @@ class StationManager:
 
         # Get all instrument names from config
         if not hasattr(self.station, "config") or not self.station.config:
-            logger.info("No station configuration found, no instruments to load")
+            logger.debug("No station configuration found, no instruments to load")
             return {}
 
         instrument_names = list(self.station.config.get("instruments", {}).keys())
 
         if not instrument_names:
-            logger.info("No instruments defined in configuration")
+            logger.debug("No instruments defined in configuration")
             return {}
 
-        logger.info(f"Loading all instruments: {instrument_names}")
+        logger.debug(f"Loading all instruments: {instrument_names}")
 
         results = {}
         for name in instrument_names:
@@ -145,7 +145,7 @@ class StationManager:
                 results[name] = False
 
         success_count = sum(results.values())
-        logger.info(
+        logger.debug(
             f"Load all complete: {success_count}/{len(instrument_names)} instruments loaded"
         )
 
@@ -169,10 +169,10 @@ class StationManager:
             ]
 
         if not instrument_names:
-            logger.info("No instruments to autoload")
+            logger.debug("No instruments to autoload")
             return {}
 
-        logger.info(f"Autoloading instruments: {instrument_names}")
+        logger.debug(f"Autoloading instruments: {instrument_names}")
 
         results = {}
         for name in instrument_names:
@@ -184,7 +184,7 @@ class StationManager:
                 results[name] = False
 
         success_count = sum(results.values())
-        logger.info(
+        logger.debug(
             f"Autoload complete: {success_count}/{len(instrument_names)} instruments loaded"
         )
 
@@ -208,7 +208,7 @@ class StationManager:
 
         try:
             instrument = self.station.components[name]
-            logger.info(f"Closing instrument '{name}'")
+            logger.debug(f"Closing instrument '{name}'")
 
             # Close the instrument connection
             instrument.close()
@@ -216,7 +216,7 @@ class StationManager:
             # Remove from station
             self.station.remove_component(name)
 
-            logger.info(f"Successfully closed instrument '{name}'")
+            logger.debug(f"Successfully closed instrument '{name}'")
             return True
 
         except Exception as e:
@@ -235,7 +235,7 @@ class StationManager:
         if not self.station:
             raise RuntimeError("Station not initialized")
 
-        logger.info(f"Reconnecting instrument '{name}'")
+        logger.debug(f"Reconnecting instrument '{name}'")
 
         # Close the instrument if it's loaded
         if name in self.station.components:
@@ -247,7 +247,7 @@ class StationManager:
         try:
             instrument = self.load_instrument(name)
             if instrument:
-                logger.info(f"Successfully reconnected instrument '{name}'")
+                logger.debug(f"Successfully reconnected instrument '{name}'")
             else:
                 logger.error(f"Failed to reconnect instrument '{name}'")
             return instrument
@@ -266,7 +266,7 @@ class StationManager:
             with open(output_path, "w") as f:
                 json.dump(available_instr, f, indent=2, default=str)
 
-            logger.info(f"Generated available instruments file: {output_path}")
+            logger.debug(f"Generated available instruments file: {output_path}")
             return str(output_path)
 
         except Exception as e:
@@ -327,7 +327,7 @@ class StationManager:
     def close_station(self):
         """Close station and all instruments."""
         if self.station:
-            logger.info("Closing station and all instruments")
+            logger.debug("Closing station and all instruments")
             try:
                 self.station.close_all_registered_instruments()
             except Exception as e:

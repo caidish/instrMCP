@@ -63,12 +63,12 @@ class DynamicToolRegistrar:
         """Load and register all tools from the registry on server start."""
         try:
             all_tools = self.registry.get_all()
-            logger.info(f"Loading {len(all_tools)} existing tools from registry")
+            logger.debug(f"Loading {len(all_tools)} existing tools from registry")
 
             for tool_name, spec in all_tools.items():
                 try:
                     self._register_tool_with_fastmcp(spec)
-                    logger.info(f"Re-registered tool: {tool_name}")
+                    logger.debug(f"Re-registered tool: {tool_name}")
                 except Exception as e:
                     logger.error(f"Failed to re-register tool {tool_name}: {e}")
 
@@ -165,7 +165,7 @@ class DynamicToolRegistrar:
                                     }
                                 )
                             else:
-                                logger.info(f"✅ Tool execution approved: {spec.name}")
+                                logger.debug(f"✅ Tool execution approved: {spec.name}")
                         except TimeoutError:
                             logger.error(
                                 f"Consent request timed out for tool execution '{spec.name}'"
@@ -226,7 +226,7 @@ class DynamicToolRegistrar:
                                 }
                             )
                         else:
-                            logger.info(f"✅ Tool execution approved: {spec.name}")
+                            logger.debug(f"✅ Tool execution approved: {spec.name}")
                     except TimeoutError:
                         logger.error(
                             f"Consent request timed out for tool execution '{spec.name}'"
@@ -255,7 +255,7 @@ class DynamicToolRegistrar:
         # Store in dynamic tools dict
         self._dynamic_tools[spec.name] = spec
 
-        logger.info(f"Registered dynamic tool with FastMCP: {spec.name}")
+        logger.debug(f"Registered dynamic tool with FastMCP: {spec.name}")
 
     def _unregister_tool_from_fastmcp(self, tool_name: str):
         """Unregister a tool from FastMCP.
@@ -273,7 +273,7 @@ class DynamicToolRegistrar:
         # Remove from FastMCP (available since v2.9.1)
         try:
             self.mcp.remove_tool(tool_name)
-            logger.info(
+            logger.debug(
                 f"Successfully removed tool '{tool_name}' from FastMCP and runtime"
             )
         except Exception as e:
@@ -311,7 +311,7 @@ class DynamicToolRegistrar:
         if not self.auto_correct_json:
             return None
 
-        logger.info(
+        logger.debug(
             f"Attempting JSON correction for field '{field_name}' via LLM sampling"
         )
 
@@ -343,7 +343,7 @@ Corrected JSON:"""
             json.loads(corrected_json)
 
             # Log successful correction
-            logger.info(
+            logger.debug(
                 f"Successfully corrected JSON for field '{field_name}': "
                 f"'{malformed_json[:50]}...' -> '{corrected_json[:50]}...'"
             )
@@ -515,7 +515,7 @@ Corrected JSON:"""
                                 if consent_result.get("always_allow")
                                 else ""
                             )
-                            logger.info(
+                            logger.debug(
                                 f"✅ Tool registration approved: {name} by {spec.author}{always_allow_status}"
                             )
                             print(
@@ -699,7 +699,7 @@ Corrected JSON:"""
                                 if consent_result.get("always_allow")
                                 else ""
                             )
-                            logger.info(
+                            logger.debug(
                                 f"✅ Tool update approved: {name} v{old_version}→v{version} by {existing_spec.author}{always_allow_status}"
                             )
                             print(

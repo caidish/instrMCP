@@ -78,7 +78,7 @@ class JupyterMCPServer:
         self._register_tools()
 
         mode_status = "safe" if safe_mode else "unsafe"
-        logger.info(
+        logger.debug(
             f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode"
         )
 
@@ -162,7 +162,7 @@ class JupyterMCPServer:
             return
 
         try:
-            logger.info(f"Starting Jupyter MCP server on {self.host}:{self.port}")
+            logger.debug(f"Starting Jupyter MCP server on {self.host}:{self.port}")
 
             # Start the server in a separate task
             self.server_task = asyncio.create_task(self._run_server())
@@ -209,7 +209,7 @@ class JupyterMCPServer:
                 except asyncio.CancelledError:
                     pass
 
-            logger.info("Jupyter MCP server stopped")
+            logger.debug("Jupyter MCP server stopped")
             print("🛑 QCoDeS MCP Server stopped")
 
         except Exception as e:
@@ -232,7 +232,7 @@ class JupyterMCPServer:
         mode_status = "safe" if safe_mode else "unsafe"
         old_mode_status = "safe" if old_mode else "unsafe"
 
-        logger.info(f"MCP server mode changed from {old_mode_status} to {mode_status}")
+        logger.debug(f"MCP server mode changed from {old_mode_status} to {mode_status}")
 
         return {
             "old_mode": old_mode_status,
@@ -259,7 +259,7 @@ class JupyterMCPServer:
         added = enabled_options - old_options
         removed = old_options - enabled_options
 
-        logger.info(f"MCP server options changed: added={added}, removed={removed}")
+        logger.debug(f"MCP server options changed: added={added}, removed={removed}")
 
         return {
             "old_options": sorted(old_options),

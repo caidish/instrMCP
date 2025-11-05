@@ -93,7 +93,7 @@ class InstrMCPConfig:
             try:
                 with open(config_file, "r") as f:
                     self._config = yaml.safe_load(f) or {}
-                logger.info(f"Loaded configuration from {config_file}")
+                logger.debug(f"Loaded configuration from {config_file}")
             except Exception as e:
                 logger.warning(f"Failed to load config from {config_file}: {e}")
                 self._config = self._get_default_config()
@@ -165,7 +165,7 @@ class InstrMCPConfig:
                         default_flow_style=False,
                         indent=2,
                     )
-                logger.info(f"Created user config at {user_config_file}")
+                logger.debug(f"Created user config at {user_config_file}")
             except Exception as e:
                 logger.warning(f"Failed to create user config: {e}")
 

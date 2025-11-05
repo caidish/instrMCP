@@ -48,7 +48,7 @@ class QCodesReadOnlyTools:
                 "Could not register pre_run_cell event - events system unavailable"
             )
 
-        logger.info("QCoDesReadOnlyTools initialized")
+        logger.debug("QCoDesReadOnlyTools initialized")
 
     def _capture_current_cell(self, info):
         """Capture the current cell content before execution.

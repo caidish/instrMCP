@@ -128,7 +128,7 @@ class ParameterPoller:
         )
         self.tasks[key] = task
 
-        logger.info(
+        logger.debug(
             f"Subscribed to {instrument_name}.{parameter_name} at {interval_s}s interval"
         )
 
@@ -145,7 +145,7 @@ class ParameterPoller:
                 pass
 
         self.subscriptions.pop(key, None)
-        logger.info(f"Unsubscribed from {instrument_name}.{parameter_name}")
+        logger.debug(f"Unsubscribed from {instrument_name}.{parameter_name}")
 
     async def _poll_parameter(
         self,

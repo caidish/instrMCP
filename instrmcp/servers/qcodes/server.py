@@ -96,7 +96,7 @@ class QCodesStationServer:
                 update: Whether to update from hardware (slow, default: False)
             """
             try:
-                logger.info(f"Getting all instrument health (update={update})")
+                logger.debug(f"Getting all instrument health (update={update})")
 
                 if not self.station_manager.station:
                     result = {"error": "Station not initialized", "status": "error"}
@@ -135,7 +135,9 @@ class QCodesStationServer:
                 update: Whether to update from hardware (default: True for single instruments)
             """
             try:
-                logger.info(f"Getting instrument health for '{name}' (update={update})")
+                logger.debug(
+                    f"Getting instrument health for '{name}' (update={update})"
+                )
 
                 if not self.station_manager.station:
                     result = {"error": "Station not initialized", "status": "error"}
@@ -178,7 +180,7 @@ class QCodesStationServer:
                 name: Instrument name
                 update: Whether to update from hardware (default: True)
             """
-            logger.info("Using typo-tolerant alias 'inst_healtn' -> 'inst_health'")
+            logger.debug("Using typo-tolerant alias 'inst_healtn' -> 'inst_health'")
             return await inst_health(name, update)
 
         @self.mcp.tool()
@@ -189,7 +191,7 @@ class QCodesStationServer:
                 name: Instrument name from configuration
             """
             try:
-                logger.info(f"Loading instrument '{name}'")
+                logger.debug(f"Loading instrument '{name}'")
 
                 instrument = self.station_manager.load_instrument(name)
 
@@ -237,7 +239,7 @@ class QCodesStationServer:
                 name: Instrument name to close
             """
             try:
-                logger.info(f"Closing instrument '{name}'")
+                logger.debug(f"Closing instrument '{name}'")
 
                 success = self.station_manager.close_instrument(name)
 
@@ -279,7 +281,7 @@ class QCodesStationServer:
                 name: Instrument name to reconnect
             """
             try:
-                logger.info(f"Reconnecting instrument '{name}'")
+                logger.debug(f"Reconnecting instrument '{name}'")
 
                 instrument = self.station_manager.reconnect_instrument(name)
 
@@ -323,7 +325,7 @@ class QCodesStationServer:
         async def station_info() -> List[TextContent]:
             """Get general station information and status."""
             try:
-                logger.info("Getting station information")
+                logger.debug("Getting station information")
 
                 if not self.station_manager.station:
                     result = {"error": "Station not initialized", "status": "error"}
@@ -358,7 +360,7 @@ class QCodesStationServer:
     async def initialize_server(self):
         """Initialize the server and station."""
         try:
-            logger.info("Initializing QCodes Station MCP Server")
+            logger.debug("Initializing QCodes Station MCP Server")
 
             # Initialize station
             self.station_manager.initialize_station()
@@ -368,16 +370,16 @@ class QCodesStationServer:
             if load_results:
                 success_count = sum(load_results.values())
                 total_count = len(load_results)
-                logger.info(
+                logger.debug(
                     f"Auto-load complete: {success_count}/{total_count} instruments loaded"
                 )
             else:
-                logger.info("No instruments to load")
+                logger.debug("No instruments to load")
 
             # Generate available instruments file
             self.station_manager.generate_available_instruments_file()
 
-            logger.info("Server initialization complete")
+            logger.debug("Server initialization complete")
 
         except Exception as e:
             logger.error(f"Failed to initialize server: {e}")
@@ -406,7 +408,7 @@ class QCodesStationServer:
 
     async def cleanup(self):
         """Clean up resources on shutdown."""
-        logger.info("Cleaning up QCodes Station MCP Server")
+        logger.debug("Cleaning up QCodes Station MCP Server")
         try:
             self.station_manager.close_station()
         except Exception as e:
@@ -448,7 +450,7 @@ def main():
         # Run server - let FastMCP handle asyncio
         server.start()
     except KeyboardInterrupt:
-        logger.info("Received interrupt signal")
+        logger.debug("Received interrupt signal")
     except Exception as e:
         logger.error(f"Server error: {e}")
         raise

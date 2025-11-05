@@ -135,7 +135,7 @@ class TestAutoCorrectEnabled:
         """Test that ctx.sample() is called when auto_correct_json is True."""
         import logging
 
-        caplog.set_level(logging.INFO)  # Capture INFO level logs
+        caplog.set_level(logging.DEBUG)  # Capture DEBUG level logs
 
         malformed_json = "[{name: 'test'}]"
         corrected_json = '[{"name": "test"}]'
@@ -371,7 +371,7 @@ class TestAuditLogging:
         """Test that successful corrections are logged."""
         import logging
 
-        caplog.set_level(logging.INFO)  # Capture INFO level logs
+        caplog.set_level(logging.DEBUG)  # Capture DEBUG level logs
 
         mock_response = Mock()
         mock_response.text = "[]"

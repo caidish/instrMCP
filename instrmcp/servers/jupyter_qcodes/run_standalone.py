@@ -59,7 +59,7 @@ class MockIPython:
             mock_dac2.ch01.voltage(1.1)
             mock_dac2.ch02.voltage(1.2)
 
-            logger.info("Created mock QCoDeS instruments for testing")
+            logger.debug("Created mock QCoDeS instruments for testing")
 
         except ImportError as e:
             logger.warning(f"QCoDeS not available, using minimal mock: {e}")
