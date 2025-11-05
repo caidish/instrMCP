@@ -450,6 +450,13 @@ class TestAuditLogger:
         temp_dir = Path(tempfile.mkdtemp())
         log_path = temp_dir / "test_audit.log"
         yield log_path
+        # Clean up logger handlers before removing directory
+        import logging
+        audit_logger = logging.getLogger("instrMCP.audit")
+        # Close all handlers to release file handles
+        for handler in audit_logger.handlers[:]:
+            handler.close()
+            audit_logger.removeHandler(handler)
         shutil.rmtree(temp_dir)
 
     @pytest.fixture
@@ -459,8 +466,19 @@ class TestAuditLogger:
         import logging
 
         audit_logger = logging.getLogger("instrMCP.audit")
-        audit_logger.handlers.clear()
-        return AuditLogger(log_path=temp_log_path)
+        # Close and remove any existing handlers
+        for handler in audit_logger.handlers[:]:
+            handler.close()
+            audit_logger.removeHandler(handler)
+
+        # Create new logger instance
+        logger_instance = AuditLogger(log_path=temp_log_path)
+        yield logger_instance
+
+        # Cleanup after test
+        for handler in audit_logger.handlers[:]:
+            handler.close()
+            audit_logger.removeHandler(handler)
 
     def test_log_registration(self, logger, temp_log_path):
         """Test logging a tool registration."""
@@ -470,6 +488,10 @@ class TestAuditLogger:
             author="test_author",
             capabilities=["cap:qcodes.read"],
         )
+
+        # Flush handlers to ensure data is written to disk
+        for handler in logger.logger.handlers:
+            handler.flush()
 
         # Read log file
         with open(temp_log_path, "r") as f:
@@ -488,6 +510,10 @@ class TestAuditLogger:
             author="test_author",
         )
 
+        # Flush handlers to ensure data is written to disk
+        for handler in logger.logger.handlers:
+            handler.flush()
+
         with open(temp_log_path, "r") as f:
             log_content = f.read()
 
@@ -502,6 +528,10 @@ class TestAuditLogger:
             tool_name="test_tool", version="1.0.0", reason="Security issue"
         )
 
+        # Flush handlers to ensure data is written to disk
+        for handler in logger.logger.handlers:
+            handler.flush()
+
         with open(temp_log_path, "r") as f:
             log_content = f.read()
 
@@ -514,6 +544,10 @@ class TestAuditLogger:
         logger.log_error(
             operation="register", tool_name="test_tool", error="Validation failed"
         )
+
+        # Flush handlers to ensure data is written to disk
+        for handler in logger.logger.handlers:
+            handler.flush()
 
         with open(temp_log_path, "r") as f:
             log_content = f.read()
