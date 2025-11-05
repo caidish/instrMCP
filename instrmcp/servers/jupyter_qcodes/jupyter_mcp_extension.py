@@ -552,15 +552,19 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
         if _status_comm is None or getattr(_status_comm, "_closed", True):
             _status_comm = Comm(target_name="mcp:server_status")
 
+        # Get timestamp safely - try running loop first, fallback to time.time()
+        try:
+            loop = asyncio.get_running_loop()
+            timestamp = loop.time()
+        except RuntimeError:
+            # No running loop - use system time (Python 3.13+ compatibility)
+            timestamp = time.time()
+
         # Send the status message
         _status_comm.send(
             {
                 "status": status,
-                "timestamp": (
-                    time.time()
-                    if asyncio.get_event_loop() is None
-                    else asyncio.get_event_loop().time()
-                ),
+                "timestamp": timestamp,
                 "details": details or {},
             }
         )
