@@ -135,6 +135,7 @@ MeasureIt Tools (Optional)
 Measurement status (requires ``%mcp_option measureit``):
 
 - ``get_measureit_status`` - Check running sweeps
+- ``measureit_
 
 Resources
 ---------

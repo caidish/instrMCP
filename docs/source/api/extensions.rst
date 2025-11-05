@@ -58,7 +58,7 @@ MeasureIt Extension
 MeasureIt Templates
 ~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.extensions.MeasureIt.measureit_templates
+.. automodule:: instrmcp.extensions.measureit.measureit_templates
    :members:
    :undoc-members:
    :show-inheritance:
@@ -69,49 +69,49 @@ Template Functions
 get_sweep0d_template
 """"""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_sweep0d_template
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_sweep0d_template
 
    Get template for time-based monitoring (Sweep0D).
 
 get_sweep1d_template
 """"""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_sweep1d_template
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_sweep1d_template
 
    Get template for 1D parameter sweeps.
 
 get_sweep2d_template
 """"""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_sweep2d_template
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_sweep2d_template
 
    Get template for 2D parameter mapping.
 
 get_simulsweep_template
 """""""""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_simulsweep_template
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_simulsweep_template
 
    Get template for simultaneous parameter sweeps.
 
 get_sweepqueue_template
 """""""""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_sweepqueue_template
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_sweepqueue_template
 
    Get template for sequential measurement workflows.
 
 get_common_patterns
 """""""""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_common_patterns
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_common_patterns
 
    Get common MeasureIt patterns and best practices.
 
 get_all_examples
 """"""""""""""""
 
-.. autofunction:: instrmcp.extensions.MeasureIt.measureit_templates.get_all_examples
+.. autofunction:: instrmcp.extensions.measureit.measureit_templates.get_all_examples
 
    Get complete collection of all MeasureIt patterns.
 

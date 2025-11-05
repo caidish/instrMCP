@@ -6,7 +6,7 @@ Tests DatabaseToolRegistrar for registering database query tools with FastMCP.
 
 import pytest
 import json
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from mcp.types import TextContent
 
 from instrmcp.servers.jupyter_qcodes.registrars.database_tools import (

@@ -40,6 +40,8 @@ class TestMeasureItToolRegistrar:
         """Create a mock QCodesReadOnlyTools instance."""
         tools = MagicMock()
         tools.get_measureit_status = AsyncMock()
+        tools.wait_for_all_sweeps = AsyncMock()
+        tools.wait_for_sweep = AsyncMock()
         return tools
 
     @pytest.fixture
@@ -57,9 +59,14 @@ class TestMeasureItToolRegistrar:
         """Test registering all MeasureIt tools."""
         registrar.register_all()
 
-        # Check that the get_status tool was registered
-        assert "measureit_get_status" in mock_mcp_server._tools
-        assert callable(mock_mcp_server._tools["measureit_get_status"])
+        # Check that all MeasureIt tools were registered
+        for tool_name in [
+            "measureit_get_status",
+            "measureit_wait_for_all_sweeps",
+            "measureit_wait_for_sweep",
+        ]:
+            assert tool_name in mock_mcp_server._tools
+            assert callable(mock_mcp_server._tools[tool_name])
 
     @pytest.mark.asyncio
     async def test_get_status_no_sweeps_running(
@@ -67,9 +74,8 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status when no sweeps are running."""
         mock_status = {
-            "running": False,
-            "sweeps": [],
-            "checked_variables": ["sweep1d_obj", "sweep2d_obj"],
+            "active": False,
+            "sweeps": {},
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -82,7 +88,7 @@ class TestMeasureItToolRegistrar:
         assert isinstance(result[0], TextContent)
 
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is False
+        assert response_data["active"] is False
         assert len(response_data["sweeps"]) == 0
         mock_tools.get_measureit_status.assert_called_once()
 
@@ -92,21 +98,18 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with a running sweep."""
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "my_sweep1d": {
                     "variable_name": "my_sweep1d",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
-                    "config": {
-                        "parameter": "gate_voltage",
-                        "start": 0.0,
-                        "stop": 1.0,
-                        "num_points": 100,
-                    },
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "state": "running",
+                    "progress": 0.45,
+                    "elapsed_time": 12.0,
+                    "time_remaining": 15.0,
                 }
-            ],
-            "checked_variables": ["my_sweep1d", "other_sweep"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -115,10 +118,45 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is True
+        assert response_data["active"] is True
         assert len(response_data["sweeps"]) == 1
-        assert response_data["sweeps"][0]["sweep_type"] == "Sweep1D"
-        assert response_data["sweeps"][0]["status"] == "running"
+        sweep = response_data["sweeps"]["my_sweep1d"]
+        assert sweep["type"] == "Sweep1D"
+        assert sweep["module"] == "measureit.sweep.sweep1d"
+        assert sweep["state"] == "running"
+        assert sweep["progress"] == 0.45
+
+    @pytest.mark.asyncio
+    async def test_wait_for_all_sweeps_tool(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
+        """Test wait_for_all_sweeps tool registration and execution."""
+        mock_tools.wait_for_all_sweeps.return_value = {"sweeps": []}
+
+        registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_all_sweeps"]
+        result = await wait_tool()
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], TextContent)
+        payload = json.loads(result[0].text)
+        assert payload["sweeps"] == []
+        mock_tools.wait_for_all_sweeps.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_wait_for_sweep_tool(self, registrar, mock_tools, mock_mcp_server):
+        """Test wait_for_sweep tool registration and execution."""
+        mock_tools.wait_for_sweep.return_value = {"sweep": {"variable_name": "s1"}}
+
+        registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        result = await wait_tool("s1")
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], TextContent)
+        payload = json.loads(result[0].text)
+        assert payload["sweep"]["variable_name"] == "s1"
+        mock_tools.wait_for_sweep.assert_called_once_with("s1")
 
     @pytest.mark.asyncio
     async def test_get_status_with_multiple_sweeps(
@@ -126,25 +164,30 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with multiple sweeps."""
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "sweep1d": {
                     "variable_name": "sweep1d",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "state": "running",
+                    "progress": 0.2,
                 },
-                {
+                "sweep2d": {
                     "variable_name": "sweep2d",
-                    "sweep_type": "Sweep2D",
-                    "status": "paused",
+                    "type": "Sweep2D",
+                    "module": "measureit.sweep.sweep2d",
+                    "state": "paused",
+                    "progress": 0.75,
                 },
-                {
+                "sweep0d": {
                     "variable_name": "sweep0d",
-                    "sweep_type": "Sweep0D",
-                    "status": "completed",
+                    "type": "Sweep0D",
+                    "module": "measureit.sweep.sweep0d",
+                    "state": "done",
+                    "progress": 1.0,
                 },
-            ],
-            "checked_variables": ["sweep1d", "sweep2d", "sweep0d"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -153,11 +196,11 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is True
+        assert response_data["active"] is True
         assert len(response_data["sweeps"]) == 3
-        assert response_data["sweeps"][0]["sweep_type"] == "Sweep1D"
-        assert response_data["sweeps"][1]["status"] == "paused"
-        assert response_data["sweeps"][2]["status"] == "completed"
+        assert response_data["sweeps"]["sweep1d"]["type"] == "Sweep1D"
+        assert response_data["sweeps"]["sweep2d"]["state"] == "paused"
+        assert response_data["sweeps"]["sweep0d"]["progress"] == 1.0
 
     @pytest.mark.asyncio
     async def test_get_status_error(self, registrar, mock_tools, mock_mcp_server):
@@ -180,32 +223,18 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with detailed sweep configuration."""
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "complex_sweep": {
                     "variable_name": "complex_sweep",
-                    "sweep_type": "Sweep2D",
-                    "status": "running",
-                    "config": {
-                        "outer_parameter": "gate_voltage",
-                        "outer_start": -1.0,
-                        "outer_stop": 1.0,
-                        "outer_points": 50,
-                        "inner_parameter": "bias_voltage",
-                        "inner_start": -0.5,
-                        "inner_stop": 0.5,
-                        "inner_points": 100,
-                        "delay": 0.001,
-                        "measured_parameters": ["current", "conductance"],
-                    },
-                    "progress": {
-                        "current_point": 1234,
-                        "total_points": 5000,
-                        "percentage": 24.68,
-                    },
+                    "type": "Sweep2D",
+                    "module": "measureit.sweep.sweep2d",
+                    "state": "running",
+                    "progress": 0.2468,
+                    "elapsed_time": 120.0,
+                    "time_remaining": 360.0,
                 }
-            ],
-            "checked_variables": ["complex_sweep"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -214,11 +243,12 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        sweep = response_data["sweeps"][0]
-        assert "config" in sweep
-        assert "progress" in sweep
-        assert sweep["config"]["outer_parameter"] == "gate_voltage"
-        assert sweep["progress"]["percentage"] == 24.68
+        sweep = response_data["sweeps"]["complex_sweep"]
+        assert sweep["type"] == "Sweep2D"
+        assert sweep["state"] == "running"
+        assert sweep["progress"] == 0.2468
+        assert sweep["elapsed_time"] == 120.0
+        assert sweep["time_remaining"] == 360.0
 
     @pytest.mark.asyncio
     async def test_get_status_with_sweep_queue(
@@ -226,24 +256,20 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with SweepQueue."""
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "my_queue": {
                     "variable_name": "my_queue",
-                    "sweep_type": "SweepQueue",
-                    "status": "running",
-                    "config": {
-                        "queue_length": 5,
-                        "current_sweep_index": 2,
-                        "sweeps": [
-                            {"type": "Sweep1D", "parameter": "gate"},
-                            {"type": "Sweep2D", "parameter": "bias"},
-                            {"type": "Sweep1D", "parameter": "field"},
-                        ],
-                    },
+                    "type": "SweepQueue",
+                    "module": "measureit.sweep.queue",
+                    "state": "running",
+                    "progress": 0.5,
+                    "elapsed_time": 90.0,
+                    "time_remaining": 30.0,
+                    "queue_length": 5,
+                    "current_sweep_index": 2,
                 }
-            ],
-            "checked_variables": ["my_queue"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -252,17 +278,17 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        sweep = response_data["sweeps"][0]
-        assert sweep["sweep_type"] == "SweepQueue"
-        assert sweep["config"]["queue_length"] == 5
-        assert sweep["config"]["current_sweep_index"] == 2
+        sweep = response_data["sweeps"]["my_queue"]
+        assert sweep["type"] == "SweepQueue"
+        assert sweep["queue_length"] == 5
+        assert sweep["current_sweep_index"] == 2
 
     @pytest.mark.asyncio
     async def test_get_status_with_empty_checked_variables(
         self, registrar, mock_tools, mock_mcp_server
     ):
         """Test getting MeasureIt status when no variables were checked."""
-        mock_status = {"running": False, "sweeps": [], "checked_variables": []}
+        mock_status = {"active": False, "sweeps": {}}
         mock_tools.get_measureit_status.return_value = mock_status
 
         registrar.register_all()
@@ -270,8 +296,7 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is False
-        assert len(response_data["checked_variables"]) == 0
+        assert response_data["active"] is False
 
     @pytest.mark.asyncio
     async def test_get_status_with_idle_sweep(
@@ -279,20 +304,18 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with idle/completed sweeps."""
         mock_status = {
-            "running": False,
-            "sweeps": [
-                {
+            "active": False,
+            "sweeps": {
+                "completed_sweep": {
                     "variable_name": "completed_sweep",
-                    "sweep_type": "Sweep1D",
-                    "status": "idle",
-                    "config": {
-                        "parameter": "voltage",
-                        "completed": True,
-                        "data_saved": True,
-                    },
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "state": "done",
+                    "progress": 1.0,
+                    "elapsed_time": 240.0,
+                    "time_remaining": 0.0,
                 }
-            ],
-            "checked_variables": ["completed_sweep"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -301,15 +324,15 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is False
-        assert response_data["sweeps"][0]["status"] == "idle"
+        assert response_data["active"] is False
+        assert response_data["sweeps"]["completed_sweep"]["state"] == "done"
 
     @pytest.mark.asyncio
     async def test_get_status_returns_text_content(
         self, registrar, mock_tools, mock_mcp_server
     ):
         """Test that get_status returns TextContent."""
-        mock_status = {"running": False, "sweeps": [], "checked_variables": []}
+        mock_status = {"active": False, "sweeps": {}}
         mock_tools.get_measureit_status.return_value = mock_status
 
         registrar.register_all()
@@ -326,20 +349,18 @@ class TestMeasureItToolRegistrar:
         self, registrar, mock_tools, mock_mcp_server
     ):
         """Test that get_status properly serializes complex objects."""
-        from datetime import datetime
 
         # Include objects that need default=str serialization
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "sweep": {
                     "variable_name": "sweep",
-                    "sweep_type": "Sweep1D",
-                    "status": "running",
-                    "timestamp": datetime(2024, 1, 1, 12, 0, 0),
+                    "type": "Sweep1D",
+                    "module": "measureit.sweep.sweep1d",
+                    "state": "running",
                 }
-            ],
-            "checked_variables": ["sweep"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -349,10 +370,10 @@ class TestMeasureItToolRegistrar:
 
         # Should not raise JSON serialization error
         response_data = json.loads(result[0].text)
-        assert response_data["running"] is True
+        assert response_data["active"] is True
 
-    def test_only_one_tool_registered(self, registrar, mock_mcp_server):
-        """Test that only the get_status tool is registered."""
+    def test_three_tools_registered(self, registrar, mock_mcp_server):
+        """Test that the get_status, wait_for_sweep, and wait_for_all_sweeps tools are registered."""
         registrar.register_all()
 
         # Should only have one MeasureIt tool
@@ -361,8 +382,10 @@ class TestMeasureItToolRegistrar:
             for name in mock_mcp_server._tools.keys()
             if name.startswith("measureit_")
         ]
-        assert len(measureit_tools) == 1
+        assert len(measureit_tools) == 3
         assert "measureit_get_status" in measureit_tools
+        assert "measureit_wait_for_sweep" in measureit_tools
+        assert "measureit_wait_for_all_sweeps" in measureit_tools
 
     @pytest.mark.asyncio
     async def test_get_status_with_simul_sweep(
@@ -370,21 +393,20 @@ class TestMeasureItToolRegistrar:
     ):
         """Test getting MeasureIt status with SimulSweep."""
         mock_status = {
-            "running": True,
-            "sweeps": [
-                {
+            "active": True,
+            "sweeps": {
+                "simul_sweep": {
                     "variable_name": "simul_sweep",
-                    "sweep_type": "SimulSweep",
-                    "status": "running",
-                    "config": {
-                        "parameters": ["gate1", "gate2", "gate3"],
-                        "simultaneous": True,
-                        "sweep_range": [0, 1],
-                        "num_points": 100,
-                    },
+                    "type": "SimulSweep",
+                    "module": "measureit.sweep.simulsweep",
+                    "state": "running",
+                    "progress": 0.33,
+                    "elapsed_time": 45.0,
+                    "time_remaining": 90.0,
+                    "parameters": ["gate1", "gate2", "gate3"],
+                    "simultaneous": True,
                 }
-            ],
-            "checked_variables": ["simul_sweep"],
+            },
         }
         mock_tools.get_measureit_status.return_value = mock_status
 
@@ -393,7 +415,7 @@ class TestMeasureItToolRegistrar:
         result = await get_status_func()
 
         response_data = json.loads(result[0].text)
-        sweep = response_data["sweeps"][0]
-        assert sweep["sweep_type"] == "SimulSweep"
-        assert len(sweep["config"]["parameters"]) == 3
-        assert sweep["config"]["simultaneous"] is True
+        sweep = response_data["sweeps"]["simul_sweep"]
+        assert sweep["type"] == "SimulSweep"
+        assert len(sweep["parameters"]) == 3
+        assert sweep["simultaneous"] is True

@@ -6,7 +6,7 @@ SweepQueue, common patterns, and comprehensive code examples.
 """
 
 import json
-from instrmcp.extensions.MeasureIt.measureit_templates import (
+from instrmcp.extensions.measureit.measureit_templates import (
     get_sweep0d_template,
     get_sweep1d_template,
     get_sweep2d_template,
@@ -605,6 +605,6 @@ class TestTemplateIntegration:
         for template_str in templates:
             template_lower = template_str.lower()
             for term in forbidden_terms:
-                assert (
-                    term.lower() not in template_lower
-                ), f"Found placeholder '{term}' in template"
+                assert term.lower() not in template_lower, (
+                    f"Found placeholder '{term}' in template"
+                )

@@ -94,7 +94,7 @@ Instead of direct MeasureIt object manipulation, provide intelligent code genera
 ### 8.1 ✅ PHASE 8 COMPLETED (Updated Sep 29, 2024)
 
 - [x] `mcp_server.py` reduced from **973 lines** → **914 lines** → **870 lines** → **234 lines** (76% reduction!)
-- [x] **MeasureIt templates** modularized to `instrmcp/extensions/MeasureIt/measureit_templates.py` (33KB)
+- [x] **MeasureIt templates** modularized to `instrmcp/extensions/measureit/measureit_templates.py` (33KB)
 - [x] **Database tools** modularized to `instrmcp/extensions/database/`:
   - `db_integration.py` (15KB) - 3 core query tools
   - `db_resources.py` (7.7KB) - 2 simple resources

@@ -3,8 +3,7 @@
 import pytest
 import json
 import os
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import Mock, patch, MagicMock
 import asyncio
 
 from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager

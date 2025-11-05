@@ -48,7 +48,7 @@ with meas.run() as datasaver:
 """
 
 CELL_MEASUREIT_SWEEP = """# MeasureIt 1D sweep
-from MeasureIt.sweep import Sweep1D
+from measureit.sweep import Sweep1D
 
 sweep = Sweep1D(
     set_param=mock_dac.ch01.voltage,

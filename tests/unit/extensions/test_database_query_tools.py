@@ -7,9 +7,7 @@ database path resolution for QCodes database integration.
 
 import pytest
 import json
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 from instrmcp.extensions.database.query_tools import (

@@ -5,8 +5,8 @@ Provides mock implementations of IPython components needed for
 testing Jupyter integration without running a full kernel.
 """
 
-from unittest.mock import MagicMock, Mock
-from typing import Dict, Any, List, Optional
+from unittest.mock import Mock
+from typing import Dict, Any, Optional
 import time
 
 

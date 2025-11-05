@@ -2,11 +2,9 @@
 
 import pytest
 import json
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
-from pathlib import Path
+from unittest.mock import Mock, AsyncMock, patch
 
 from instrmcp.servers.jupyter_qcodes.dynamic_registrar import DynamicToolRegistrar
-from instrmcp.tools.dynamic import create_tool_spec
 
 
 @pytest.fixture

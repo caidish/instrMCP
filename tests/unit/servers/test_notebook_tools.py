@@ -297,10 +297,11 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 2
 
         # Mock sys.last_* for error tracking
-        with patch.object(sys, "last_type", ValueError, create=True), patch.object(
-            sys, "last_value", ValueError("test error"), create=True
-        ), patch.object(sys, "last_traceback", None, create=True):
-
+        with (
+            patch.object(sys, "last_type", ValueError, create=True),
+            patch.object(sys, "last_value", ValueError("test error"), create=True),
+            patch.object(sys, "last_traceback", None, create=True),
+        ):
             registrar.register_all()
             get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
             result = await get_output_func()
@@ -417,10 +418,11 @@ class TestNotebookToolRegistrar:
         }
         mock_ipython.execution_count = 3
 
-        with patch.object(sys, "last_type", ValueError, create=True), patch.object(
-            sys, "last_value", ValueError("test"), create=True
-        ), patch.object(sys, "last_traceback", None, create=True):
-
+        with (
+            patch.object(sys, "last_type", ValueError, create=True),
+            patch.object(sys, "last_value", ValueError("test"), create=True),
+            patch.object(sys, "last_traceback", None, create=True),
+        ):
             registrar.register_all()
             get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
             result = await get_cells_func(num_cells=2, include_output=True)
@@ -586,6 +588,6 @@ class TestNotebookToolRegistrar:
         registrar.register_all()
 
         for tool_name, tool_func in mock_mcp_server._tools.items():
-            assert asyncio.iscoroutinefunction(
-                tool_func
-            ), f"Tool {tool_name} should be an async function"
+            assert asyncio.iscoroutinefunction(tool_func), (
+                f"Tool {tool_name} should be an async function"
+            )

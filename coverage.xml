@@ -282,16 +282,16 @@
 				</class>
 			</classes>
 		</package>
-		<package name="extensions.MeasureIt" line-rate="0" branch-rate="0" complexity="0">
+		<package name="extensions.measureit" line-rate="0" branch-rate="0" complexity="0">
 			<classes>
-				<class name="__init__.py" filename="extensions/MeasureIt/__init__.py" complexity="0" line-rate="0" branch-rate="0">
+				<class name="__init__.py" filename="extensions/measureit/__init__.py" complexity="0" line-rate="0" branch-rate="0">
 					<methods/>
 					<lines>
 						<line number="7" hits="0"/>
 						<line number="17" hits="0"/>
 					</lines>
 				</class>
-				<class name="measureit_templates.py" filename="extensions/MeasureIt/measureit_templates.py" complexity="0" line-rate="0" branch-rate="0">
+				<class name="measureit_templates.py" filename="extensions/measureit/measureit_templates.py" complexity="0" line-rate="0" branch-rate="0">
 					<methods/>
 					<lines>
 						<line number="8" hits="0"/>

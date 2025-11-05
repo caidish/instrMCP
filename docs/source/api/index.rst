@@ -41,7 +41,7 @@ Extensions
 Extensions add optional functionality:
 
 - ``instrmcp.extensions.database``: Database integration
-- ``instrmcp.extensions.MeasureIt``: MeasureIt template library
+- ``instrmcp.extensions.measureit``: MeasureIt template library
 - ``instrmcp.extensions.jupyterlab``: JupyterLab extension
 
 See :doc:`extensions` for detailed API documentation.
@@ -79,4 +79,4 @@ Commonly Used Classes and Functions
 **Extension Functions**:
 
 - :py:func:`instrmcp.extensions.database.query_tools.list_experiments`
-- :py:func:`instrmcp.extensions.MeasureIt.measureit_templates.get_sweep1d_template`
+- :py:func:`instrmcp.extensions.measureit.measureit_templates.get_sweep1d_template`
