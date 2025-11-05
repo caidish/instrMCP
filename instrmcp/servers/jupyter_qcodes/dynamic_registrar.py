@@ -563,9 +563,9 @@ Corrected JSON:"""
                 # Add correction details if auto-correction was used
                 if corrected_fields:
                     response["auto_corrections"] = corrected_fields
-                    response["message"] += (
-                        f" (with {len(corrected_fields)} JSON field(s) auto-corrected)"
-                    )
+                    response[
+                        "message"
+                    ] += f" (with {len(corrected_fields)} JSON field(s) auto-corrected)"
 
                 return json.dumps(response)
 

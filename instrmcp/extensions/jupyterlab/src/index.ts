@@ -44,6 +44,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track consent comms opened by backend
     const consentComms = new WeakMap<Kernel.IKernelConnection, Set<any>>();
+
+    // Track MCP server readiness per kernel
+    const mcpServerReady = new WeakMap<Kernel.IKernelConnection, boolean>();
+
+    // Queue for pending operations while waiting for server
+    const pendingOperations = new WeakMap<Kernel.IKernelConnection, (() => void)[]>();
     
     // Debounce utility function
     const debounce = (fn: () => void, delay: number) => {
@@ -1140,6 +1146,60 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Register comm target for server status updates from backend
+    const registerServerStatusCommTarget = (kernel: Kernel.IKernelConnection) => {
+      if (!kernel || !kernel.status || kernel.status === 'dead') {
+        return;
+      }
+
+      // Register target to receive server status updates
+      kernel.registerCommTarget('mcp:server_status', (comm: any, msg: any) => {
+        const data = msg?.content?.data || {};
+        const status = data.status;
+
+        console.log(`MCP Server Status: Received status update - ${status}`);
+
+        if (status === 'server_ready') {
+          // Mark server as ready
+          mcpServerReady.set(kernel, true);
+          console.log('MCP Active Cell Bridge: Server is ready, initializing comm connection');
+
+          // Process any pending operations
+          const pending = pendingOperations.get(kernel) || [];
+          pendingOperations.set(kernel, []);
+
+          // Execute all pending operations
+          for (const operation of pending) {
+            operation();
+          }
+
+          // Ensure comm connection and send initial snapshot
+          ensureComm(kernel).then(() => {
+            sendSnapshot(kernel);
+          });
+        } else if (status === 'server_stopped') {
+          // Mark server as not ready
+          mcpServerReady.set(kernel, false);
+          console.log('MCP Active Cell Bridge: Server stopped');
+
+          // Clear existing comm connections
+          const comm = comms.get(kernel);
+          if (comm && !comm.isDisposed) {
+            comm.close();
+          }
+          comms.delete(kernel);
+          openedComms.delete(kernel);
+          commInitializing.delete(kernel);
+        } else if (status === 'server_not_started') {
+          // Initial state - server not started yet
+          mcpServerReady.set(kernel, false);
+          console.log('MCP Active Cell Bridge: Waiting for server to start');
+        }
+      });
+
+      console.log('MCP Server Status: Registered comm target mcp:server_status');
+    };
+
     // Register comm target for consent requests from backend
     const registerConsentCommTarget = (kernel: Kernel.IKernelConnection) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
@@ -1195,12 +1255,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
         console.warn('MCP Active Cell Bridge: Kernel not available or dead');
         return null;
       }
-      
+
       if (kernel.status !== 'idle' && kernel.status !== 'busy') {
         console.warn(`MCP Active Cell Bridge: Kernel not ready (status: ${kernel.status})`);
         return null;
       }
-      
+
+      // Check if MCP server is ready (optional - we'll try anyway but handle errors gracefully)
+      // if (!mcpServerReady.get(kernel)) {
+      //   console.log('MCP Active Cell Bridge: Server not ready yet, skipping comm connection');
+      //   return null;
+      // }
+
       let comm = comms.get(kernel);
       if (!comm || !isCommReady(kernel, comm)) {
         // Check if already initializing
@@ -1213,7 +1279,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             return null;
           }
         }
-        
+
         // Start initialization
         initPromise = (async () => {
           try {
@@ -1265,11 +1331,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
           } catch (error) {
             console.error('MCP Active Cell Bridge: Failed to create comm:', error);
             
-            // Check if error is due to missing comm target
+            // Check if error is due to missing comm target - this is expected if server not started
             const errorMsg = error?.toString() || '';
             if (errorMsg.includes('No such comm target') || errorMsg.includes('comm target')) {
-              console.error('MCP Active Cell Bridge: Kernel comm target not registered!');
-              console.error('Run this command in a notebook cell: %load_ext servers.jupyter_qcodes.jupyter_mcp_extension');
+              console.log('MCP Active Cell Bridge: Server not started yet. Use %mcp_start to start the server.');
+              // Don't show error messages - this is expected behavior
             }
             
             openedComms.delete(kernel);
@@ -1373,22 +1439,35 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Track active cell changes
     notebooks.activeCellChanged.connect(async (sender: any, args: any) => {
       const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
+
+      // // Check if server is ready
+      // if (kernel && !mcpServerReady.get(kernel)) {
+      //   console.log('MCP Active Cell Bridge: Server not ready, queueing active cell change');
+      //   // Queue this operation for when server becomes ready
+      //   let pending = pendingOperations.get(kernel) || [];
+      //   pending.push(() => {
+      //     ensureComm(kernel).then(() => sendSnapshot(kernel));
+      //   });
+      //   pendingOperations.set(kernel, pending);
+      //   return;
+      // }
+
       await ensureComm(kernel);
-      
+
       // Send snapshot immediately when cell changes
       await sendSnapshot(kernel);
-      
+
       // Set up debounced content change tracking for the new cell
       const cell = notebooks.activeCell;
       if (cell) {
         // Create debounced function with 2000ms delay as requested
         const debouncedSendSnapshot = debounce(() => sendSnapshot(kernel), 2000);
-        
+
         // Listen to content changes
         cell.model.sharedModel.changed.connect(() => {
           debouncedSendSnapshot();
         });
-        
+
         console.log('MCP Active Cell Bridge: Tracking new active cell');
       }
     });
@@ -1396,6 +1475,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Track notebook changes
     notebooks.currentChanged.connect(async (sender: any, args: any) => {
       const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
+
+      // // Check if server is ready
+      // if (kernel && !mcpServerReady.get(kernel)) {
+      //   console.log('MCP Active Cell Bridge: Server not ready, queueing notebook change');
+      //   // Queue this operation for when server becomes ready
+      //   let pending = pendingOperations.get(kernel) || [];
+      //   pending.push(() => {
+      //     ensureComm(kernel).then(() => sendSnapshot(kernel));
+      //   });
+      //   pendingOperations.set(kernel, pending);
+      //   return;
+      // }
+
       await ensureComm(kernel);
       await sendSnapshot(kernel);
       console.log('MCP Active Cell Bridge: Notebook changed, sent snapshot');
@@ -1405,19 +1497,22 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.widgetAdded.connect((sender: any, panel: any) => {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
-        ensureComm(kernel);
         if (kernel) {
+          registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
+          // Don't try to ensure comm yet - wait for server ready signal
         }
-        console.log('MCP Active Cell Bridge: Kernel ready, setting up comms');
+        console.log('MCP Active Cell Bridge: Kernel ready, waiting for server status');
       });
     });
 
-    // Initialize consent comm target for existing notebooks
+    // Initialize comm targets for existing notebooks
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
       if (kernel) {
+        registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
+        // Don't try to ensure comm yet - wait for server ready signal
       }
     });
 

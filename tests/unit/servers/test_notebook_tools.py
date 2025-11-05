@@ -588,6 +588,6 @@ class TestNotebookToolRegistrar:
         registrar.register_all()
 
         for tool_name, tool_func in mock_mcp_server._tools.items():
-            assert asyncio.iscoroutinefunction(tool_func), (
-                f"Tool {tool_name} should be an async function"
-            )
+            assert asyncio.iscoroutinefunction(
+                tool_func
+            ), f"Tool {tool_name} should be an async function"

@@ -1176,7 +1176,7 @@ class QCodesReadOnlyTools:
             await asyncio.sleep(WAIT_DELAY)
             status = await self.get_measureit_status()
             if status.get("error"):
-                return {"sweep": sweep_info, "error": status["error"]}
+                return {"sweep": target, "error": status["error"]}
             target = status["sweeps"].get(var_name)
 
             if not target:
