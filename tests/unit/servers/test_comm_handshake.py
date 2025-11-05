@@ -129,7 +129,7 @@ class TestBroadcastServerStatusPython313:
 
         # Mock get_ipython to return our fake instance
         with patch(
-            "IPython.get_ipython",
+            "IPython.core.getipython.get_ipython",
             return_value=fake_ipython,
         ):
             # Mock asyncio.get_running_loop to raise RuntimeError (Python 3.13 behavior)
@@ -174,7 +174,7 @@ class TestBroadcastServerStatusPython313:
 
         # Mock get_ipython to return our fake instance
         with patch(
-            "IPython.get_ipython",
+            "IPython.core.getipython.get_ipython",
             return_value=fake_ipython,
         ):
             # Mock asyncio.get_running_loop to return a loop
@@ -216,7 +216,7 @@ class TestBroadcastServerStatusPython313:
         )
 
         with patch(
-            "IPython.get_ipython",
+            "IPython.core.getipython.get_ipython",
             return_value=None,
         ):
             # Should not raise, just return early
@@ -234,7 +234,7 @@ class TestBroadcastServerStatusPython313:
         fake_ip.kernel = None
 
         with patch(
-            "IPython.get_ipython",
+            "IPython.core.getipython.get_ipython",
             return_value=fake_ip,
         ):
             # Should not raise, just return early

@@ -452,12 +452,17 @@ class TestAuditLogger:
         yield log_path
         # Clean up logger handlers before removing directory
         import logging
+
         audit_logger = logging.getLogger("instrMCP.audit")
         # Close all handlers to release file handles
         for handler in audit_logger.handlers[:]:
             handler.close()
             audit_logger.removeHandler(handler)
-        shutil.rmtree(temp_dir)
+
+        # Use ignore_errors on Windows to avoid file locking issues
+        import sys
+
+        shutil.rmtree(temp_dir, ignore_errors=(sys.platform == "win32"))
 
     @pytest.fixture
     def logger(self, temp_log_path):

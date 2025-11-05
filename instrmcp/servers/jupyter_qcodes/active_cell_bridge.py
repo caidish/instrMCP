@@ -9,7 +9,7 @@ import time
 import threading
 import logging
 from typing import Optional, Dict, Any, List
-from IPython import get_ipython
+from IPython.core.getipython import get_ipython
 
 logger = logging.getLogger(__name__)
 

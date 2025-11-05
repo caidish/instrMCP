@@ -229,13 +229,21 @@ class TestInstrMCPConfig:
 
     def test_resolve_paths_relative_to_absolute(self, temp_dir, monkeypatch):
         """Test relative paths are converted to absolute."""
+        import sys
+
         monkeypatch.setattr(Path, "home", lambda: temp_dir)
 
         config = InstrMCPConfig()
+        # Use a truly absolute path that works on all platforms
+        if sys.platform == "win32":
+            absolute_path = "D:\\absolute\\path"
+        else:
+            absolute_path = "/absolute/path"
+
         config._config = {
             "paths": {
                 "data": "config/data",  # Relative path
-                "templates": "/absolute/path",  # Already absolute
+                "templates": absolute_path,  # Already absolute
             }
         }
 
@@ -244,7 +252,7 @@ class TestInstrMCPConfig:
         # Relative path should be made absolute
         assert os.path.isabs(config._config["paths"]["data"])
         # Absolute path should remain unchanged
-        assert config._config["paths"]["templates"] == "/absolute/path"
+        assert config._config["paths"]["templates"] == absolute_path
 
     def test_resolve_paths_empty_config(self):
         """Test resolve paths handles empty config gracefully."""

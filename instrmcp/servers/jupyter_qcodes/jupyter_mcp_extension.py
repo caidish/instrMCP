@@ -114,7 +114,7 @@ class MCPMagics(Magics):
 
             try:
                 # Get IPython instance from the shell
-                from IPython import get_ipython
+                from IPython.core.getipython import get_ipython
 
                 ipython = get_ipython()
                 if not ipython:
@@ -333,7 +333,7 @@ class MCPMagics(Magics):
 
             try:
                 # Get IPython instance before stopping server
-                from IPython import get_ipython
+                from IPython.core.getipython import get_ipython
 
                 ipython = get_ipython()
                 if not ipython:
@@ -541,7 +541,7 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
     global _status_comm
 
     try:
-        from IPython import get_ipython
+        from IPython.core.getipython import get_ipython
         from ipykernel.comm import Comm
 
         ipython = get_ipython()
