@@ -7,6 +7,7 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from IPython.core.magic import Magics, line_magic, magics_class
@@ -25,6 +26,9 @@ _server_port: int = 8123  # Default port
 
 # Global options tracking
 _enabled_options: set = set()  # Set of enabled option names
+
+# Server status comm tracking
+_status_comm = None  # Will hold the comm for broadcasting server status
 
 
 @magics_class
@@ -131,6 +135,16 @@ class MCPMagics(Magics):
                 if not _desired_mode:
                     print("⚠️  UNSAFE MODE: execute_editing_cell tool is available")
 
+                # Broadcast that server is ready
+                broadcast_server_status(
+                    "server_ready",
+                    {
+                        "mode": "safe" if _desired_mode else "unsafe",
+                        "host": _server.host,
+                        "port": _server.port,
+                    },
+                )
+
             except Exception as e:
                 print(f"❌ Failed to start MCP server: {e}")
 
@@ -172,6 +186,9 @@ class MCPMagics(Magics):
 
                 _server_task = None
                 print("✅ MCP server stopped")
+
+                # Broadcast that server has stopped
+                broadcast_server_status("server_stopped", {})
 
             except Exception as e:
                 print(f"❌ Failed to stop MCP server: {e}")
@@ -350,6 +367,16 @@ class MCPMagics(Magics):
                 if not _desired_mode:
                     print("⚠️  UNSAFE MODE: execute_editing_cell tool is now available")
 
+                # Broadcast that server is ready after restart
+                broadcast_server_status(
+                    "server_ready",
+                    {
+                        "mode": "safe" if _desired_mode else "unsafe",
+                        "host": _server.host,
+                        "port": _server.port,
+                    },
+                )
+
             except Exception as e:
                 print(f"❌ Failed to restart MCP server: {e}")
 
@@ -374,13 +401,18 @@ def load_ipython_extension(ipython):
 
         class MCPCommFilter(_logging.Filter):
             """Filter to suppress expected comm target errors before MCP server starts."""
+
             def filter(self, record):
                 # Suppress only the specific error about mcp:active_cell not being registered
-                if record.levelname == 'ERROR' and 'No such comm target registered: mcp:active_cell' in record.getMessage():
+                if (
+                    record.levelname == "ERROR"
+                    and "No such comm target registered: mcp:active_cell"
+                    in record.getMessage()
+                ):
                     return False  # Don't log this error
                 return True  # Log everything else
 
-        ipykernel_comm_logger = _logging.getLogger('ipykernel.comm')
+        ipykernel_comm_logger = _logging.getLogger("ipykernel.comm")
         ipykernel_comm_logger.addFilter(MCPCommFilter())
 
         # Check if we're in a Jupyter environment
@@ -403,6 +435,9 @@ def load_ipython_extension(ipython):
 
         # Register comm target for active cell tracking
         register_comm_target()
+
+        # Broadcast initial server status (not started yet)
+        broadcast_server_status("server_not_started", {})
 
         # Register magic commands
         magic_instance = MCPMagics(ipython)
@@ -499,3 +534,37 @@ def get_server_status() -> dict:
         "task_done": _server_task and _server_task.done(),
         "task_cancelled": _server_task and _server_task.cancelled(),
     }
+
+
+def broadcast_server_status(status: str, details: Optional[dict] = None):
+    """Broadcast server status to any listening frontends."""
+    global _status_comm
+
+    try:
+        from IPython import get_ipython
+        from ipykernel.comm import Comm
+
+        ipython = get_ipython()
+        if not ipython or not hasattr(ipython, "kernel"):
+            return
+
+        # Create or reuse a comm for broadcasting
+        if _status_comm is None or getattr(_status_comm, "_closed", True):
+            _status_comm = Comm(target_name="mcp:server_status")
+
+        # Send the status message
+        _status_comm.send(
+            {
+                "status": status,
+                "timestamp": (
+                    time.time()
+                    if asyncio.get_event_loop() is None
+                    else asyncio.get_event_loop().time()
+                ),
+                "details": details or {},
+            }
+        )
+
+        logger.debug(f"Broadcasted server status: {status}")
+    except Exception as e:
+        logger.debug(f"Could not broadcast server status: {e}")

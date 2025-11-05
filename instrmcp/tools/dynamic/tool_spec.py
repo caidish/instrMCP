@@ -349,7 +349,9 @@ def create_tool_spec(
     if not description:
         description = f"Dynamic tool: {name}"
     if capabilities is None:
-        capabilities = []  # Empty default - capabilities are freeform labels for documentation/discovery, not enforced
+        capabilities = (
+            []
+        )  # Empty default - capabilities are freeform labels for documentation/discovery, not enforced
     if parameters is None:
         parameters = []
     if returns is None:
