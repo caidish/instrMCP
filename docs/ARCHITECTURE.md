@@ -78,17 +78,18 @@ All tools now use hierarchical naming with `/` separator for better organization
 - `notebook/list_variables(type_filter)` - List notebook variables by type
 - `notebook/get_variable_info(name)` - Detailed variable information
 - `notebook/get_editing_cell(fresh_ms)` - Current JupyterLab cell content
-- `notebook/update_editing_cell(content)` - Update current cell content
 - `notebook/get_editing_cell_output()` - Get output of most recently executed cell
 - `notebook/get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
 - `notebook/server_status()` - Check server mode and status
 
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
-- `notebook/execute_cell()` - Execute current cell
+- `notebook/update_editing_cell(content)` - Update current cell content (requires consent)
+- `notebook/execute_cell()` - Execute current cell (requires consent)
 - `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
-- `notebook/delete_cell()` - Delete the currently active cell
-- `notebook/apply_patch(old_text, new_text)` - Apply text replacement patch to active cell
+- `notebook/delete_cell()` - Delete the currently active cell (requires consent)
+- `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
+- `notebook/apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (requires consent)
 
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
@@ -134,14 +135,21 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 The server supports optional features that can be enabled/disabled via magic commands:
 
-### Safe/Unsafe Mode
+### Safe/Unsafe/Dangerous Mode
 
 - `%mcp_safe` - Switch to safe mode (read-only access)
 - `%mcp_unsafe` - Switch to unsafe mode (allows cell manipulation and code execution)
+- `%mcp_dangerous` - Switch to dangerous mode (all consent dialogs auto-approved)
+
+| Mode | Command | Tools Available | Consent Required |
+|------|---------|-----------------|------------------|
+| Safe | `%mcp_safe` | Read-only tools | N/A |
+| Unsafe | `%mcp_unsafe` | All tools | Yes |
+| Dangerous | `%mcp_dangerous` | All tools | No (auto-approved) |
 
 ### Unsafe Mode Tools
 
-Only available when `%mcp_unsafe` is active:
+Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consent in unsafe mode, auto-approved in dangerous mode):
 
 - `notebook/execute_cell()` - Execute code in the active cell
 - `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook

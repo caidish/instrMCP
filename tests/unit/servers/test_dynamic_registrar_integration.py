@@ -302,3 +302,76 @@ class TestToolVisibility:
 
         # Verify it's removed from registry
         assert registrar.registry.get("temp_tool") is None
+
+
+class TestDangerousModeBypassConsent:
+    """Test bypass_consent enables consent bypass (dangerous mode)."""
+
+    def test_registrar_without_bypass_has_consent_manager(
+        self, mock_mcp, mock_ipython, temp_registry
+    ):
+        """Test registrar without bypass has an active consent manager."""
+        with patch(
+            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            return_value=temp_registry.parent,
+        ):
+            registrar = DynamicToolRegistrar(
+                mock_mcp,
+                mock_ipython,
+                require_consent=True,
+                bypass_consent=False,
+            )
+            assert registrar.consent_manager is not None
+            assert registrar.consent_manager._bypass_mode is False
+
+    def test_registrar_with_bypass_has_consent_manager_in_bypass_mode(
+        self, mock_mcp, mock_ipython, temp_registry
+    ):
+        """Test registrar with bypass has consent manager in bypass mode."""
+        with patch(
+            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            return_value=temp_registry.parent,
+        ):
+            registrar = DynamicToolRegistrar(
+                mock_mcp,
+                mock_ipython,
+                require_consent=True,
+                bypass_consent=True,
+            )
+            assert registrar.consent_manager is not None
+            assert registrar.consent_manager._bypass_mode is True
+
+    def test_registrar_without_consent_has_no_consent_manager(
+        self, mock_mcp, mock_ipython, temp_registry
+    ):
+        """Test registrar without require_consent has no consent manager."""
+        with patch(
+            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            return_value=temp_registry.parent,
+        ):
+            registrar = DynamicToolRegistrar(
+                mock_mcp,
+                mock_ipython,
+                require_consent=False,
+                # Should be ignored when require_consent=False
+                bypass_consent=True,
+            )
+            assert registrar.consent_manager is None
+
+    def test_bypass_consent_stores_flag(
+        self, mock_mcp, mock_ipython, temp_registry
+    ):
+        """Test that bypass_consent flag is stored in registrar."""
+        with patch(
+            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            return_value=temp_registry.parent,
+        ):
+            registrar = DynamicToolRegistrar(
+                mock_mcp, mock_ipython, bypass_consent=True
+            )
+            assert registrar.bypass_consent is True
+
+            registrar2 = DynamicToolRegistrar(
+                mock_mcp, mock_ipython, bypass_consent=False
+            )
+            assert registrar2.bypass_consent is False

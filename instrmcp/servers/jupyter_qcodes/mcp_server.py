@@ -53,12 +53,14 @@ class JupyterMCPServer:
         host: str = "127.0.0.1",
         port: int = 8123,
         safe_mode: bool = True,
+        dangerous_mode: bool = False,
         enabled_options: set = None,
     ):
         self.ipython = ipython
         self.host = host
         self.port = port
         self.safe_mode = safe_mode
+        self.dangerous_mode = dangerous_mode
         self.enabled_options = enabled_options or set()
         self.running = False
         self.server_task: Optional[asyncio.Task] = None
@@ -100,20 +102,20 @@ class JupyterMCPServer:
         qcodes_registrar = QCodesToolRegistrar(self.mcp, self.tools)
         qcodes_registrar.register_all()
 
-        # Notebook tools
+        # Notebook tools (read-only)
         notebook_registrar = NotebookToolRegistrar(self.mcp, self.tools, self.ipython)
         notebook_registrar.register_all()
 
         # Unsafe mode tools (if enabled)
         # Create consent manager for unsafe tools
-        consent_manager_for_unsafe = None
         if not self.safe_mode:
             from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
 
             # Use infinite timeout for consent requests
             # User will wait as long as needed to review and approve
+            # In dangerous mode, bypass all consent dialogs
             consent_manager_for_unsafe = ConsentManager(
-                self.ipython, timeout_seconds=None
+                self.ipython, timeout_seconds=None, bypass_mode=self.dangerous_mode
             )
             unsafe_registrar = UnsafeToolRegistrar(
                 self.mcp, self.tools, consent_manager_for_unsafe
@@ -135,12 +137,14 @@ class JupyterMCPServer:
         if not self.safe_mode:
             auto_correct_json = "auto_correct_json" in self.enabled_options
             # Consent is enabled by default, can be bypassed via INSTRMCP_CONSENT_BYPASS=1
+            # In dangerous mode, bypass all consent dialogs
             require_consent = True
             dynamic_registrar = DynamicToolRegistrar(
                 self.mcp,
                 self.ipython,
                 auto_correct_json=auto_correct_json,
                 require_consent=require_consent,
+                bypass_consent=self.dangerous_mode,
             )
             dynamic_registrar.register_all()
 

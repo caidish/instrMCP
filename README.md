@@ -246,8 +246,12 @@ The `mcp_list_resources()` tool helps LLMs discover and effectively use MCP reso
 }
 ```
 
-### 2. Visual Diff Consent for Notebook Patching
-Enhanced `notebook_apply_patch` with visual diff dialog showing exactly what will change:
+### 2. Consent System for Cell Modifications
+Cell modification tools now require user consent in unsafe mode:
+
+**Tools requiring consent:**
+- `notebook_update_editing_cell` - Shows old/new content comparison before replacing entire cell
+- `notebook_apply_patch` - Shows visual diff dialog with exact changes
 
 **Features:**
 - **Visual Diff Display**: Red deletions, green additions, context lines

@@ -26,6 +26,7 @@ class ConsentManager:
         ipython=None,
         timeout_seconds: Optional[int] = None,
         persist_permissions: bool = False,
+        bypass_mode: bool = False,
     ):
         """Initialize the consent manager.
 
@@ -33,6 +34,7 @@ class ConsentManager:
             ipython: IPython instance for comm channel communication
             timeout_seconds: Timeout for consent requests (default: None = infinite wait)
             persist_permissions: Whether to persist always_allow to disk (default: False = session-only)
+            bypass_mode: If True, auto-approve all consent requests (dangerous mode)
         """
         self.ipython = ipython
         self.timeout_seconds = timeout_seconds
@@ -51,8 +53,10 @@ class ConsentManager:
             self.always_allow_path = None
             self._always_allow: Dict[str, List[str]] = {}
 
-        # Check bypass mode
-        self._bypass_mode = os.environ.get("INSTRMCP_CONSENT_BYPASS") == "1"
+        # Check bypass mode - parameter takes precedence over env var
+        self._bypass_mode = bypass_mode or (
+            os.environ.get("INSTRMCP_CONSENT_BYPASS") == "1"
+        )
         if self._bypass_mode:
             logger.warning(
                 "⚠️  CONSENT BYPASS MODE ENABLED - All operations auto-approved!"

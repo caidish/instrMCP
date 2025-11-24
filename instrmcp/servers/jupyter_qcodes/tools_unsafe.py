@@ -32,11 +32,95 @@ class UnsafeToolRegistrar:
 
     def register_all(self):
         """Register all unsafe mode tools."""
+        self._register_update_editing_cell()
         self._register_execute_cell()
         self._register_add_cell()
         self._register_delete_cell()
         self._register_delete_cells()
         self._register_apply_patch()
+
+    def _register_update_editing_cell(self):
+        """Register the notebook/update_editing_cell tool."""
+
+        @self.mcp.tool(name="notebook_update_editing_cell")
+        async def update_editing_cell(content: str) -> List[TextContent]:
+            """Update the content of the currently editing cell in JupyterLab frontend.
+
+            UNSAFE: This tool modifies the content of the currently active cell.
+            Only available in unsafe mode. The content will replace the entire
+            current cell content.
+
+            Args:
+                content: New Python code content to set in the active cell
+            """
+            # Request consent if consent manager is available
+            if self.consent_manager:
+                try:
+                    # Get current cell content to show what will be replaced
+                    cell_info = await self.tools.get_editing_cell()
+                    old_content = cell_info.get("text", "")
+
+                    consent_result = await self.consent_manager.request_consent(
+                        operation="update_cell",
+                        tool_name="notebook_update_editing_cell",
+                        author="MCP Server",
+                        details={
+                            "old_content": old_content,
+                            "new_content": content,
+                            "description": f"Replace cell content ({len(old_content)} chars → {len(content)} chars)",
+                            "cell_type": cell_info.get("cell_type", "code"),
+                            "cell_index": cell_info.get("index", "unknown"),
+                        },
+                    )
+
+                    if not consent_result["approved"]:
+                        reason = consent_result.get("reason", "User declined")
+                        logger.warning(f"Cell update declined - {reason}")
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "success": False,
+                                        "error": f"Update declined: {reason}",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+                    else:
+                        logger.debug("✅ Cell update approved")
+                        print("✅ Consent granted for cell update")
+
+                except TimeoutError:
+                    logger.error("Consent request timed out for cell update")
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "Consent request timed out",
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ]
+
+            try:
+                result = await self.tools.update_editing_cell(content)
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                logger.error(f"Error in notebook/update_editing_cell: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
 
     def _register_execute_cell(self):
         """Register the notebook/execute_cell tool."""

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 _server: Optional[JupyterMCPServer] = None
 _server_task: Optional[asyncio.Task] = None
 _desired_mode: bool = True  # True = safe, False = unsafe
+_dangerous_mode: bool = False  # True = bypass all consent dialogs
 _server_host: str = "127.0.0.1"  # Default host
 _server_port: int = 8123  # Default port
 
@@ -38,9 +39,10 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_safe(self, line):
         """Switch MCP server to safe mode."""
-        global _server, _desired_mode
+        global _server, _desired_mode, _dangerous_mode
 
         _desired_mode = True
+        _dangerous_mode = False
         print("🛡️  Mode set to safe")
 
         if _server and _server.running:
@@ -54,9 +56,10 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_unsafe(self, line):
         """Switch MCP server to unsafe mode."""
-        global _server, _desired_mode
+        global _server, _desired_mode, _dangerous_mode
 
         _desired_mode = False
+        _dangerous_mode = False
         print("⚠️  Mode set to unsafe")
         print("⚠️  UNSAFE MODE: execute_editing_cell tool will be available")
 
@@ -69,15 +72,41 @@ class MCPMagics(Magics):
             print("✅ Mode will take effect when server starts")
 
     @line_magic
+    def mcp_dangerous(self, line):
+        """Switch MCP server to dangerous mode - all operations auto-approved."""
+        global _server, _desired_mode, _dangerous_mode
+
+        _desired_mode = False  # Dangerous mode implies unsafe mode
+        _dangerous_mode = True
+        print("⚠️⚠️⚠️  DANGEROUS MODE ENABLED  ⚠️⚠️⚠️")
+        print("All consent dialogs will be automatically approved!")
+        print("This mode bypasses all safety confirmations.")
+
+        if _server and _server.running:
+            print("⚠️  Server restart required for changes to take effect")
+            print("   Use: %mcp_restart")
+        else:
+            print("✅ Mode will take effect when server starts")
+
+    @line_magic
     def mcp_status(self, line):
         """Show MCP server status."""
-        global _server, _server_task, _desired_mode
+        global _server, _server_task, _desired_mode, _dangerous_mode
 
-        mode_icon = "🛡️" if _desired_mode else "⚠️"
-        mode_name = "safe" if _desired_mode else "unsafe"
+        if _dangerous_mode:
+            mode_icon = "☠️"
+            mode_name = "dangerous"
+        elif _desired_mode:
+            mode_icon = "🛡️"
+            mode_name = "safe"
+        else:
+            mode_icon = "⚠️"
+            mode_name = "unsafe"
 
         print(f"{mode_icon} MCP Server Status:")
         print(f"   Desired Mode: {mode_name}")
+        if _dangerous_mode:
+            print("   ⚠️  All consent dialogs auto-approved!")
 
         if _server:
             print(f"   Server Running: {'✅' if _server.running else '❌'}")
@@ -102,7 +131,7 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_start(self, line):
         """Start the MCP server."""
-        global _server, _server_task, _desired_mode
+        global _server, _server_task, _desired_mode, _dangerous_mode
 
         if _server and _server.running:
             print("✅ MCP server already running")
@@ -123,16 +152,28 @@ class MCPMagics(Magics):
 
                 # Create NEW server instance with the desired mode and options
                 _server = JupyterMCPServer(
-                    ipython, safe_mode=_desired_mode, enabled_options=_enabled_options
+                    ipython,
+                    safe_mode=_desired_mode,
+                    dangerous_mode=_dangerous_mode,
+                    enabled_options=_enabled_options,
                 )
                 _server_task = asyncio.create_task(_start_server_task())
                 await asyncio.sleep(0.1)  # Give it a moment to start
 
-                mode_icon = "🛡️" if _desired_mode else "⚠️"
-                mode_name = "safe" if _desired_mode else "unsafe"
+                if _dangerous_mode:
+                    mode_icon = "☠️"
+                    mode_name = "dangerous"
+                elif _desired_mode:
+                    mode_icon = "🛡️"
+                    mode_name = "safe"
+                else:
+                    mode_icon = "⚠️"
+                    mode_name = "unsafe"
                 print(f"✅ MCP server started in {mode_icon} {mode_name} mode")
 
-                if not _desired_mode:
+                if _dangerous_mode:
+                    print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
+                elif not _desired_mode:
                     print("⚠️  UNSAFE MODE: execute_editing_cell tool is available")
 
                 # Broadcast that server is ready
@@ -321,7 +362,7 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_restart(self, line):
         """Restart the MCP server to apply mode changes."""
-        global _server, _server_task, _desired_mode
+        global _server, _server_task, _desired_mode, _dangerous_mode
 
         if not _server:
             print("❌ No server to restart. Use %mcp_start instead.")
@@ -353,25 +394,37 @@ class MCPMagics(Magics):
 
                 # Create completely NEW server with desired mode and options
                 _server = JupyterMCPServer(
-                    ipython, safe_mode=_desired_mode, enabled_options=_enabled_options
+                    ipython,
+                    safe_mode=_desired_mode,
+                    dangerous_mode=_dangerous_mode,
+                    enabled_options=_enabled_options,
                 )
 
                 # Start new server
                 _server_task = asyncio.create_task(_start_server_task())
                 await asyncio.sleep(0.1)  # Give it a moment to start
 
-                mode_icon = "🛡️" if _desired_mode else "⚠️"
-                mode_name = "safe" if _desired_mode else "unsafe"
+                if _dangerous_mode:
+                    mode_icon = "☠️"
+                    mode_name = "dangerous"
+                elif _desired_mode:
+                    mode_icon = "🛡️"
+                    mode_name = "safe"
+                else:
+                    mode_icon = "⚠️"
+                    mode_name = "unsafe"
                 print(f"✅ MCP server restarted in {mode_icon} {mode_name} mode")
 
-                if not _desired_mode:
+                if _dangerous_mode:
+                    print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
+                elif not _desired_mode:
                     print("⚠️  UNSAFE MODE: execute_editing_cell tool is now available")
 
                 # Broadcast that server is ready after restart
                 broadcast_server_status(
                     "server_ready",
                     {
-                        "mode": "safe" if _desired_mode else "unsafe",
+                        "mode": mode_name,
                         "host": _server.host,
                         "port": _server.port,
                     },
@@ -443,6 +496,9 @@ def load_ipython_extension(ipython):
         magic_instance = MCPMagics(ipython)
         ipython.register_magic_function(magic_instance.mcp_safe, "line", "mcp_safe")
         ipython.register_magic_function(magic_instance.mcp_unsafe, "line", "mcp_unsafe")
+        ipython.register_magic_function(
+            magic_instance.mcp_dangerous, "line", "mcp_dangerous"
+        )
         ipython.register_magic_function(magic_instance.mcp_option, "line", "mcp_option")
         ipython.register_magic_function(magic_instance.mcp_status, "line", "mcp_status")
         ipython.register_magic_function(magic_instance.mcp_start, "line", "mcp_start")

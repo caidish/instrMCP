@@ -34,14 +34,18 @@ class DynamicToolRegistrar:
         ipython,
         auto_correct_json: bool = False,
         require_consent: bool = True,
+        bypass_consent: bool = False,
     ):
         """Initialize the dynamic tool registrar.
 
         Args:
             mcp: FastMCP server instance
             ipython: IPython instance for tool execution
-            auto_correct_json: Enable automatic JSON correction via LLM sampling (default: False)
-            require_consent: Require user consent for tool operations (default: True)
+            auto_correct_json: Enable automatic JSON correction via LLM
+                sampling (default: False)
+            require_consent: Require user consent for tool operations
+                (default: True)
+            bypass_consent: Bypass all consent dialogs (dangerous mode)
         """
         self.mcp = mcp
         self.ipython = ipython
@@ -49,9 +53,14 @@ class DynamicToolRegistrar:
         self.runtime = DynamicToolRuntime(ipython)
         self.auto_correct_json = auto_correct_json
         self.require_consent = require_consent
+        self.bypass_consent = bypass_consent
 
-        # Initialize consent manager
-        self.consent_manager = ConsentManager(ipython) if require_consent else None
+        # Initialize consent manager (bypass mode if dangerous mode enabled)
+        self.consent_manager = (
+            ConsentManager(ipython, bypass_mode=bypass_consent)
+            if require_consent
+            else None
+        )
 
         # Track dynamically registered tools for execution
         self._dynamic_tools: Dict[str, ToolSpec] = {}

@@ -65,7 +65,6 @@ class NotebookToolRegistrar:
         self._register_list_variables()
         self._register_get_variable_info()
         self._register_get_editing_cell()
-        self._register_update_editing_cell()
         self._register_get_editing_cell_output()
         self._register_get_notebook_cells()
         self._register_move_cursor()
@@ -144,35 +143,6 @@ class NotebookToolRegistrar:
                 ]
             except Exception as e:
                 logger.error(f"Error in notebook/get_editing_cell: {e}")
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": str(e)}, indent=2)
-                    )
-                ]
-
-    def _register_update_editing_cell(self):
-        """Register the notebook/update_editing_cell tool."""
-
-        @self.mcp.tool(name="notebook_update_editing_cell")
-        async def update_editing_cell(content: str) -> List[TextContent]:
-            """Update the content of the currently editing cell in JupyterLab frontend.
-
-            This tool allows you to programmatically set new Python code in the cell
-            that is currently being edited in JupyterLab. The content will replace
-            the entire current cell content.
-
-            Args:
-                content: New Python code content to set in the active cell
-            """
-            try:
-                result = await self.tools.update_editing_cell(content)
-                return [
-                    TextContent(
-                        type="text", text=json.dumps(result, indent=2, default=str)
-                    )
-                ]
-            except Exception as e:
-                logger.error(f"Error in notebook/update_editing_cell: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

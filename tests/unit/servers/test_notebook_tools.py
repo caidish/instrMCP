@@ -77,7 +77,6 @@ class TestNotebookToolRegistrar:
             "notebook_list_variables",
             "notebook_get_variable_info",
             "notebook_get_editing_cell",
-            "notebook_update_editing_cell",
             "notebook_get_editing_cell_output",
             "notebook_get_notebook_cells",
             "notebook_move_cursor",
@@ -86,6 +85,9 @@ class TestNotebookToolRegistrar:
 
         for tool_name in expected_tools:
             assert tool_name in mock_mcp_server._tools
+
+        # update_editing_cell is now in UnsafeToolRegistrar, not here
+        assert "notebook_update_editing_cell" not in mock_mcp_server._tools
 
     @pytest.mark.asyncio
     async def test_list_variables_no_filter(
@@ -202,38 +204,6 @@ class TestNotebookToolRegistrar:
         mock_tools.get_editing_cell.assert_called_once_with(
             fresh_ms=1000, line_start=None, line_end=None
         )
-
-    @pytest.mark.asyncio
-    async def test_update_editing_cell_success(
-        self, registrar, mock_tools, mock_mcp_server
-    ):
-        """Test updating editing cell content."""
-        new_content = "# Updated code\nx = 10"
-        mock_result = {"status": "success", "updated": True}
-        mock_tools.update_editing_cell.return_value = mock_result
-
-        registrar.register_all()
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content=new_content)
-
-        response_data = json.loads(result[0].text)
-        assert response_data == mock_result
-        mock_tools.update_editing_cell.assert_called_once_with(new_content)
-
-    @pytest.mark.asyncio
-    async def test_update_editing_cell_error(
-        self, registrar, mock_tools, mock_mcp_server
-    ):
-        """Test updating cell with error."""
-        mock_tools.update_editing_cell.side_effect = Exception("Update failed")
-
-        registrar.register_all()
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content="x = 5")
-
-        response_data = json.loads(result[0].text)
-        assert "error" in response_data
-        assert "Update failed" in response_data["error"]
 
     @pytest.mark.asyncio
     async def test_get_editing_cell_output_with_output(
@@ -591,3 +561,188 @@ class TestNotebookToolRegistrar:
             assert asyncio.iscoroutinefunction(
                 tool_func
             ), f"Tool {tool_name} should be an async function"
+
+
+class TestUnsafeToolRegistrarUpdateCell:
+    """Test UnsafeToolRegistrar consent functionality for update_editing_cell."""
+
+    @pytest.fixture
+    def mock_mcp_server(self):
+        """Create a mock FastMCP server."""
+        mcp = MagicMock()
+        mcp._tools = {}
+
+        def tool_decorator(name=None):
+            def wrapper(func):
+                tool_name = name or func.__name__
+                mcp._tools[tool_name] = func
+                return func
+
+            return wrapper
+
+        mcp.tool = tool_decorator
+        return mcp
+
+    @pytest.fixture
+    def mock_tools(self):
+        """Create a mock QCodesReadOnlyTools instance."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        tools = MagicMock()
+        tools.get_editing_cell = AsyncMock()
+        tools.update_editing_cell = AsyncMock()
+        tools.execute_editing_cell = AsyncMock()
+        tools.add_new_cell = AsyncMock()
+        tools.delete_editing_cell = AsyncMock()
+        tools.delete_cells_by_number = AsyncMock()
+        tools.apply_patch = AsyncMock()
+        return tools
+
+    @pytest.fixture
+    def mock_consent_manager(self):
+        """Create a mock ConsentManager instance."""
+        consent_manager = MagicMock()
+        consent_manager.request_consent = AsyncMock()
+        return consent_manager
+
+    def test_update_editing_cell_registered_in_unsafe(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test update_editing_cell is registered in UnsafeToolRegistrar."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        assert "notebook_update_editing_cell" in mock_mcp_server._tools
+
+    @pytest.mark.asyncio
+    async def test_update_editing_cell_consent_approved(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test update_editing_cell with consent approved."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        new_content = "# Updated code\nx = 10"
+        old_content = "# Original code\nx = 5"
+        mock_tools.get_editing_cell.return_value = {
+            "text": old_content,
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_result = {"status": "success", "updated": True}
+        mock_tools.update_editing_cell.return_value = mock_result
+        mock_consent_manager.request_consent.return_value = {"approved": True}
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
+        result = await update_cell_func(content=new_content)
+
+        response_data = json.loads(result[0].text)
+        assert response_data == mock_result
+        mock_tools.update_editing_cell.assert_called_once_with(new_content)
+        mock_consent_manager.request_consent.assert_called_once()
+
+        # Verify consent details
+        call_args = mock_consent_manager.request_consent.call_args
+        assert call_args.kwargs["operation"] == "update_cell"
+        assert call_args.kwargs["tool_name"] == "notebook_update_editing_cell"
+        assert call_args.kwargs["details"]["old_content"] == old_content
+        assert call_args.kwargs["details"]["new_content"] == new_content
+
+    @pytest.mark.asyncio
+    async def test_update_editing_cell_consent_declined(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test update_editing_cell with consent declined."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        new_content = "# Updated code\nx = 10"
+        mock_tools.get_editing_cell.return_value = {
+            "text": "# Original",
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_consent_manager.request_consent.return_value = {
+            "approved": False,
+            "reason": "User declined",
+        }
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
+        result = await update_cell_func(content=new_content)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["success"] is False
+        assert "Update declined" in response_data["error"]
+        mock_tools.update_editing_cell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_editing_cell_consent_timeout(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test update_editing_cell with consent timeout."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        new_content = "# Updated code\nx = 10"
+        mock_tools.get_editing_cell.return_value = {
+            "text": "# Original",
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_consent_manager.request_consent.side_effect = TimeoutError(
+            "Consent timed out"
+        )
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
+        result = await update_cell_func(content=new_content)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["success"] is False
+        assert "timed out" in response_data["error"]
+        mock_tools.update_editing_cell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_editing_cell_consent_shows_char_count(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test consent dialog shows character count in description."""
+        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+
+        new_content = "x = 100"  # 7 chars
+        old_content = "x = 5"  # 5 chars
+        mock_tools.get_editing_cell.return_value = {
+            "text": old_content,
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_consent_manager.request_consent.return_value = {"approved": True}
+        mock_tools.update_editing_cell.return_value = {"status": "success"}
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
+        await update_cell_func(content=new_content)
+
+        call_args = mock_consent_manager.request_consent.call_args
+        description = call_args.kwargs["details"]["description"]
+        assert "5 chars" in description
+        assert "7 chars" in description
