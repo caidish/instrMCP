@@ -180,8 +180,8 @@ class ConsentManager:
         """
         # Check bypass mode
         if self._bypass_mode:
-            logger.debug(
-                f"Consent bypassed for {operation} of tool '{tool_name}' by '{author}'"
+            logger.info(
+                f"⚡ Consent bypassed for {operation} of tool '{tool_name}' (dangerous mode)"
             )
             return {"approved": True, "always_allow": False, "reason": "bypass_mode"}
 

@@ -18,11 +18,12 @@ python -m build               # Build package
 instrmcp version              # Test installation
 ```
 
-**Code Quality:**
+**Code Quality (CI Requirements - see `.github/workflows/lint.yml`):**
 ```bash
-black instrmcp/ tests/        # Format code
-flake8 instrmcp/              # Linting
-mypy instrmcp/                # Type checking
+black --check instrmcp/ tests/                    # Format check (must pass)
+flake8 instrmcp/ tests/ --select=E9,F63,F7,F82    # Critical errors only (must pass)
+flake8 instrmcp/ tests/ --max-line-length=127     # Style warnings (non-blocking)
+mypy instrmcp/ --ignore-missing-imports           # Type check (non-blocking)
 ```
 
 **Testing:**
@@ -117,4 +118,4 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `pytest` to verify tests pass
-- [ ] Check `flake8 instrmcp/` for linting errors
+- [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)

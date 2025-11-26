@@ -358,9 +358,7 @@ class TestDangerousModeBypassConsent:
             )
             assert registrar.consent_manager is None
 
-    def test_bypass_consent_stores_flag(
-        self, mock_mcp, mock_ipython, temp_registry
-    ):
+    def test_bypass_consent_stores_flag(self, mock_mcp, mock_ipython, temp_registry):
         """Test that bypass_consent flag is stored in registrar."""
         with patch(
             "instrmcp.tools.dynamic.tool_registry.Path.home",

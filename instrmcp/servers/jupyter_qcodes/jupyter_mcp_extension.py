@@ -180,7 +180,8 @@ class MCPMagics(Magics):
                 broadcast_server_status(
                     "server_ready",
                     {
-                        "mode": "safe" if _desired_mode else "unsafe",
+                        "mode": mode_name,
+                        "dangerous": _dangerous_mode,
                         "host": _server.host,
                         "port": _server.port,
                     },
@@ -381,6 +382,9 @@ class MCPMagics(Magics):
                     print("❌ Could not get IPython instance")
                     return
 
+                # Broadcast server_stopped before stopping (for frontend comm cleanup)
+                broadcast_server_status("server_stopped", {})
+
                 # Stop current server
                 await _stop_server_task()
 
@@ -425,6 +429,7 @@ class MCPMagics(Magics):
                     "server_ready",
                     {
                         "mode": mode_name,
+                        "dangerous": _dangerous_mode,
                         "host": _server.host,
                         "port": _server.port,
                     },

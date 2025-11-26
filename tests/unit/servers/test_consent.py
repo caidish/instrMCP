@@ -200,33 +200,25 @@ class TestConsentBypassModeParameter:
     def test_bypass_mode_parameter_enabled(self, mock_ipython):
         """Test that bypass_mode parameter enables bypass mode."""
         with patch.dict(os.environ, {}, clear=True):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=True
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=True)
             assert manager._bypass_mode is True
 
     def test_bypass_mode_parameter_disabled(self, mock_ipython):
         """Test that bypass_mode parameter is disabled by default."""
         with patch.dict(os.environ, {}, clear=True):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=False
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=False)
             assert manager._bypass_mode is False
 
     def test_bypass_mode_parameter_overrides_env_false(self, mock_ipython):
         """Test bypass_mode=True takes precedence even if env var not set."""
         with patch.dict(os.environ, {}, clear=True):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=True
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=True)
             assert manager._bypass_mode is True
 
     def test_bypass_mode_env_var_when_parameter_false(self, mock_ipython):
         """Test env var works when parameter is False (backwards compat)."""
         with patch.dict(os.environ, {"INSTRMCP_CONSENT_BYPASS": "1"}):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=False
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=False)
             # Env var should still enable bypass
             assert manager._bypass_mode is True
 
@@ -234,9 +226,7 @@ class TestConsentBypassModeParameter:
     async def test_bypass_mode_parameter_auto_approves(self, mock_ipython):
         """Test bypass_mode parameter auto-approves without comm channel."""
         with patch.dict(os.environ, {}, clear=True):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=True
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=True)
 
             result = await manager.request_consent(
                 operation="execute",
@@ -252,9 +242,7 @@ class TestConsentBypassModeParameter:
     async def test_bypass_mode_all_operations_approved(self, mock_ipython):
         """Test that bypass mode approves all operation types."""
         with patch.dict(os.environ, {}, clear=True):
-            manager = ConsentManager(
-                mock_ipython, timeout_seconds=1, bypass_mode=True
-            )
+            manager = ConsentManager(mock_ipython, timeout_seconds=1, bypass_mode=True)
 
             for operation in ["register", "update", "execute", "delete"]:
                 result = await manager.request_consent(
@@ -263,9 +251,7 @@ class TestConsentBypassModeParameter:
                     author="test_author",
                     details={"test": "data"},
                 )
-                assert result["approved"] is True, (
-                    f"Failed for operation: {operation}"
-                )
+                assert result["approved"] is True, f"Failed for operation: {operation}"
                 assert result["reason"] == "bypass_mode"
 
 

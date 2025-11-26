@@ -527,9 +527,10 @@ Corrected JSON:"""
                             logger.debug(
                                 f"✅ Tool registration approved: {name} by {spec.author}{always_allow_status}"
                             )
-                            print(
-                                f"✅ Consent granted for tool '{name}' by '{spec.author}'{always_allow_status}"
-                            )
+                            if consent_result.get("reason") != "bypass_mode":
+                                print(
+                                    f"✅ Consent granted for tool '{name}' by '{spec.author}'{always_allow_status}"
+                                )
 
                     except TimeoutError:
                         logger.error(f"Consent request timed out for tool '{name}'")
@@ -711,9 +712,10 @@ Corrected JSON:"""
                             logger.debug(
                                 f"✅ Tool update approved: {name} v{old_version}→v{version} by {existing_spec.author}{always_allow_status}"
                             )
-                            print(
-                                f"✅ Consent granted for tool update '{name}' v{old_version}→v{version}{always_allow_status}"
-                            )
+                            if consent_result.get("reason") != "bypass_mode":
+                                print(
+                                    f"✅ Consent granted for tool update '{name}' v{old_version}→v{version}{always_allow_status}"
+                                )
 
                     except TimeoutError:
                         logger.error(

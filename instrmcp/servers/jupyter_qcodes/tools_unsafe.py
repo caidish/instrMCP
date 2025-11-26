@@ -90,7 +90,8 @@ class UnsafeToolRegistrar:
                         ]
                     else:
                         logger.debug("✅ Cell update approved")
-                        print("✅ Consent granted for cell update")
+                        if consent_result.get("reason") != "bypass_mode":
+                            print("✅ Consent granted for cell update")
 
                 except TimeoutError:
                     logger.error("Consent request timed out for cell update")
@@ -170,7 +171,8 @@ class UnsafeToolRegistrar:
                         ]
                     else:
                         logger.debug("✅ Cell execution approved")
-                        print("✅ Consent granted for cell execution")
+                        if consent_result.get("reason") != "bypass_mode":
+                            print("✅ Consent granted for cell execution")
 
                 except TimeoutError:
                     logger.error("Consent request timed out for cell execution")
@@ -281,7 +283,8 @@ class UnsafeToolRegistrar:
                         ]
                     else:
                         logger.debug("✅ Cell deletion approved")
-                        print("✅ Consent granted for cell deletion")
+                        if consent_result.get("reason") != "bypass_mode":
+                            print("✅ Consent granted for cell deletion")
 
                 except TimeoutError:
                     logger.error("Consent request timed out for cell deletion")
@@ -404,9 +407,10 @@ class UnsafeToolRegistrar:
                         logger.debug(
                             f"✅ Cells deletion approved ({len(cell_list)} cells)"
                         )
-                        print(
-                            f"✅ Consent granted for deletion of {len(cell_list)} cell(s)"
-                        )
+                        if consent_result.get("reason") != "bypass_mode":
+                            print(
+                                f"✅ Consent granted for deletion of {len(cell_list)} cell(s)"
+                            )
 
                 except TimeoutError:
                     logger.error("Consent request timed out for cells deletion")
@@ -492,7 +496,8 @@ class UnsafeToolRegistrar:
                         ]
                     else:
                         logger.debug("✅ Patch application approved")
-                        print("✅ Consent granted for patch application")
+                        if consent_result.get("reason") != "bypass_mode":
+                            print("✅ Consent granted for patch application")
 
                 except TimeoutError:
                     logger.error("Consent request timed out for patch application")
