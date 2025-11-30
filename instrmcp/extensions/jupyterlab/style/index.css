@@ -1,4 +1,202 @@
-/* MCP Active Cell Bridge Extension Styles */
+.mcp-toolbar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  background: var(--jp-layout-color1);
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 8px;
+}
 
-/* No specific styles needed for this extension */
-/* The extension works entirely via JavaScript/TypeScript */
+.mcp-toolbar-widget {
+  min-height: 28px;
+}
+
+.mcp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.mcp-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mcp-btn:not(:disabled):hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.mcp-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.mcp-server-btn.running {
+  background: #1b5e20;
+  color: #ffffff;
+  border-color: #2e7d32;
+}
+
+.mcp-server-btn.stopped {
+  background: #702b2b;
+  color: #ffffff;
+  border-color: #8a3a3a;
+}
+
+.mcp-mode-selector {
+  position: relative;
+}
+
+.mcp-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  font-size: 12px;
+  color: var(--jp-ui-font-color1);
+  min-width: 100px;
+}
+
+.mcp-mode-selector.mode-safe .mcp-mode-pill {
+  border-color: #2e7d32;
+  color: #1b5e20;
+}
+
+.mcp-mode-selector.mode-unsafe .mcp-mode-pill {
+  border-color: #f57c00;
+  color: #f57c00;
+}
+
+.mcp-mode-selector.mode-dangerous .mcp-mode-pill {
+  border-color: #d32f2f;
+  color: #d32f2f;
+}
+
+.mcp-mode-select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.mcp-options {
+  position: relative;
+}
+
+.mcp-gear {
+  background: var(--jp-layout-color2);
+}
+
+.mcp-options-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 190px;
+  background: var(--jp-layout-color1);
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  z-index: 40;
+}
+
+.mcp-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 12px;
+  color: var(--jp-ui-font-color1);
+}
+
+.mcp-option-item input {
+  margin: 0;
+}
+
+.mcp-option-item.empty {
+  color: var(--jp-ui-font-color2);
+}
+
+.mcp-restart {
+  background: var(--jp-layout-color2);
+}
+
+.mcp-reset {
+  background: var(--jp-layout-color2);
+  border-color: #1976d2;
+  color: #1976d2;
+}
+
+.mcp-reset:not(:disabled):hover {
+  background: #e3f2fd;
+}
+
+.mcp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  font-size: 12px;
+}
+
+.mcp-status.running {
+  border-color: #2e7d32;
+  color: #1b5e20;
+}
+
+.mcp-status.stopped {
+  border-color: #d32f2f;
+  color: #b71c1c;
+}
+
+.mcp-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d32f2f;
+  box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.5);
+  animation: mcp-pulse 1.4s infinite;
+}
+
+.mcp-status.running .mcp-status-dot {
+  background: #2e7d32;
+  box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.5);
+}
+
+.mcp-status-text {
+  font-weight: 600;
+}
+
+.mcp-status-port {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes mcp-pulse {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(0, 0, 0, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}

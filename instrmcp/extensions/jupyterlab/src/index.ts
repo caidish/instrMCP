@@ -15,8 +15,12 @@ import { NotebookActions } from '@jupyterlab/notebook';
 
 import { Dialog, showDialog } from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
+import { Signal } from '@lumino/signaling';
 
 import { Change, diffLines } from 'diff';
+import { MCPToolbarExtension, MCPStatusUpdate } from './toolbar';
+
+const statusUpdateSignal = new Signal<object, MCPStatusUpdate>({});
 
 /**
  * MCP Active Cell Bridge Extension
@@ -47,6 +51,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track MCP server readiness per kernel
     const mcpServerReady = new WeakMap<Kernel.IKernelConnection, boolean>();
+
+    // Track IPython extension load per kernel
+    const extensionLoaded = new WeakMap<Kernel.IKernelConnection, boolean>();
+    const extensionLoading = new WeakMap<Kernel.IKernelConnection, Promise<void>>();
 
     // Queue for pending operations while waiting for server
     const pendingOperations = new WeakMap<Kernel.IKernelConnection, (() => void)[]>();
@@ -1014,6 +1022,39 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    const ensureExtensionLoaded = async (kernel?: Kernel.IKernelConnection | null) => {
+      if (!kernel || kernel.status === 'dead') {
+        return;
+      }
+
+      if (extensionLoaded.get(kernel)) {
+        return;
+      }
+
+      const inFlight = extensionLoading.get(kernel);
+      if (inFlight) {
+        return inFlight;
+      }
+
+      const promise = (async () => {
+        try {
+          const future = kernel.requestExecute({
+            code: '%load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension',
+            silent: true
+          });
+          await future.done;
+          extensionLoaded.set(kernel, true);
+        } catch (error) {
+          console.warn('MCP Toolbar: Failed to auto-load MCP IPython extension', error);
+        } finally {
+          extensionLoading.delete(kernel);
+        }
+      })();
+
+      extensionLoading.set(kernel, promise);
+      return promise;
+    };
+
     // Handle consent request from kernel
     const handleConsentRequest = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const operation = data.operation || 'unknown';
@@ -1156,6 +1197,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       kernel.registerCommTarget('mcp:server_status', (comm: any, msg: any) => {
         const data = msg?.content?.data || {};
         const status = data.status;
+        const details = data.details || {};
 
         console.log(`MCP Server Status: Received status update - ${status}`);
 
@@ -1194,6 +1236,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
           // Initial state - server not started yet
           mcpServerReady.set(kernel, false);
           console.log('MCP Active Cell Bridge: Waiting for server to start');
+        }
+
+        if (
+          status === 'server_ready' ||
+          status === 'server_stopped' ||
+          status === 'config_changed' ||
+          status === 'server_not_started'
+        ) {
+          statusUpdateSignal.emit({ kernel, status, details });
         }
       });
 
@@ -1498,11 +1549,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
         if (kernel) {
+          ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
           // Don't try to ensure comm yet - wait for server ready signal
         }
         console.log('MCP Active Cell Bridge: Kernel ready, waiting for server status');
+      });
+
+      panel.sessionContext.kernelChanged.connect((_: any, args: any) => {
+        const kernel = args.newValue ?? null;
+        if (kernel) {
+          ensureExtensionLoaded(kernel);
+          registerServerStatusCommTarget(kernel);
+          registerConsentCommTarget(kernel);
+        }
       });
     });
 
@@ -1510,11 +1571,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
       if (kernel) {
+        ensureExtensionLoaded(kernel);
         registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
         // Don't try to ensure comm yet - wait for server ready signal
       }
     });
+
+    const toolbarExtension = new MCPToolbarExtension({
+      getServerReady: (kernel?: Kernel.IKernelConnection | null) =>
+        (kernel ? mcpServerReady.get(kernel) : undefined) ?? false,
+      getComm: (kernel?: Kernel.IKernelConnection | null) =>
+        kernel ? comms.get(kernel) : null,
+      statusUpdateSignal
+    });
+    app.docRegistry.addWidgetExtension('Notebook', toolbarExtension);
 
     console.log('MCP Active Cell Bridge: Event listeners registered');
   }

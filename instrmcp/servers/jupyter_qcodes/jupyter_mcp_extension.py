@@ -8,7 +8,7 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 import asyncio
 import logging
 import time
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from IPython.core.magic import Magics, line_magic, magics_class
 
@@ -31,6 +31,395 @@ _enabled_options: set = set()  # Set of enabled option names
 # Server status comm tracking
 _status_comm = None  # Will hold the comm for broadcasting server status
 
+# Toolbar control comms tracking (for safe sends)
+_toolbar_comms: set = set()  # Active toolbar control comms
+
+
+def _safe_comm_send(comm, payload: dict) -> bool:
+    """Safely send a message on a comm, handling closed/disposed state.
+
+    Returns True if send succeeded, False otherwise.
+    """
+    if comm is None:
+        return False
+
+    # Check if comm is closed or disposed
+    if getattr(comm, "_closed", False) or getattr(comm, "is_disposed", False):
+        logger.debug("Comm is closed/disposed, skipping send")
+        return False
+
+    try:
+        comm.send(payload)
+        return True
+    except Exception as e:
+        logger.debug(f"Failed to send on comm: {e}")
+        # Remove from tracked comms if it was a toolbar comm
+        _toolbar_comms.discard(comm)
+        return False
+
+# Single source of truth for available options
+VALID_OPTIONS: Dict[str, str] = {
+    "measureit": "Enable MeasureIt sweep tools",
+    "database": "Enable database tools",
+    "auto_correct_json": "Auto-correct malformed JSON",
+}
+
+
+def _get_mode_display() -> Dict[str, str]:
+    """Return the current mode name and icon."""
+    if _dangerous_mode:
+        return {"mode": "dangerous", "icon": "☠️"}
+    if _desired_mode:
+        return {"mode": "safe", "icon": "🛡️"}
+    return {"mode": "unsafe", "icon": "⚠️"}
+
+
+def _get_current_config() -> dict:
+    """Return the current MCP server configuration and state."""
+    mode_info = _get_mode_display()
+    host = _server.host if _server else _server_host
+    port = _server.port if _server else _server_port
+
+    return {
+        "mode": mode_info["mode"],
+        "enabled_options": sorted(_enabled_options),
+        "available_options": [
+            {"name": k, "description": v} for k, v in VALID_OPTIONS.items()
+        ],
+        "dangerous": _dangerous_mode,
+        "server_running": bool(_server and _server.running),
+        "host": host,
+        "port": port,
+    }
+
+
+def _do_set_mode(mode: str, announce: bool = False) -> str:
+    """Update desired mode flags and broadcast config change."""
+    global _desired_mode, _dangerous_mode, _server
+
+    normalized = (mode or "").lower()
+    if normalized not in {"safe", "unsafe", "dangerous"}:
+        raise ValueError(f"Invalid mode '{mode}'. Must be safe, unsafe, or dangerous.")
+
+    _desired_mode = normalized == "safe"
+    _dangerous_mode = normalized == "dangerous"
+
+    # Update running server flags so frontends get accurate state even before restart
+    if _server:
+        try:
+            _server.set_safe_mode(_desired_mode)
+            _server.dangerous_mode = _dangerous_mode
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(f"Could not update running server mode: {exc}")
+
+    if announce:
+        mode_info = _get_mode_display()
+        if mode_info["mode"] == "safe":
+            print("🛡️  Mode set to safe")
+            if _server and _server.running:
+                print("⚠️  Server restart required for tool changes to take effect")
+                print("   Use: %mcp_restart")
+            else:
+                print("✅ Mode will take effect when server starts")
+        elif mode_info["mode"] == "unsafe":
+            print("⚠️  Mode set to unsafe")
+            print("⚠️  UNSAFE MODE: execute_editing_cell tool will be available")
+            if _server and _server.running:
+                print("⚠️  Server restart required for tool changes to take effect")
+                print("   Use: %mcp_restart")
+            else:
+                print("✅ Mode will take effect when server starts")
+        else:
+            print("⚠️⚠️⚠️  DANGEROUS MODE ENABLED  ⚠️⚠️⚠️")
+            print("All consent dialogs will be automatically approved!")
+            print("This mode bypasses all safety confirmations.")
+            if _server and _server.running:
+                print("⚠️  Server restart required for changes to take effect")
+                print("   Use: %mcp_restart")
+            else:
+                print("✅ Mode will take effect when server starts")
+
+    broadcast_server_status("config_changed", _get_current_config())
+    return normalized
+
+
+def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
+    """Enable/disable an option, mirror to running server, and broadcast."""
+    global _enabled_options, _server
+
+    if option not in VALID_OPTIONS:
+        raise ValueError(
+            f"Invalid option '{option}'. Valid options: {', '.join(sorted(VALID_OPTIONS))}"
+        )
+
+    changed = False
+    if enabled and option not in _enabled_options:
+        _enabled_options.add(option)
+        changed = True
+    elif not enabled and option in _enabled_options:
+        _enabled_options.remove(option)
+        changed = True
+
+    if changed and _server and _server.running:
+        try:
+            _server.set_enabled_options(_enabled_options)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(f"Could not update running server options: {exc}")
+
+    if changed:
+        broadcast_server_status("config_changed", _get_current_config())
+        if announce:
+            print(f"{'✅ Added' if enabled else '❌ Removed'}: {option}")
+    elif announce:
+        print(f"ℹ️  Option '{option}' already {'enabled' if enabled else 'disabled'}")
+
+    return changed
+
+
+async def _do_start_server(announce: bool = True) -> None:
+    """Start the MCP server using existing logic, broadcasting status."""
+    global _server, _server_task
+
+    if _server and _server.running:
+        if announce:
+            print("✅ MCP server already running")
+        return
+
+    if announce:
+        print("🚀 Starting MCP server...")
+
+    try:
+        from IPython.core.getipython import get_ipython
+
+        ipython = get_ipython()
+        if not ipython:
+            if announce:
+                print("❌ Could not get IPython instance")
+            return
+
+        _server = JupyterMCPServer(
+            ipython,
+            safe_mode=_desired_mode,
+            dangerous_mode=_dangerous_mode,
+            enabled_options=_enabled_options,
+        )
+        await _server.start()
+        _server_task = _server.server_task
+
+        mode_info = _get_mode_display()
+        if announce:
+            print(
+                f"✅ MCP server started in {mode_info['icon']} {mode_info['mode']} mode"
+            )
+            if _dangerous_mode:
+                print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
+            elif not _desired_mode:
+                print("⚠️  UNSAFE MODE: execute_editing_cell tool is available")
+
+        broadcast_server_status("server_ready", _get_current_config())
+
+    except Exception as e:
+        if announce:
+            print(f"❌ Failed to start MCP server: {e}")
+        logger.error(f"Failed to start MCP server: {e}")
+
+
+async def _do_stop_server(announce: bool = True) -> None:
+    """Stop the MCP server and broadcast status."""
+    global _server, _server_task
+
+    if not _server:
+        if announce:
+            print("❌ MCP server not initialized")
+        return
+
+    if not _server.running:
+        if announce:
+            print("✅ MCP server already stopped")
+        return
+
+    if announce:
+        print("🛑 Stopping MCP server...")
+
+    try:
+        await _stop_server_task()
+
+        if _server_task and not _server_task.done():
+            _server_task.cancel()
+            try:
+                await _server_task
+            except asyncio.CancelledError:
+                pass
+
+        _server_task = None
+        _server = None
+        if announce:
+            print("✅ MCP server stopped")
+
+        broadcast_server_status("server_stopped", _get_current_config())
+
+    except Exception as e:
+        if announce:
+            print(f"❌ Failed to stop MCP server: {e}")
+        logger.error(f"Failed to stop MCP server: {e}")
+
+
+async def _do_restart_server(announce: bool = True) -> None:
+    """Restart the MCP server and broadcast status updates."""
+    global _server, _server_task
+
+    if not _server:
+        if announce:
+            print("❌ No server to restart. Use %mcp_start instead.")
+        return
+
+    if announce:
+        print("🔄 Restarting MCP server...")
+
+    try:
+        from IPython.core.getipython import get_ipython
+
+        ipython = get_ipython()
+        if not ipython:
+            if announce:
+                print("❌ Could not get IPython instance")
+            return
+
+        # Notify frontends before shutting down
+        broadcast_server_status("server_stopped", _get_current_config())
+
+        await _stop_server_task()
+
+        if _server_task and not _server_task.done():
+            _server_task.cancel()
+            try:
+                await _server_task
+            except asyncio.CancelledError:
+                pass
+
+        _server = None
+        _server = JupyterMCPServer(
+            ipython,
+            safe_mode=_desired_mode,
+            dangerous_mode=_dangerous_mode,
+            enabled_options=_enabled_options,
+        )
+
+        await _server.start()
+        _server_task = _server.server_task
+
+        mode_info = _get_mode_display()
+        if announce:
+            print(
+                f"✅ MCP server restarted in {mode_info['icon']} {mode_info['mode']} mode"
+            )
+            if _dangerous_mode:
+                print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
+            elif not _desired_mode:
+                print("⚠️  UNSAFE MODE: execute_editing_cell tool is now available")
+
+        broadcast_server_status("server_ready", _get_current_config())
+
+    except Exception as e:
+        if announce:
+            print(f"❌ Failed to restart MCP server: {e}")
+        logger.error(f"Failed to restart MCP server: {e}")
+
+
+def _handle_toolbar_control(comm, open_msg):
+    """Comm handler for toolbar control messages."""
+    # Track this comm for safe sending
+    _toolbar_comms.add(comm)
+
+    def _send_result(fut, comm_ref):
+        """Callback to send result after async operation completes."""
+        payload = {
+            "type": "result",
+            "success": not fut.exception(),
+            "details": _get_current_config(),
+        }
+        if fut.exception():
+            payload["error"] = str(fut.exception())
+        _safe_comm_send(comm_ref, payload)
+
+    def on_msg(msg):
+        data = msg.get("content", {}).get("data", {}) if msg else {}
+        msg_type = data.get("type")
+
+        if msg_type == "get_status":
+            _safe_comm_send(comm, {"type": "status", **_get_current_config()})
+            return
+
+        if msg_type == "start_server":
+            future = asyncio.ensure_future(_do_start_server(announce=False))
+            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            return
+
+        if msg_type == "stop_server":
+            future = asyncio.ensure_future(_do_stop_server(announce=False))
+            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            return
+
+        if msg_type == "restart_server":
+            future = asyncio.ensure_future(_do_restart_server(announce=False))
+            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            return
+
+        if msg_type == "set_mode":
+            try:
+                _do_set_mode(data.get("mode"), announce=False)
+                _safe_comm_send(
+                    comm,
+                    {
+                        "type": "result",
+                        "success": True,
+                        "restart_required": True,
+                        "details": _get_current_config(),
+                    },
+                )
+            except Exception as exc:
+                _safe_comm_send(
+                    comm, {"type": "result", "success": False, "error": str(exc)}
+                )
+            return
+
+        if msg_type == "set_option":
+            option = data.get("option")
+            enabled = bool(data.get("enabled"))
+            try:
+                changed = _do_set_option(option, enabled, announce=False)
+                _safe_comm_send(
+                    comm,
+                    {
+                        "type": "result",
+                        "success": True,
+                        "changed": changed,
+                        "restart_required": True,
+                        "details": _get_current_config(),
+                    },
+                )
+            except Exception as exc:
+                _safe_comm_send(
+                    comm, {"type": "result", "success": False, "error": str(exc)}
+                )
+            return
+
+        _safe_comm_send(
+            comm,
+            {
+                "type": "result",
+                "success": False,
+                "error": f"Unknown toolbar message type: {msg_type}",
+            },
+        )
+
+    def on_close(msg):
+        logger.debug("Toolbar control comm closed")
+        _toolbar_comms.discard(comm)
+
+    comm.on_msg(on_msg)
+    comm.on_close(on_close)
+
 
 @magics_class
 class MCPMagics(Magics):
@@ -39,54 +428,17 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_safe(self, line):
         """Switch MCP server to safe mode."""
-        global _server, _desired_mode, _dangerous_mode
-
-        _desired_mode = True
-        _dangerous_mode = False
-        print("🛡️  Mode set to safe")
-
-        if _server and _server.running:
-            # Update the running server's mode flag too
-            _server.set_safe_mode(True)
-            print("⚠️  Server restart required for tool changes to take effect")
-            print("   Use: %mcp_restart")
-        else:
-            print("✅ Mode will take effect when server starts")
+        _do_set_mode("safe", announce=True)
 
     @line_magic
     def mcp_unsafe(self, line):
         """Switch MCP server to unsafe mode."""
-        global _server, _desired_mode, _dangerous_mode
-
-        _desired_mode = False
-        _dangerous_mode = False
-        print("⚠️  Mode set to unsafe")
-        print("⚠️  UNSAFE MODE: execute_editing_cell tool will be available")
-
-        if _server and _server.running:
-            # Update the running server's mode flag too
-            _server.set_safe_mode(False)
-            print("⚠️  Server restart required for tool changes to take effect")
-            print("   Use: %mcp_restart")
-        else:
-            print("✅ Mode will take effect when server starts")
+        _do_set_mode("unsafe", announce=True)
 
     @line_magic
     def mcp_dangerous(self, line):
         """Switch MCP server to dangerous mode - all operations auto-approved."""
-        global _server, _desired_mode, _dangerous_mode
-
-        _desired_mode = False  # Dangerous mode implies unsafe mode
-        _dangerous_mode = True
-        print("⚠️⚠️⚠️  DANGEROUS MODE ENABLED  ⚠️⚠️⚠️")
-        print("All consent dialogs will be automatically approved!")
-        print("This mode bypasses all safety confirmations.")
-
-        if _server and _server.running:
-            print("⚠️  Server restart required for changes to take effect")
-            print("   Use: %mcp_restart")
-        else:
-            print("✅ Mode will take effect when server starts")
+        _do_set_mode("dangerous", announce=True)
 
     @line_magic
     def mcp_status(self, line):
@@ -131,114 +483,18 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_start(self, line):
         """Start the MCP server."""
-        global _server, _server_task, _desired_mode, _dangerous_mode
-
-        if _server and _server.running:
-            print("✅ MCP server already running")
-            return
-
-        async def start_server():
-            global _server, _server_task
-            print("🚀 Starting MCP server...")
-
-            try:
-                # Get IPython instance from the shell
-                from IPython.core.getipython import get_ipython
-
-                ipython = get_ipython()
-                if not ipython:
-                    print("❌ Could not get IPython instance")
-                    return
-
-                # Create NEW server instance with the desired mode and options
-                _server = JupyterMCPServer(
-                    ipython,
-                    safe_mode=_desired_mode,
-                    dangerous_mode=_dangerous_mode,
-                    enabled_options=_enabled_options,
-                )
-                _server_task = asyncio.create_task(_start_server_task())
-                await asyncio.sleep(0.1)  # Give it a moment to start
-
-                if _dangerous_mode:
-                    mode_icon = "☠️"
-                    mode_name = "dangerous"
-                elif _desired_mode:
-                    mode_icon = "🛡️"
-                    mode_name = "safe"
-                else:
-                    mode_icon = "⚠️"
-                    mode_name = "unsafe"
-                print(f"✅ MCP server started in {mode_icon} {mode_name} mode")
-
-                if _dangerous_mode:
-                    print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
-                elif not _desired_mode:
-                    print("⚠️  UNSAFE MODE: execute_editing_cell tool is available")
-
-                # Broadcast that server is ready
-                broadcast_server_status(
-                    "server_ready",
-                    {
-                        "mode": mode_name,
-                        "dangerous": _dangerous_mode,
-                        "host": _server.host,
-                        "port": _server.port,
-                    },
-                )
-
-            except Exception as e:
-                print(f"❌ Failed to start MCP server: {e}")
-
-        # Run start in the current event loop
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(start_server())
+            loop.create_task(_do_start_server(announce=True))
         except RuntimeError:
             print("❌ No event loop available for server start")
 
     @line_magic
     def mcp_close(self, line):
         """Stop the MCP server."""
-        global _server, _server_task
-
-        if not _server:
-            print("❌ MCP server not initialized")
-            return
-
-        if not _server.running:
-            print("✅ MCP server already stopped")
-            return
-
-        async def stop_server():
-            global _server_task
-            print("🛑 Stopping MCP server...")
-
-            try:
-                # Stop the server
-                await _stop_server_task()
-
-                # Cancel the task
-                if _server_task and not _server_task.done():
-                    _server_task.cancel()
-                    try:
-                        await _server_task
-                    except asyncio.CancelledError:
-                        pass
-
-                _server_task = None
-                print("✅ MCP server stopped")
-
-                # Broadcast that server has stopped
-                broadcast_server_status("server_stopped", {})
-
-            except Exception as e:
-                print(f"❌ Failed to stop MCP server: {e}")
-
-        # Run stop in the current event loop
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(stop_server())
+            loop.create_task(_do_stop_server(announce=True))
         except RuntimeError:
             print("❌ No event loop available for server stop")
 
@@ -248,7 +504,7 @@ class MCPMagics(Magics):
         global _server, _enabled_options
 
         parts = line.strip().split()
-        valid_options = {"measureit", "database", "auto_correct_json"}
+        valid_options = set(VALID_OPTIONS.keys())
 
         if not parts:
             # Show current options status
@@ -257,11 +513,8 @@ class MCPMagics(Magics):
                 f"   Enabled options: {', '.join(sorted(_enabled_options)) if _enabled_options else 'None'}"
             )
             print("   Available options:")
-            print("   - measureit: Enable MeasureIt template resources")
-            print("   - database: Enable database integration tools and resources")
-            print(
-                "   - auto_correct_json: Enable automatic JSON error correction (experimental)"
-            )
+            for name, desc in VALID_OPTIONS.items():
+                print(f"   - {name}: {desc}")
             print()
             print("   Usage:")
             print("   %mcp_option add measureit database    # Add multiple options")
@@ -274,6 +527,8 @@ class MCPMagics(Magics):
             return
 
         subcommand = parts[0].lower()
+
+        changes_made = False
 
         if subcommand in ["add", "remove"]:
             # New subcommand style
@@ -292,25 +547,26 @@ class MCPMagics(Magics):
                 return
 
             # Apply changes
-            changes_made = []
+            changes_messages = []
             if subcommand == "add":
                 for option in options:
-                    if option not in _enabled_options:
-                        _enabled_options.add(option)
-                        changes_made.append(f"✅ Added: {option}")
+                    if _do_set_option(option, True, announce=False):
+                        changes_messages.append(f"✅ Added: {option}")
                     else:
-                        changes_made.append(f"ℹ️  Already enabled: {option}")
+                        changes_messages.append(f"ℹ️  Already enabled: {option}")
             else:  # remove
                 for option in options:
-                    if option in _enabled_options:
-                        _enabled_options.remove(option)
-                        changes_made.append(f"❌ Removed: {option}")
+                    if _do_set_option(option, False, announce=False):
+                        changes_messages.append(f"❌ Removed: {option}")
                     else:
-                        changes_made.append(f"ℹ️  Not enabled: {option}")
+                        changes_messages.append(f"ℹ️  Not enabled: {option}")
 
             # Show results
-            for change in changes_made:
+            for change in changes_messages:
                 print(change)
+            changes_made = any(
+                change.startswith(("✅", "❌")) for change in changes_messages
+            )
 
         elif subcommand == "list":
             # Show status
@@ -340,108 +596,32 @@ class MCPMagics(Magics):
                 return
 
             # Enable/disable option
-            if disable:
-                if option_name in _enabled_options:
-                    _enabled_options.remove(option_name)
-                    print(f"❌ Removed: {option_name}")
-                else:
-                    print(f"ℹ️  Option '{option_name}' was not enabled")
+            changes_made = _do_set_option(option_name, not disable, announce=False)
+            if changes_made:
+                print(f"{'❌ Removed' if disable else '✅ Added'}: {option_name}")
             else:
-                _enabled_options.add(option_name)
-                print(f"✅ Added: {option_name}")
+                print(
+                    f"ℹ️  Option '{option_name}' was already "
+                    f"{'disabled' if disable else 'enabled'}"
+                )
 
         # Update server if running (for all code paths that make changes)
         if subcommand in ["add", "remove"] or (subcommand not in ["list"] and parts):
-            if _server and _server.running:
-                # Update the server's options
-                _server.set_enabled_options(_enabled_options)
-                print("⚠️  Server restart required for option changes to take effect")
-                print("   Use: %mcp_restart")
+            if changes_made:
+                if _server and _server.running:
+                    print("⚠️  Server restart required for option changes to take effect")
+                    print("   Use: %mcp_restart")
+                else:
+                    print("✅ Changes will take effect when server starts")
             else:
-                print("✅ Changes will take effect when server starts")
+                print("ℹ️  No option changes applied.")
 
     @line_magic
     def mcp_restart(self, line):
         """Restart the MCP server to apply mode changes."""
-        global _server, _server_task, _desired_mode, _dangerous_mode
-
-        if not _server:
-            print("❌ No server to restart. Use %mcp_start instead.")
-            return
-
-        async def restart_server():
-            global _server, _server_task
-            print("🔄 Restarting MCP server...")
-
-            try:
-                # Get IPython instance before stopping server
-                from IPython.core.getipython import get_ipython
-
-                ipython = get_ipython()
-                if not ipython:
-                    print("❌ Could not get IPython instance")
-                    return
-
-                # Broadcast server_stopped before stopping (for frontend comm cleanup)
-                broadcast_server_status("server_stopped", {})
-
-                # Stop current server
-                await _stop_server_task()
-
-                # Cancel existing task
-                if _server_task and not _server_task.done():
-                    _server_task.cancel()
-                    try:
-                        await _server_task
-                    except asyncio.CancelledError:
-                        pass
-
-                # Create completely NEW server with desired mode and options
-                _server = JupyterMCPServer(
-                    ipython,
-                    safe_mode=_desired_mode,
-                    dangerous_mode=_dangerous_mode,
-                    enabled_options=_enabled_options,
-                )
-
-                # Start new server
-                _server_task = asyncio.create_task(_start_server_task())
-                await asyncio.sleep(0.1)  # Give it a moment to start
-
-                if _dangerous_mode:
-                    mode_icon = "☠️"
-                    mode_name = "dangerous"
-                elif _desired_mode:
-                    mode_icon = "🛡️"
-                    mode_name = "safe"
-                else:
-                    mode_icon = "⚠️"
-                    mode_name = "unsafe"
-                print(f"✅ MCP server restarted in {mode_icon} {mode_name} mode")
-
-                if _dangerous_mode:
-                    print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
-                elif not _desired_mode:
-                    print("⚠️  UNSAFE MODE: execute_editing_cell tool is now available")
-
-                # Broadcast that server is ready after restart
-                broadcast_server_status(
-                    "server_ready",
-                    {
-                        "mode": mode_name,
-                        "dangerous": _dangerous_mode,
-                        "host": _server.host,
-                        "port": _server.port,
-                    },
-                )
-
-            except Exception as e:
-                print(f"❌ Failed to restart MCP server: {e}")
-
-        # Run restart in the current event loop
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(restart_server())
+            loop.create_task(_do_restart_server(announce=True))
         except RuntimeError:
             print("❌ No event loop available for restart")
 
@@ -493,9 +673,16 @@ def load_ipython_extension(ipython):
 
         # Register comm target for active cell tracking
         register_comm_target()
+        try:
+            ipython.kernel.comm_manager.register_target(
+                "mcp:toolbar_control", _handle_toolbar_control
+            )
+            logger.debug("Registered comm target 'mcp:toolbar_control'")
+        except Exception as e:
+            logger.error(f"Failed to register toolbar control comm target: {e}")
 
         # Broadcast initial server status (not started yet)
-        broadcast_server_status("server_not_started", {})
+        broadcast_server_status("server_not_started", _get_current_config())
 
         # Register magic commands
         magic_instance = MCPMagics(ipython)
@@ -621,15 +808,26 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
             # No running loop - use system time (Python 3.13+ compatibility)
             timestamp = time.time()
 
-        # Send the status message
-        _status_comm.send(
-            {
-                "status": status,
-                "timestamp": timestamp,
-                "details": details or {},
-            }
-        )
+        payload_details: Dict[str, Any] = _get_current_config()
+        if details:
+            payload_details.update(details)
 
-        logger.debug(f"Broadcasted server status: {status}")
+        # Send the status message with error handling
+        try:
+            _status_comm.send(
+                {
+                    "status": status,
+                    "timestamp": timestamp,
+                    "details": payload_details,
+                }
+            )
+            logger.debug(f"Broadcasted server status: {status}")
+        except Exception as send_error:
+            # Clear comm on send failure so it recreates next time
+            logger.debug(f"Send failed, clearing status comm: {send_error}")
+            _status_comm = None
+
     except Exception as e:
+        # Clear comm on any error to force recreation
+        _status_comm = None
         logger.debug(f"Could not broadcast server status: {e}")
