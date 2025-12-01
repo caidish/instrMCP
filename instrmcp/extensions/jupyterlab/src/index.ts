@@ -455,6 +455,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           targetIndex = currentIndex - 1;
         } else if (target === 'below') {
           targetIndex = currentIndex + 1;
+        } else if (target === 'bottom') {
+          // Move to the last cell in the notebook (by file order, not execution count)
+          targetIndex = cells.length - 1;
         } else {
           // target is a cell execution count number
           const targetCellNum = parseInt(target);
@@ -463,7 +466,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               type: 'move_cursor_response',
               request_id: requestId,
               success: false,
-              message: `Invalid target '${target}'. Must be 'above', 'below', or a cell number`
+              message: `Invalid target '${target}'. Must be 'above', 'below', 'bottom', or a cell number`
             });
             return;
           }
@@ -617,17 +620,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 // Expression result
                 // Access data from _rawData or data property
                 const resultData = output._rawData || output.data || {};
+                // Sanitize to remove large image data
                 outputData.push({
                   type: 'execute_result',
                   execution_count: output.executionCount,
-                  data: resultData
+                  data: sanitizeOutputData(resultData)
                 });
               } else if (outputType === 'display_data') {
                 // Rich display
                 const displayData = output._rawData || output.data || {};
+                // Sanitize to remove large image data
                 outputData.push({
                   type: 'display_data',
-                  data: displayData
+                  data: sanitizeOutputData(displayData)
                 });
               } else if (outputType === 'error') {
                 // Error/traceback - access from _raw
@@ -870,6 +875,49 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    };
+
+    // Image MIME types that should be sanitized (replaced with placeholder)
+    const IMAGE_MIME_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/svg+xml',
+      'image/webp',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    // Sanitize output data by replacing large images with placeholders
+    const sanitizeOutputData = (data: Record<string, any>): Record<string, any> => {
+      const sanitized: Record<string, any> = {};
+
+      for (const [mimeType, content] of Object.entries(data)) {
+        if (IMAGE_MIME_TYPES.includes(mimeType)) {
+          // Replace image with placeholder
+          let sizeInfo = 'unknown size';
+          if (typeof content === 'string') {
+            // Base64 encoded - estimate actual size (base64 is ~4/3 of original)
+            const estimatedBytes = Math.floor(content.length * 0.75);
+            if (estimatedBytes >= 1024 * 1024) {
+              sizeInfo = `${(estimatedBytes / (1024 * 1024)).toFixed(2)} MB`;
+            } else if (estimatedBytes >= 1024) {
+              sizeInfo = `${(estimatedBytes / 1024).toFixed(1)} KB`;
+            } else {
+              sizeInfo = `${estimatedBytes} bytes`;
+            }
+          }
+
+          // Extract format from MIME type
+          const format = mimeType.split('/')[1]?.toUpperCase() || 'IMAGE';
+          sanitized[mimeType] = `[${format} image, ${sizeInfo} - content omitted to save tokens]`;
+        } else {
+          // Keep non-image content as-is
+          sanitized[mimeType] = content;
+        }
+      }
+
+      return sanitized;
     };
 
     // Handle patch consent request from kernel

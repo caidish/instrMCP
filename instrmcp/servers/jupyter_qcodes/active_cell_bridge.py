@@ -684,6 +684,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         target: Where to move the cursor:
                - "above": Move to cell above current
                - "below": Move to cell below current
+               - "bottom": Move to the last cell in the notebook (by file order)
                - "<number>": Move to cell with that execution count (e.g., "5" for [5])
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
@@ -700,14 +701,14 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         }
 
     # Validate target
-    valid_targets = ["above", "below"]
+    valid_targets = ["above", "below", "bottom"]
     if target not in valid_targets:
         try:
             int(target)  # Check if it's a number
         except ValueError:
             return {
                 "success": False,
-                "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number",
+                "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
             }
 
     request_id = str(uuid.uuid4())

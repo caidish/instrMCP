@@ -117,97 +117,69 @@ def cleanup_status_comm():
 
 
 class TestBroadcastServerStatusPython313:
-    """Test broadcast_server_status Python 3.13 compatibility."""
+    """Test broadcast_server_status with existing toolbar comms."""
 
-    def test_broadcast_with_no_event_loop(
+    def test_broadcast_with_existing_toolbar_comm(
         self, fake_ipython, cleanup_status_comm, caplog
     ):
-        """Test broadcast_server_status when no asyncio event loop exists (Python 3.13)."""
+        """Test broadcast_server_status sends through existing toolbar comms."""
         from instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension import (
             broadcast_server_status,
+            _toolbar_comms,
         )
 
-        # Mock get_ipython to return our fake instance
-        with patch(
-            "IPython.core.getipython.get_ipython",
-            return_value=fake_ipython,
-        ):
-            # Mock asyncio.get_running_loop to raise RuntimeError (Python 3.13 behavior)
-            with patch(
-                "instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension.asyncio.get_running_loop",
-                side_effect=RuntimeError("no running event loop"),
-            ):
-                # Mock Comm to capture sends
-                sent_messages = []
+        # Create a mock comm to receive broadcasts
+        sent_messages = []
 
-                class MockComm:
-                    def __init__(self, target_name):
-                        self.target_name = target_name
-                        self._closed = False
+        class MockToolbarComm:
+            def __init__(self):
+                self._closed = False
+                self.is_disposed = False
+                self.kernel = MagicMock()
+                self.kernel.is_alive.return_value = True
 
-                    def send(self, data):
-                        sent_messages.append(data)
+            def send(self, data):
+                sent_messages.append(data)
 
-                with patch(
-                    "ipykernel.comm.Comm",
-                    MockComm,
-                ):
-                    # Call broadcast_server_status
-                    broadcast_server_status("server_ready", {"port": 3000})
+        mock_comm = MockToolbarComm()
 
-                    # Verify message was sent despite RuntimeError
-                    assert len(sent_messages) == 1
-                    msg = sent_messages[0]
-                    assert msg["status"] == "server_ready"
-                    assert msg["details"] == {"port": 3000}
-                    assert "timestamp" in msg
-                    # Timestamp should be from time.time(), not loop.time()
-                    assert isinstance(msg["timestamp"], float)
+        # Add the mock comm to the tracked set
+        _toolbar_comms.add(mock_comm)
+        try:
+            # Call broadcast_server_status
+            broadcast_server_status("server_ready", {"port": 3000})
 
-    def test_broadcast_with_running_loop(
+            # Verify message was sent through the tracked comm
+            assert len(sent_messages) == 1
+            msg = sent_messages[0]
+            assert msg["type"] == "status_broadcast"
+            assert msg["status"] == "server_ready"
+            assert "details" in msg
+            assert msg["details"].get("port") == 3000
+            assert "timestamp" in msg
+            assert isinstance(msg["timestamp"], float)
+        finally:
+            _toolbar_comms.discard(mock_comm)
+
+    def test_broadcast_with_no_toolbar_comms(
         self, fake_ipython, cleanup_status_comm, caplog
     ):
-        """Test broadcast_server_status when event loop is running."""
+        """Test broadcast_server_status when no toolbar comms are connected."""
         from instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension import (
             broadcast_server_status,
+            _toolbar_comms,
         )
 
-        # Mock get_ipython to return our fake instance
-        with patch(
-            "IPython.core.getipython.get_ipython",
-            return_value=fake_ipython,
-        ):
-            # Mock asyncio.get_running_loop to return a loop
-            mock_loop = MagicMock()
-            mock_loop.time.return_value = 12345.678
+        # Ensure no comms are tracked
+        original_comms = _toolbar_comms.copy()
+        _toolbar_comms.clear()
 
-            with patch(
-                "instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension.asyncio.get_running_loop",
-                return_value=mock_loop,
-            ):
-                # Mock Comm to capture sends
-                sent_messages = []
-
-                class MockComm:
-                    def __init__(self, target_name):
-                        self.target_name = target_name
-                        self._closed = False
-
-                    def send(self, data):
-                        sent_messages.append(data)
-
-                with patch(
-                    "ipykernel.comm.Comm",
-                    MockComm,
-                ):
-                    # Call broadcast_server_status
-                    broadcast_server_status("server_stopped")
-
-                    # Verify message was sent with loop timestamp
-                    assert len(sent_messages) == 1
-                    msg = sent_messages[0]
-                    assert msg["status"] == "server_stopped"
-                    assert msg["timestamp"] == 12345.678  # From loop.time()
+        try:
+            # Call broadcast_server_status - should not raise
+            broadcast_server_status("server_stopped")
+            # Just verify it doesn't crash when no comms are available
+        finally:
+            _toolbar_comms.update(original_comms)
 
     def test_broadcast_without_ipython(self, cleanup_status_comm):
         """Test broadcast_server_status gracefully handles missing IPython."""

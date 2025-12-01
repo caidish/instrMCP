@@ -264,3 +264,57 @@ Client ←→ HTTP ←→ Jupyter MCP Server
 ```
 
 Direct connection to the HTTP server running in Jupyter.
+
+## Server Lifecycle & Troubleshooting
+
+### MCP Server Lifecycle
+
+The MCP server runs as an HTTP server within the Jupyter kernel process using uvicorn:
+
+1. **Start**: Creates uvicorn Server instance with `install_signal_handlers = lambda: None` to prevent interference with ipykernel's ZMQ event loop
+2. **Run**: Server runs in an asyncio task via `uvicorn.Server.serve()`
+3. **Stop**: Sets `server.should_exit = True` for graceful shutdown, then cancels the task
+
+**Important**: The signal handler override is critical - without it, repeated start/stop cycles corrupt ipykernel's ZMQ sockets.
+
+### Logging System
+
+Logs are stored in `~/.instrmcp/`:
+
+```
+~/.instrmcp/
+├── logs/
+│   ├── mcp.log              # Main server log (rotating, 10MB max)
+│   ├── mcp_debug.log        # Debug log (when enabled)
+│   └── tool_calls.log       # Tool invocations with timing
+├── audit/
+│   └── tool_audit.log       # Dynamic tool lifecycle
+└── logging.yaml             # Configuration (optional)
+```
+
+**Enable debug logging**: Create/edit `~/.instrmcp/logging.yaml`:
+```yaml
+debug_enabled: true
+```
+
+### Common Issues
+
+#### "Socket operation on non-socket" Error
+
+**Cause**: ZMQ socket corruption from improper uvicorn shutdown.
+
+**Solution**: This was fixed by disabling uvicorn's signal handlers. If you encounter this error:
+1. Click the "Reset" button in the toolbar
+2. If that fails, restart the kernel
+
+#### Toolbar Shows "Stopped" But Server Won't Start
+
+**Cause**: Stale state after kernel restart.
+
+**Solution**: Click the "Reset" button to reconnect the toolbar comm.
+
+#### Tool Calls Not Appearing in Logs
+
+**Cause**: `tool_logging` disabled or logger not initialized.
+
+**Solution**: Ensure `~/.instrmcp/logging.yaml` has `tool_logging: true` (default) and restart the kernel.

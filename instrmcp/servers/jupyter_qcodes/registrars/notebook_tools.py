@@ -5,14 +5,15 @@ Registers tools for interacting with Jupyter notebook variables and cells.
 """
 
 import json
-import logging
 import time
 from typing import List, Optional
 
 from mcp.types import TextContent
 from ..active_cell_bridge import get_cell_outputs, get_cached_cell_output
+from instrmcp.logging_config import get_logger
+from ..tool_logger import log_tool_call
 
-logger = logging.getLogger(__name__)
+logger = get_logger("tools.notebook")
 
 
 class NotebookToolRegistrar:
@@ -80,10 +81,26 @@ class NotebookToolRegistrar:
             Args:
                 type_filter: Optional type filter (e.g., "array", "dict", "instrument")
             """
+            start = time.perf_counter()
             try:
                 variables = await self.tools.list_variables(type_filter)
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_list_variables",
+                    {"type_filter": type_filter},
+                    duration,
+                    "success",
+                )
                 return [TextContent(type="text", text=json.dumps(variables, indent=2))]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_list_variables",
+                    {"type_filter": type_filter},
+                    duration,
+                    "error",
+                    str(e),
+                )
                 logger.error(f"Error in notebook/list_variables: {e}")
                 return [
                     TextContent(
@@ -101,10 +118,23 @@ class NotebookToolRegistrar:
             Args:
                 name: Variable name
             """
+            start = time.perf_counter()
             try:
                 info = await self.tools.get_variable_info(name)
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_get_variable_info", {"name": name}, duration, "success"
+                )
                 return [TextContent(type="text", text=json.dumps(info, indent=2))]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_get_variable_info",
+                    {"name": name},
+                    duration,
+                    "error",
+                    str(e),
+                )
                 logger.error(f"Error in notebook/get_variable_info: {e}")
                 return [
                     TextContent(
@@ -132,16 +162,28 @@ class NotebookToolRegistrar:
                 line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
                          Use this to limit context window consumption for large cells.
             """
+            start = time.perf_counter()
+            args = {
+                "fresh_ms": fresh_ms,
+                "line_start": line_start,
+                "line_end": line_end,
+            }
             try:
                 result = await self.tools.get_editing_cell(
                     fresh_ms=fresh_ms, line_start=line_start, line_end=line_end
                 )
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call("notebook_get_editing_cell", args, duration, "success")
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
                     )
                 ]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_get_editing_cell", args, duration, "error", str(e)
+                )
                 logger.error(f"Error in notebook/get_editing_cell: {e}")
                 return [
                     TextContent(
@@ -517,6 +559,7 @@ class NotebookToolRegistrar:
                 target: Where to move the cursor:
                        - "above": Move to cell above current
                        - "below": Move to cell below current
+                       - "bottom": Move to the last cell in the notebook (by file order)
                        - "<number>": Move to cell with that execution count (e.g., "5" for [5])
 
             Returns:
@@ -525,6 +568,7 @@ class NotebookToolRegistrar:
             Example usage:
                 move_cursor("below")   # Move to next cell
                 move_cursor("above")   # Move to previous cell
+                move_cursor("bottom")  # Move to last cell in notebook
                 move_cursor("5")       # Move to cell [5]
             """
             try:

@@ -6,12 +6,15 @@ They are only available when the server is running in unsafe mode.
 """
 
 import json
-import logging
+import time
 from typing import List
 
 from mcp.types import TextContent
 
-logger = logging.getLogger(__name__)
+from instrmcp.logging_config import get_logger
+from .tool_logger import log_tool_call
+
+logger = get_logger("tools.unsafe")
 
 
 class UnsafeToolRegistrar:
@@ -189,14 +192,19 @@ class UnsafeToolRegistrar:
                         )
                     ]
 
+            start = time.perf_counter()
             try:
                 result = await self.tools.execute_editing_cell()
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call("notebook_execute_cell", {}, duration, "success")
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
                     )
                 ]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call("notebook_execute_cell", {}, duration, "error", str(e))
                 logger.error(f"Error in notebook/execute_cell: {e}")
                 return [
                     TextContent(

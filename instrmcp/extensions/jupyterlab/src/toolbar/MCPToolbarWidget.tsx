@@ -71,23 +71,31 @@ export class MCPToolbarWidget extends ReactWidget {
   }
 
   private async _openControlComm(): Promise<void> {
+    // Always close existing comm first
     this._closeControlComm();
 
     const kernel = this._panel.sessionContext.session?.kernel;
-    if (!kernel || kernel.status === 'dead') {
+    if (!kernel || kernel.status === 'dead' || kernel.status === 'restarting') {
       return;
     }
 
     try {
       const comm = kernel.createComm('mcp:toolbar_control');
       comm.onMsg = (msg: any) => {
+        // Guard against disposed widget
+        if (this.isDisposed) return;
         this._handleControlMessage(msg);
       };
+      comm.onClose = () => {
+        // Comm was closed (kernel shutdown, etc.) - clear our reference
+        this._controlComm = null;
+      };
       this._controlComm = comm;
-      comm.open();
+      await comm.open();  // Wait for open to complete
       this._requestStatus();
     } catch (error) {
       console.warn('MCP Toolbar: failed to open control comm', error);
+      this._controlComm = null;
     }
   }
 
@@ -102,6 +110,9 @@ export class MCPToolbarWidget extends ReactWidget {
     if (msgType === 'status') {
       this._applyDetails(data);
     } else if (msgType === 'result' && data.details) {
+      this._applyDetails(data.details);
+    } else if (msgType === 'status_broadcast' && data.details) {
+      // Handle broadcasts sent through the control comm (instead of separate status comm)
       this._applyDetails(data.details);
     }
   }
@@ -184,40 +195,48 @@ export class MCPToolbarWidget extends ReactWidget {
 
   private _handleReset = (): void => {
     console.log('MCP Toolbar: Manual reset triggered');
+
+    // 1. Clear kernel restart flag
     this._kernelRestarting = false;
+
+    // 2. Close comm completely
     this._closeControlComm();
+
+    // 3. Reset state to defaults
     this._state = { ...DEFAULT_STATE };
     this.update();
-    void this._openControlComm();
+
+    // 4. Delay then reconnect (give kernel time to stabilize)
+    setTimeout(() => {
+      if (!this.isDisposed) {
+        void this._openControlComm();
+      }
+    }, 200);
   };
 
   private _handleModeChange = (mode: MCPMode): void => {
     if (mode === this._state.mode) {
       return;
     }
-
-    this._sendControlMessage({ type: 'set_mode', mode });
-
+    // Guard: should be disabled in UI already, but double-check
     if (this._state.serverRunning) {
-      const restart = window.confirm('Restart MCP server now to apply mode change?');
-      if (restart) {
-        this._handleRestart();
-      }
+      return;
     }
+    this._sendControlMessage({ type: 'set_mode', mode });
   };
 
   private _handleOptionToggle = (option: string, enabled: boolean): void => {
-    this._sendControlMessage({ type: 'set_option', option, enabled });
-
+    // Guard: should be disabled in UI already, but double-check
     if (this._state.serverRunning) {
-      const restart = window.confirm('Restart MCP server to apply option changes?');
-      if (restart) {
-        this._handleRestart();
-      }
+      return;
     }
+    this._sendControlMessage({ type: 'set_option', option, enabled });
   };
 
   private _sendControlMessage(payload: any): void {
+    // Don't send if widget is disposed
+    if (this.isDisposed) return;
+
     const kernel = this._panel.sessionContext.session?.kernel;
     if (!kernel || kernel.status === 'dead' || kernel.status === 'restarting') {
       return;
@@ -229,15 +248,16 @@ export class MCPToolbarWidget extends ReactWidget {
       return;
     }
 
+    // Check if comm is valid
     if (!this._controlComm || this._controlComm.isDisposed) {
+      // Reconnect and retry
       void this._openControlComm().then(() => {
-        if (this._controlComm && !this._controlComm.isDisposed) {
+        if (this._controlComm && !this._controlComm.isDisposed && !this.isDisposed) {
           try {
             this._controlComm.send(payload);
           } catch (error) {
-            console.warn('MCP Toolbar: failed to send control message after reconnect', error);
-            // Clear comm on failure so next action reopens it
-            this._controlComm = null;
+            console.warn('MCP Toolbar: failed to send after reconnect', error);
+            this._closeControlComm();  // Close properly on failure
           }
         }
       });
@@ -248,20 +268,22 @@ export class MCPToolbarWidget extends ReactWidget {
       this._controlComm.send(payload);
     } catch (error) {
       console.warn('MCP Toolbar: failed to send control message', error);
-      // Clear comm on failure so next action reopens it
-      this._controlComm = null;
+      this._closeControlComm();  // Close properly on failure so next action reopens
     }
   }
 
   private _closeControlComm(): void {
-    if (this._controlComm && !this._controlComm.isDisposed) {
+    // Clear reference FIRST to prevent race conditions
+    const comm = this._controlComm;
+    this._controlComm = null;
+
+    if (comm && !comm.isDisposed) {
       try {
-        this._controlComm.close();
+        comm.close();
       } catch (error) {
-        // ignore
+        // Ignore - comm may already be closed
       }
     }
-    this._controlComm = null;
   }
 
   private _onKernelChanged = (): void => {
@@ -292,10 +314,14 @@ export class MCPToolbarWidget extends ReactWidget {
       this._state = { ...DEFAULT_STATE };
       this.update();
     } else if (status === 'idle' && this._kernelRestarting) {
-      // Kernel came back - reconnect
+      // Kernel came back - wait a bit then reconnect
       console.log('MCP Toolbar: Kernel back from restart, reconnecting');
       this._kernelRestarting = false;
-      void this._openControlComm();
+      setTimeout(() => {
+        if (!this.isDisposed && !this._kernelRestarting) {
+          void this._openControlComm();
+        }
+      }, 100);
     }
   };
 }

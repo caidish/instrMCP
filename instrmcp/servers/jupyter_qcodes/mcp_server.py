@@ -6,7 +6,6 @@ Jupyter notebook functionality through MCP tools.
 """
 
 import asyncio
-import logging
 import secrets
 from typing import Dict, Any, Optional
 
@@ -22,6 +21,7 @@ from .registrars import (
     ResourceRegistrar,
 )
 from .dynamic_registrar import DynamicToolRegistrar
+from instrmcp.logging_config import get_logger
 
 # MeasureIt integration (optional)
 try:
@@ -41,7 +41,7 @@ except ImportError:
     db_integration = None
     DATABASE_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger("server")
 
 
 class JupyterMCPServer:
@@ -168,6 +168,20 @@ class JupyterMCPServer:
         try:
             logger.debug(f"Starting Jupyter MCP server on {self.host}:{self.port}")
 
+            # Use uvicorn directly for better lifecycle control
+            import uvicorn
+
+            app = self.mcp.http_app()
+            config = uvicorn.Config(
+                app,
+                host=self.host,
+                port=self.port,
+                log_level="warning",
+            )
+            self._uvicorn_server = uvicorn.Server(config)
+            # Disable signal handlers to avoid interfering with ipykernel's ZMQ
+            self._uvicorn_server.install_signal_handlers = lambda: None
+
             # Start the server in a separate task
             self.server_task = asyncio.create_task(self._run_server())
             self.running = True
@@ -180,16 +194,12 @@ class JupyterMCPServer:
             raise
 
     async def _run_server(self):
-        """Run the FastMCP server."""
+        """Run the uvicorn server."""
         try:
-            # Use FastMCP's run method - it handles the asyncio loop
-            await asyncio.to_thread(
-                self.mcp.run,
-                transport="http",
-                host=self.host,
-                port=self.port,
-                show_banner=False,
-            )
+            await self._uvicorn_server.serve()
+        except asyncio.CancelledError:
+            logger.debug("MCP server task cancelled")
+            raise
         except Exception as e:
             logger.error(f"MCP server error: {e}")
             raise
@@ -201,6 +211,12 @@ class JupyterMCPServer:
 
         try:
             self.running = False
+
+            # Signal uvicorn to shutdown gracefully
+            if hasattr(self, "_uvicorn_server") and self._uvicorn_server:
+                self._uvicorn_server.should_exit = True
+                # Give it a moment to shut down gracefully
+                await asyncio.sleep(0.1)
 
             # Clean up tools
             await self.tools.cleanup()

@@ -6,7 +6,6 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 """
 
 import asyncio
-import logging
 import time
 from typing import Any, Dict, Optional
 
@@ -14,8 +13,11 @@ from IPython.core.magic import Magics, line_magic, magics_class
 
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
+from instrmcp.logging_config import setup_logging, get_logger
 
-logger = logging.getLogger(__name__)
+# Initialize unified logging system
+setup_logging()
+logger = get_logger("comm")
 
 # Global server instance and mode tracking
 _server: Optional[JupyterMCPServer] = None
@@ -28,34 +30,57 @@ _server_port: int = 8123  # Default port
 # Global options tracking
 _enabled_options: set = set()  # Set of enabled option names
 
-# Server status comm tracking
-_status_comm = None  # Will hold the comm for broadcasting server status
+# Note: We create a fresh comm for each broadcast to avoid stale socket issues
 
 # Toolbar control comms tracking (for safe sends)
 _toolbar_comms: set = set()  # Active toolbar control comms
 
 
-def _safe_comm_send(comm, payload: dict) -> bool:
-    """Safely send a message on a comm, handling closed/disposed state.
+def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
+    """Safely send a message on a comm, handling closed/disposed/dead kernel state.
 
     Returns True if send succeeded, False otherwise.
     """
+    comm_id = id(comm) if comm else "None"
+    msg_type = payload.get("type", "unknown") if payload else "unknown"
+
     if comm is None:
+        logger.debug(f"_safe_comm_send({caller}): comm is None, skipping")
         return False
 
+    closed = getattr(comm, "_closed", False)
+    disposed = getattr(comm, "is_disposed", False)
+    kernel = getattr(comm, "kernel", None)
+
+    logger.debug(
+        f"_safe_comm_send({caller}): comm={comm_id}, "
+        f"msg_type={msg_type}, closed={closed}, disposed={disposed}, "
+        f"kernel={'present' if kernel else 'None'}"
+    )
+
     # Check if comm is closed or disposed
-    if getattr(comm, "_closed", False) or getattr(comm, "is_disposed", False):
-        logger.debug("Comm is closed/disposed, skipping send")
+    if closed or disposed:
+        logger.debug(f"_safe_comm_send({caller}): SKIP - closed/disposed")
+        _toolbar_comms.discard(comm)
+        return False
+
+    # Check if kernel is still present (not torn down)
+    if kernel is None:
+        logger.debug(f"_safe_comm_send({caller}): SKIP - kernel is None")
+        _toolbar_comms.discard(comm)
         return False
 
     try:
+        logger.debug(f"_safe_comm_send({caller}): SENDING...")
         comm.send(payload)
+        logger.debug(f"_safe_comm_send({caller}): SENT OK")
         return True
     except Exception as e:
-        logger.debug(f"Failed to send on comm: {e}")
-        # Remove from tracked comms if it was a toolbar comm
+        logger.debug(f"_safe_comm_send({caller}): FAILED - {e}")
+        # Remove from tracked comms on any failure
         _toolbar_comms.discard(comm)
         return False
+
 
 # Single source of truth for available options
 VALID_OPTIONS: Dict[str, str] = {
@@ -80,6 +105,8 @@ def _get_current_config() -> dict:
     host = _server.host if _server else _server_host
     port = _server.port if _server else _server_port
 
+    server_running = bool(_server and _server.running)
+
     return {
         "mode": mode_info["mode"],
         "enabled_options": sorted(_enabled_options),
@@ -87,7 +114,7 @@ def _get_current_config() -> dict:
             {"name": k, "description": v} for k, v in VALID_OPTIONS.items()
         ],
         "dangerous": _dangerous_mode,
-        "server_running": bool(_server and _server.running),
+        "server_running": server_running,
         "host": host,
         "port": port,
     }
@@ -177,7 +204,7 @@ def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
 
 
 async def _do_start_server(announce: bool = True) -> None:
-    """Start the MCP server using existing logic, broadcasting status."""
+    """Start the MCP server and broadcast status."""
     global _server, _server_task
 
     if _server and _server.running:
@@ -242,7 +269,7 @@ async def _do_stop_server(announce: bool = True) -> None:
         print("🛑 Stopping MCP server...")
 
     try:
-        await _stop_server_task()
+        await _server.stop()
 
         if _server_task and not _server_task.done():
             _server_task.cancel()
@@ -328,11 +355,30 @@ async def _do_restart_server(announce: bool = True) -> None:
 
 def _handle_toolbar_control(comm, open_msg):
     """Comm handler for toolbar control messages."""
+    comm_id = id(comm)
+    logger.debug(f"_handle_toolbar_control: NEW comm opened, id={comm_id}")
+    logger.debug(f"_toolbar_comms before add: {len(_toolbar_comms)} comms")
+
     # Track this comm for safe sending
     _toolbar_comms.add(comm)
+    logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
 
     def _send_result(fut, comm_ref):
         """Callback to send result after async operation completes."""
+        comm_id = id(comm_ref) if comm_ref else "None"
+        logger.debug(f"_send_result callback fired, comm={comm_id}")
+
+        # Check if comm is still tracked (not closed/removed)
+        if comm_ref not in _toolbar_comms:
+            logger.debug("_send_result: SKIP - comm not in _toolbar_comms")
+            return
+
+        # Check if kernel is still present (not torn down)
+        if getattr(comm_ref, "kernel", None) is None:
+            logger.debug("_send_result: SKIP - kernel is None")
+            _toolbar_comms.discard(comm_ref)
+            return
+
         payload = {
             "type": "result",
             "success": not fut.exception(),
@@ -340,32 +386,52 @@ def _handle_toolbar_control(comm, open_msg):
         }
         if fut.exception():
             payload["error"] = str(fut.exception())
-        _safe_comm_send(comm_ref, payload)
+
+        # _safe_comm_send will handle any remaining errors and discard comm if needed
+        _safe_comm_send(comm_ref, payload, caller="_send_result")
 
     def on_msg(msg):
         data = msg.get("content", {}).get("data", {}) if msg else {}
         msg_type = data.get("type")
+        logger.debug(f"on_msg received: {msg_type}")
 
         if msg_type == "get_status":
-            _safe_comm_send(comm, {"type": "status", **_get_current_config()})
+            _safe_comm_send(
+                comm, {"type": "status", **_get_current_config()}, caller="get_status"
+            )
             return
 
         if msg_type == "start_server":
+            logger.debug(f"on_msg: scheduling start_server")
             future = asyncio.ensure_future(_do_start_server(announce=False))
             future.add_done_callback(lambda fut: _send_result(fut, comm))
             return
 
         if msg_type == "stop_server":
+            logger.debug(f"on_msg: scheduling stop_server")
             future = asyncio.ensure_future(_do_stop_server(announce=False))
             future.add_done_callback(lambda fut: _send_result(fut, comm))
             return
 
         if msg_type == "restart_server":
+            logger.debug(f"on_msg: scheduling restart_server")
             future = asyncio.ensure_future(_do_restart_server(announce=False))
             future.add_done_callback(lambda fut: _send_result(fut, comm))
             return
 
         if msg_type == "set_mode":
+            # Reject mode changes when server is running
+            if _server and _server.running:
+                _safe_comm_send(
+                    comm,
+                    {
+                        "type": "result",
+                        "success": False,
+                        "error": "Cannot change mode while server is running",
+                    },
+                    caller="set_mode_reject",
+                )
+                return
             try:
                 _do_set_mode(data.get("mode"), announce=False)
                 _safe_comm_send(
@@ -373,17 +439,31 @@ def _handle_toolbar_control(comm, open_msg):
                     {
                         "type": "result",
                         "success": True,
-                        "restart_required": True,
                         "details": _get_current_config(),
                     },
+                    caller="set_mode_ok",
                 )
             except Exception as exc:
                 _safe_comm_send(
-                    comm, {"type": "result", "success": False, "error": str(exc)}
+                    comm,
+                    {"type": "result", "success": False, "error": str(exc)},
+                    caller="set_mode_err",
                 )
             return
 
         if msg_type == "set_option":
+            # Reject option changes when server is running
+            if _server and _server.running:
+                _safe_comm_send(
+                    comm,
+                    {
+                        "type": "result",
+                        "success": False,
+                        "error": "Cannot change options while server is running",
+                    },
+                    caller="set_option_reject",
+                )
+                return
             option = data.get("option")
             enabled = bool(data.get("enabled"))
             try:
@@ -394,13 +474,15 @@ def _handle_toolbar_control(comm, open_msg):
                         "type": "result",
                         "success": True,
                         "changed": changed,
-                        "restart_required": True,
                         "details": _get_current_config(),
                     },
+                    caller="set_option_ok",
                 )
             except Exception as exc:
                 _safe_comm_send(
-                    comm, {"type": "result", "success": False, "error": str(exc)}
+                    comm,
+                    {"type": "result", "success": False, "error": str(exc)},
+                    caller="set_option_err",
                 )
             return
 
@@ -411,10 +493,11 @@ def _handle_toolbar_control(comm, open_msg):
                 "success": False,
                 "error": f"Unknown toolbar message type: {msg_type}",
             },
+            caller="unknown_msg_type",
         )
 
     def on_close(msg):
-        logger.debug("Toolbar control comm closed")
+        logger.debug(f"on_close: comm {id(comm)} closed by frontend")
         _toolbar_comms.discard(comm)
 
     comm.on_msg(on_msg)
@@ -609,7 +692,9 @@ class MCPMagics(Magics):
         if subcommand in ["add", "remove"] or (subcommand not in ["list"] and parts):
             if changes_made:
                 if _server and _server.running:
-                    print("⚠️  Server restart required for option changes to take effect")
+                    print(
+                        "⚠️  Server restart required for option changes to take effect"
+                    )
                     print("   Use: %mcp_restart")
                 else:
                     print("✅ Changes will take effect when server starts")
@@ -785,49 +870,28 @@ def get_server_status() -> dict:
 
 
 def broadcast_server_status(status: str, details: Optional[dict] = None):
-    """Broadcast server status to any listening frontends."""
-    global _status_comm
+    """Broadcast server status to all connected toolbar frontends.
 
-    try:
-        from IPython.core.getipython import get_ipython
-        from ipykernel.comm import Comm
+    Sends through existing toolbar control comms instead of creating new Comms.
+    """
+    logger.debug(f"broadcast_server_status: status={status}")
 
-        ipython = get_ipython()
-        if not ipython or not hasattr(ipython, "kernel"):
-            return
+    timestamp = time.time()
 
-        # Create or reuse a comm for broadcasting
-        if _status_comm is None or getattr(_status_comm, "_closed", True):
-            _status_comm = Comm(target_name="mcp:server_status")
+    payload_details: Dict[str, Any] = _get_current_config()
+    if details:
+        payload_details.update(details)
 
-        # Get timestamp safely - try running loop first, fallback to time.time()
-        try:
-            loop = asyncio.get_running_loop()
-            timestamp = loop.time()
-        except RuntimeError:
-            # No running loop - use system time (Python 3.13+ compatibility)
-            timestamp = time.time()
+    payload = {
+        "type": "status_broadcast",
+        "status": status,
+        "timestamp": timestamp,
+        "details": payload_details,
+    }
 
-        payload_details: Dict[str, Any] = _get_current_config()
-        if details:
-            payload_details.update(details)
+    # Send through all tracked toolbar comms
+    comms_to_send = list(_toolbar_comms)
+    logger.debug(f"broadcast_server_status: sending to {len(comms_to_send)} comms")
 
-        # Send the status message with error handling
-        try:
-            _status_comm.send(
-                {
-                    "status": status,
-                    "timestamp": timestamp,
-                    "details": payload_details,
-                }
-            )
-            logger.debug(f"Broadcasted server status: {status}")
-        except Exception as send_error:
-            # Clear comm on send failure so it recreates next time
-            logger.debug(f"Send failed, clearing status comm: {send_error}")
-            _status_comm = None
-
-    except Exception as e:
-        # Clear comm on any error to force recreation
-        _status_comm = None
-        logger.debug(f"Could not broadcast server status: {e}")
+    for comm in comms_to_send:
+        _safe_comm_send(comm, payload, caller=f"broadcast_{status}")

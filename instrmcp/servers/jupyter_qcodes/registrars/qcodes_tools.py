@@ -10,7 +10,11 @@ from typing import List
 
 from mcp.types import TextContent
 
-logger = logging.getLogger(__name__)
+from instrmcp.logging_config import get_logger
+from ..tool_logger import log_tool_call
+import time
+
+logger = get_logger("tools.qcodes")
 
 
 class QCodesToolRegistrar:
@@ -45,14 +49,30 @@ class QCodesToolRegistrar:
                 name: Instrument name, or "*" to list all instruments
                 with_values: Include cached parameter values (only for specific instruments, not with "*")
             """
+            start = time.perf_counter()
             try:
                 info = await self.tools.instrument_info(name, with_values)
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_instrument_info",
+                    {"name": name, "with_values": with_values},
+                    duration,
+                    "success",
+                )
                 return [
                     TextContent(
                         type="text", text=json.dumps(info, indent=2, default=str)
                     )
                 ]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_instrument_info",
+                    {"name": name, "with_values": with_values},
+                    duration,
+                    "error",
+                    str(e),
+                )
                 logger.error(f"Error in qcodes_instrument_info: {e}")
                 return [
                     TextContent(
@@ -72,15 +92,31 @@ class QCodesToolRegistrar:
                          Single: {"instrument": "name", "parameter": "param", "fresh": false}
                          Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
             """
+            start = time.perf_counter()
             try:
                 queries_data = json.loads(queries)
                 results = await self.tools.get_parameter_values(queries_data)
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_get_parameter_values",
+                    {"queries": queries},
+                    duration,
+                    "success",
+                )
                 return [
                     TextContent(
                         type="text", text=json.dumps(results, indent=2, default=str)
                     )
                 ]
             except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_get_parameter_values",
+                    {"queries": queries},
+                    duration,
+                    "error",
+                    str(e),
+                )
                 logger.error(f"Error in qcodes_get_parameter_values: {e}")
                 return [
                     TextContent(

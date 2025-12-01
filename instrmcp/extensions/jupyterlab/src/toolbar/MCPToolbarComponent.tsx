@@ -29,11 +29,13 @@ const MCPToolbarComponent: React.FC<Props> = ({
       <ServerControlButton running={state.serverRunning} onStart={onStart} onStop={onStop} />
       <ModeSelector
         mode={state.mode}
+        disabled={state.serverRunning}
         onChange={mode => onSetMode(mode)}
       />
       <OptionsPanel
         options={state.availableOptions}
         enabledOptions={state.enabledOptions}
+        disabled={state.serverRunning}
         onToggle={onToggleOption}
       />
       <button
