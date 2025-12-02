@@ -48,6 +48,12 @@ class QCodesToolRegistrar:
             Args:
                 name: Instrument name, or "*" to list all instruments
                 with_values: Include cached parameter values (only for specific instruments, not with "*")
+
+            Note:
+                To get live parameter values, use qcodes_get_parameter_values with:
+                - "{instrument}.{parameter}" for direct parameters
+                - "{instrument}.{channel}.{parameter}" for multi-channel instruments
+                Example: "lockin.X" or "dac.ch01.voltage"
             """
             start = time.perf_counter()
             try:

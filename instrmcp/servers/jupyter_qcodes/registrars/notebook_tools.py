@@ -150,6 +150,7 @@ class NotebookToolRegistrar:
             fresh_ms: int = 1000,
             line_start: Optional[int] = None,
             line_end: Optional[int] = None,
+            max_lines: int = 200,
         ) -> List[TextContent]:
             """Get the currently editing cell content from JupyterLab frontend.
 
@@ -157,20 +158,31 @@ class NotebookToolRegistrar:
 
             Args:
                 fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
-                         will request fresh data from frontend (default: 1000, accept any age)
-                line_start: Optional starting line number (1-indexed). Defaults to 1.
-                line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
-                         Use this to limit context window consumption for large cells.
+                         will request fresh data from frontend (default: 1000)
+                line_start: Optional starting line number (1-indexed).
+                line_end: Optional ending line number (1-indexed, inclusive).
+                max_lines: Maximum number of lines to return (default: 200).
+
+            Line selection logic:
+                - If both line_start and line_end are provided: return those lines exactly
+                - Else if total_lines <= max_lines: return all lines
+                - Else if line_start is provided: return max_lines starting from line_start
+                - Else if line_end is provided: return max_lines ending at line_end
+                - Else: return first max_lines lines
             """
             start = time.perf_counter()
             args = {
                 "fresh_ms": fresh_ms,
                 "line_start": line_start,
                 "line_end": line_end,
+                "max_lines": max_lines,
             }
             try:
                 result = await self.tools.get_editing_cell(
-                    fresh_ms=fresh_ms, line_start=line_start, line_end=line_end
+                    fresh_ms=fresh_ms,
+                    line_start=line_start,
+                    line_end=line_end,
+                    max_lines=max_lines,
                 )
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call("notebook_get_editing_cell", args, duration, "success")

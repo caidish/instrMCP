@@ -173,26 +173,11 @@ class ResourceRegistrar:
                 "total_resources": len(resources_list),
                 "resources": resources_list,
                 "guidance": {
-                    "resources_vs_tools": {
-                        "resources": "Provide READ-ONLY reference data, templates, and documentation. Use for context and examples.",
-                        "tools": "Perform ACTIVE operations like reading live values, executing code, modifying state.",
-                    },
-                    "when_to_use_resources": [
-                        "Before using tools - check available_instruments before calling qcodes_instrument_info",
-                        "For code templates - get MeasureIt examples instead of asking for code snippets",
-                        "For configuration - check database_config before querying database",
-                        "For overview - get station_state for complete picture without live data",
-                    ],
+                    "workflow": "Check resources first for context, then use tools for operations",
                     "common_patterns": [
                         "Pattern 1: Check available_instruments → Use qcodes_instrument_info(name) for specific instrument",
                         "Pattern 2: Check measureit_code_examples → Adapt template code for specific measurement",
                         "Pattern 3: Check recent_measurements → Use database_get_dataset_info(id) for details",
-                    ],
-                    "important_notes": [
-                        "Resources are static/cached - they show configuration, not live data",
-                        "Use tools to read current parameter values from instruments",
-                        "MeasureIt templates provide complete working code patterns",
-                        f"Currently enabled options: {', '.join(self.enabled_options) if self.enabled_options else 'none (core only)'}",
                     ],
                 },
             }

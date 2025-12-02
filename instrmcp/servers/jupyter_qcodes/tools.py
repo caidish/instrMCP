@@ -645,13 +645,20 @@ class QCodesReadOnlyTools:
 
         obj = self.namespace[name]
 
+        # Get repr and truncate if needed
+        obj_repr = repr(obj)
+        repr_truncated = len(obj_repr) > 500
+        if repr_truncated:
+            obj_repr = obj_repr[:500] + "... [truncated]"
+
         info = {
             "name": name,
             "type": type(obj).__name__,
             "module": getattr(type(obj), "__module__", "builtins"),
             "size": len(obj) if hasattr(obj, "__len__") else None,
             "attributes": [attr for attr in dir(obj) if not attr.startswith("_")],
-            "repr": repr(obj)[:500] + "..." if len(repr(obj)) > 500 else repr(obj),
+            "repr": obj_repr,
+            "repr_truncated": repr_truncated,
         }
 
         # Add QCoDeS-specific info if it's an instrument
@@ -675,6 +682,7 @@ class QCodesReadOnlyTools:
         fresh_ms: Optional[int] = None,
         line_start: Optional[int] = None,
         line_end: Optional[int] = None,
+        max_lines: int = 200,
     ) -> Dict[str, Any]:
         """Get the currently editing cell content from JupyterLab frontend.
 
@@ -683,8 +691,16 @@ class QCodesReadOnlyTools:
         Args:
             fresh_ms: Optional maximum age in milliseconds. If provided and the
                      cached snapshot is older, will request fresh data from frontend.
-            line_start: Optional starting line number (1-indexed). Defaults to 1.
-            line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
+            line_start: Optional starting line number (1-indexed).
+            line_end: Optional ending line number (1-indexed, inclusive).
+            max_lines: Maximum number of lines to return (default: 200).
+
+        Line selection logic:
+            - If both line_start and line_end are provided: return those lines exactly
+            - Else if total_lines <= max_lines: return all lines
+            - Else if line_start is provided: return max_lines starting from line_start
+            - Else if line_end is provided: return max_lines ending at line_end
+            - Else: return first max_lines lines
 
         Returns:
             Dictionary with editing cell information or error status
@@ -711,9 +727,27 @@ class QCodesReadOnlyTools:
             all_lines = full_text.splitlines()
             total_lines = len(all_lines)
 
-            # Apply line range (default: lines 1-100)
-            start = (line_start or 1) - 1  # Convert to 0-indexed
-            end = line_end or 100  # Keep 1-indexed for slice end
+            # Determine line range based on provided parameters
+            if line_start is not None and line_end is not None:
+                # Both provided: use exact range
+                start = line_start - 1  # Convert to 0-indexed
+                end = line_end  # Keep 1-indexed for slice end
+            elif total_lines <= max_lines:
+                # Small enough: return all lines
+                start = 0
+                end = total_lines
+            elif line_start is not None:
+                # Start provided: return max_lines from line_start
+                start = line_start - 1
+                end = start + max_lines
+            elif line_end is not None:
+                # End provided: return max_lines ending at line_end
+                end = line_end
+                start = max(0, end - max_lines)
+            else:
+                # Nothing provided: return first max_lines
+                start = 0
+                end = max_lines
 
             # Clamp to valid range - don't error if range is outside content
             start = max(0, min(start, total_lines))

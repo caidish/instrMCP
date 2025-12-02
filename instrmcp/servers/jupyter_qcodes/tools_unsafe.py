@@ -136,8 +136,11 @@ class UnsafeToolRegistrar:
             UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
             The code will run in the frontend with output appearing in the notebook.
 
-            After execution, use notebook/get_editing_cell_output to retrieve the execution result,
-            including any output or errors from the cell.
+            Note:
+                - Use notebook_get_editing_cell_output to retrieve the execution result,
+                  including any output or errors from the cell.
+                - If running a measurement sweep, use measureit_get_status and
+                  measureit_wait_for_sweep/measureit_wait_for_all_sweeps to monitor progress.
             """
             # Request consent if consent manager is available
             if self.consent_manager:
