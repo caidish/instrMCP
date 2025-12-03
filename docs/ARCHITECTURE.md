@@ -292,6 +292,8 @@ Logs are stored in `~/.instrmcp/`:
 └── logging.yaml             # Configuration (optional)
 ```
 
+Logger namespace: all loggers use lowercase `instrmcp.*` (legacy mixed-case names still map here).
+
 **Enable debug logging**: Create/edit `~/.instrmcp/logging.yaml`:
 ```yaml
 debug_enabled: true

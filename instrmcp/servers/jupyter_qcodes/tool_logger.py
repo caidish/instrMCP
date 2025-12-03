@@ -42,7 +42,7 @@ class ToolCallLogger:
         self.log_path = log_path or TOOL_CALLS_LOG
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.logger = logging.getLogger("instrMCP.tools.calls")
+        self.logger = logging.getLogger("instrmcp.tools.calls")
         self.logger.setLevel(logging.INFO)
         self._file_handler: Optional[logging.FileHandler] = None
         self._setup_handler()

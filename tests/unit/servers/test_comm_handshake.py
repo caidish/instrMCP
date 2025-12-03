@@ -458,7 +458,11 @@ class TestActiveCellBridge:
             comm.simulate_message(pong_msg)
 
     def test_unknown_message_type(
-        self, fake_ipython, cleanup_active_cell_globals, caplog
+        self,
+        fake_ipython,
+        cleanup_active_cell_globals,
+        caplog,
+        enable_instrmcp_log_capture,
     ):
         """Test handling unknown message type logs a warning."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (

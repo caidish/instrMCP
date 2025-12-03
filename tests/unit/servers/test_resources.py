@@ -927,15 +927,15 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Check guidance structure - simplified structure with workflow and patterns
+        # Check guidance structure (simplified)
         guidance = guide["guidance"]
         assert "workflow" in guidance
         assert "common_patterns" in guidance
 
-        # Check workflow is a string explaining the approach
+        # Check workflow is a simple string
         assert isinstance(guidance["workflow"], str)
         assert len(guidance["workflow"]) > 0
 
-        # Check common_patterns is a populated list
+        # Check common_patterns is populated
         assert isinstance(guidance["common_patterns"], list)
         assert len(guidance["common_patterns"]) > 0

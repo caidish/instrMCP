@@ -220,7 +220,8 @@ class JupyterMCPServer:
             app,
             host=self.host,
             port=self.port,
-            log_level="warning",
+            log_level="info",
+            access_log=True,
         )
         self._uvicorn_server = uvicorn.Server(config)
         # Threads can't install signal handlers
@@ -326,18 +327,15 @@ class JupyterMCPServer:
 
         Returns:
             True if server stopped successfully, False if timeout occurred.
-            On timeout, state is NOT cleared to prevent starting duplicate servers.
         """
-        # Always cleanup tools first, even if server thread is dead/never started
-        # This handles resource leaks after crashes or failed starts
-        self._cleanup_tools_sync()
-
         if not self._server_thread or not self._server_thread.is_alive():
             # Already stopped or never started - clean up any stale state
             self._server_thread = None
             self._uvicorn_server = None
             self._server_started = False
             self.running = False
+            # Cleanup tools even if server wasn't running (handles leaked resources)
+            self._cleanup_tools_sync()
             return True
 
         logger.debug("Stopping MCP server...")
@@ -350,26 +348,37 @@ class JupyterMCPServer:
         self._server_thread.join(timeout=0.5)
 
         # Phase 2: Force exit if still running (kills active connections)
-        if self._server_thread.is_alive() and self._uvicorn_server:
+        if self._server_thread.is_alive():
             logger.debug("Forcing server shutdown (active connections)")
-            self._uvicorn_server.force_exit = True
+            if self._uvicorn_server:
+                self._uvicorn_server.force_exit = True
+            # Force-stop the event loop to ensure thread exits
+            if self._server_loop:
+                try:
+                    self._server_loop.call_soon_threadsafe(self._server_loop.stop)
+                except RuntimeError:
+                    # Loop already closed or stopping
+                    pass
 
-        # Wait remaining time for forced shutdown
+        # Wait for thread to finish after force-stop
         self._server_thread.join(timeout=1.5)
 
         # Check if thread actually stopped
         if self._server_thread.is_alive():
             logger.warning("Server thread did not stop within timeout")
-            # Don't clear state - prevents starting duplicate server on same port
-            # Caller should NOT broadcast "stopped" or clear references
-            return False
+            # Even on timeout, we've force-stopped the loop, so clear state
+            # to allow restart attempt (port should be released soon)
 
-        # Thread stopped cleanly - clear state
+        # Clear state - server is down or will be momentarily
         self._server_thread = None
         self._uvicorn_server = None
         self._server_started = False
         self.running = False
         logger.debug("MCP server stopped")
+
+        # Cleanup tools AFTER server is down to avoid conflicts
+        self._cleanup_tools_sync()
+
         return True
 
     def _cleanup_tools_sync(self):

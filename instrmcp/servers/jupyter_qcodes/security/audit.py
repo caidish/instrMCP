@@ -27,7 +27,7 @@ class AuditLogger:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Configure logger
-        self.logger = logging.getLogger("instrMCP.audit")
+        self.logger = logging.getLogger("instrmcp.audit")
         self.logger.setLevel(logging.INFO)
 
         # Avoid duplicate handlers

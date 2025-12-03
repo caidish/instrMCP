@@ -1,5 +1,6 @@
 """Integration tests for DynamicToolRegistrar with FastMCP."""
 
+import logging
 import pytest
 from unittest.mock import Mock, patch
 
@@ -70,7 +71,9 @@ class TestFastMCPRemoveTool:
         # Verify remove_tool was called
         mock_mcp.remove_tool.assert_called_once_with("test_tool")
 
-    def test_remove_tool_handles_exception(self, registrar, mock_mcp, caplog):
+    def test_remove_tool_handles_exception(
+        self, registrar, mock_mcp, caplog, enable_instrmcp_log_capture
+    ):
         """Test that exceptions from remove_tool are handled gracefully."""
         # Register a tool
         spec = create_tool_spec(
@@ -86,11 +89,12 @@ class TestFastMCPRemoveTool:
         # Make remove_tool raise an exception
         mock_mcp.remove_tool.side_effect = Exception("FastMCP error")
 
-        # Revoke should not crash
-        registrar._unregister_tool_from_fastmcp("test_tool")
+        with caplog.at_level(logging.WARNING):
+            # Revoke should not crash
+            registrar._unregister_tool_from_fastmcp("test_tool")
 
-        # Verify warning was logged
-        assert "Failed to remove tool 'test_tool' from FastMCP" in caplog.text
+            # Verify warning was logged
+            assert "Failed to remove tool 'test_tool' from FastMCP" in caplog.text
 
     def test_remove_tool_called_during_update(self, registrar, mock_mcp):
         """Test that remove_tool is called when updating a tool."""

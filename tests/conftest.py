@@ -5,6 +5,7 @@ This module provides common fixtures used across all tests, including
 mock QCodes instruments, mock IPython kernels, and temporary directories.
 """
 
+import logging
 import pytest
 import asyncio
 import tempfile
@@ -207,3 +208,28 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line("markers", "hardware: marks tests that require hardware")
+
+
+@pytest.fixture
+def enable_instrmcp_log_capture():
+    """Enable log propagation on instrmcp logger so caplog can capture logs.
+
+    The instrmcp logger has propagate=False by default (to avoid duplicate logs),
+    but this prevents caplog from capturing logs since caplog listens on root.
+    This fixture temporarily enables propagation AND sets level to DEBUG for
+    tests that need to verify log output.
+
+    Usage:
+        def test_something(enable_instrmcp_log_capture, caplog):
+            with caplog.at_level(logging.WARNING):
+                # do something that logs
+                assert "expected message" in caplog.text
+    """
+    instrmcp_logger = logging.getLogger("instrmcp")
+    old_propagate = instrmcp_logger.propagate
+    old_level = instrmcp_logger.level
+    instrmcp_logger.propagate = True
+    instrmcp_logger.setLevel(logging.DEBUG)  # Allow DEBUG messages through
+    yield
+    instrmcp_logger.propagate = old_propagate
+    instrmcp_logger.setLevel(old_level)

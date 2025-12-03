@@ -1,4 +1,4 @@
-"""Unified logging configuration for instrMCP.
+"""Unified logging configuration for instrmcp.
 
 This module provides centralized logging setup with:
 - Rotating file handlers (prevents unbounded growth)
@@ -60,7 +60,7 @@ def load_config() -> Dict[str, Any]:
                     config[key] = value
         except Exception as e:
             # If config file is invalid, use defaults
-            logging.getLogger("instrMCP").warning(
+            logging.getLogger("instrmcp").warning(
                 f"Failed to load logging config from {CONFIG_FILE}: {e}"
             )
 
@@ -68,12 +68,12 @@ def load_config() -> Dict[str, Any]:
 
 
 def setup_logging(force: bool = False) -> None:
-    """Configure all instrMCP loggers with proper handlers.
+    """Configure all instrmcp loggers with proper handlers.
 
     This sets up:
     - Main log file (mcp.log) with rotation
     - Debug log file (mcp_debug.log) when debug_enabled=True
-    - Proper logger hierarchy under instrMCP.*
+    - Proper logger hierarchy under instrmcp.*
 
     Args:
         force: If True, reinitialize even if already set up.
@@ -89,8 +89,8 @@ def setup_logging(force: bool = False) -> None:
     # Load configuration
     _config = load_config()
 
-    # Get or create root instrMCP logger
-    root_logger = logging.getLogger("instrMCP")
+    # Get or create root instrmcp logger
+    root_logger = logging.getLogger("instrmcp")
 
     # Clear existing handlers to avoid duplicates on reinit
     root_logger.handlers.clear()
@@ -130,31 +130,34 @@ def setup_logging(force: bool = False) -> None:
     _logging_initialized = True
 
     # Log that we've initialized
-    root_logger.debug("instrMCP logging initialized")
+    root_logger.debug("instrmcp logging initialized")
     root_logger.debug(f"Config: {_config}")
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get a logger under the instrMCP hierarchy.
+    """Get a logger under the instrmcp hierarchy.
 
     Args:
-        name: Logger name (will be prefixed with 'instrMCP.')
+        name: Logger name (will be prefixed with 'instrmcp.')
 
     Returns:
         Logger instance.
 
     Example:
         >>> logger = get_logger("server")
-        >>> # Returns logger named "instrMCP.server"
+        >>> # Returns logger named "instrmcp.server"
     """
     # Ensure logging is set up
     setup_logging()
 
     # Create hierarchical name
-    if name.startswith("instrMCP."):
+    if name.startswith("instrmcp."):
         full_name = name
+    elif name.startswith("instrMCP."):
+        # Support legacy mixed-case callers but normalize
+        full_name = "instrmcp." + name.split("instrMCP.", 1)[1]
     else:
-        full_name = f"instrMCP.{name}"
+        full_name = f"instrmcp.{name}"
 
     return logging.getLogger(full_name)
 
