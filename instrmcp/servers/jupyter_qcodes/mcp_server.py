@@ -7,6 +7,8 @@ Jupyter notebook functionality through MCP tools.
 
 import asyncio
 import secrets
+import sys
+import threading
 from typing import Dict, Any, Optional
 
 from fastmcp import FastMCP
@@ -63,7 +65,14 @@ class JupyterMCPServer:
         self.dangerous_mode = dangerous_mode
         self.enabled_options = enabled_options or set()
         self.running = False
-        self.server_task: Optional[asyncio.Task] = None
+
+        # Thread-isolated server state
+        self._server_thread: Optional[threading.Thread] = None
+        self._server_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._uvicorn_server = None
+        self._ready_event = threading.Event()
+        self._thread_error: Optional[Exception] = None
+        self._server_started = False  # Own flag, not dependent on uvicorn internals
 
         # Generate a random token for basic security
         self.token = secrets.token_urlsafe(32)
@@ -103,7 +112,13 @@ class JupyterMCPServer:
         qcodes_registrar.register_all()
 
         # Notebook tools (read-only)
-        notebook_registrar = NotebookToolRegistrar(self.mcp, self.tools, self.ipython)
+        notebook_registrar = NotebookToolRegistrar(
+            self.mcp,
+            self.tools,
+            self.ipython,
+            safe_mode=self.safe_mode,
+            dangerous_mode=self.dangerous_mode,
+        )
         notebook_registrar.register_all()
 
         # Unsafe mode tools (if enabled)
@@ -160,80 +175,273 @@ class JupyterMCPServer:
         #     """Get parameter cache statistics."""
         #     pass
 
-    async def start(self):
-        """Start the MCP server."""
-        if self.running:
+    def _run_server_in_thread(self):
+        """Thread target: runs uvicorn with its own event loop.
+
+        This runs in a dedicated background thread, isolated from IPython's
+        main event loop. This allows %gui qt and other event loop changes
+        to not affect the HTTP server.
+        """
+        # Windows: create a selector-based loop for THIS thread only
+        # Don't use set_event_loop_policy() - that's process-global and would
+        # affect IPython/qasync in the main thread
+        if sys.platform == "win32":
+            policy = asyncio.WindowsSelectorEventLoopPolicy()
+            self._server_loop = policy.new_event_loop()
+        else:
+            self._server_loop = asyncio.new_event_loop()
+
+        asyncio.set_event_loop(self._server_loop)
+        try:
+            self._server_loop.run_until_complete(self._async_serve())
+        except Exception as e:
+            self._thread_error = e
+            self._ready_event.set()  # Unblock start_sync even on failure
+            logger.error(f"Server thread error: {e}")
+        finally:
+            self._server_started = False
+            try:
+                self._server_loop.close()
+            except Exception:
+                pass
+            self._server_loop = None
+
+    async def _async_serve(self):
+        """Async server runner within dedicated thread.
+
+        Uses uvicorn.Server.serve() which properly initializes all internal
+        state (lifespan, servers, etc.) before starting. We wrap it with
+        a startup detection task to signal readiness.
+        """
+        import uvicorn
+
+        app = self.mcp.http_app()
+        config = uvicorn.Config(
+            app,
+            host=self.host,
+            port=self.port,
+            log_level="warning",
+        )
+        self._uvicorn_server = uvicorn.Server(config)
+        # Threads can't install signal handlers
+        self._uvicorn_server.install_signal_handlers = lambda: None
+
+        # Create a task to detect when server is ready
+        async def signal_ready():
+            # Poll until uvicorn reports started (checks internal state)
+            while not self._uvicorn_server.started:
+                if self._uvicorn_server.should_exit:
+                    return  # Aborted before ready
+                await asyncio.sleep(0.05)
+            self._server_started = True
+            self._ready_event.set()
+            logger.debug(f"Uvicorn startup complete on {self.host}:{self.port}")
+
+        # Start readiness monitor as background task
+        ready_task = asyncio.create_task(signal_ready())
+
+        try:
+            # serve() handles all lifecycle: startup, main_loop, shutdown
+            await self._uvicorn_server.serve()
+        finally:
+            self._server_started = False
+            ready_task.cancel()
+            try:
+                await ready_task
+            except asyncio.CancelledError:
+                pass
+
+    def start_sync(self):
+        """Synchronous start - works from any context (including after %gui qt).
+
+        This is the primary method for starting the server. It creates a
+        dedicated background thread for uvicorn, making it immune to event
+        loop changes in the main thread.
+        """
+        if self._server_thread and self._server_thread.is_alive():
+            logger.debug("Server thread already running")
             return
 
+        logger.debug(f"Starting Jupyter MCP server on {self.host}:{self.port}")
+
+        # Clear state from previous runs
+        self._ready_event.clear()
+        self._thread_error = None
+        self._uvicorn_server = None
+        self._server_started = False
+
+        self._server_thread = threading.Thread(
+            target=self._run_server_in_thread, daemon=True, name="MCP-Server"
+        )
+        self._server_thread.start()
+
+        # Wait for server to be ready (or fail)
+        ready = self._ready_event.wait(timeout=5.0)
+
+        # Check for startup failure
+        if self._thread_error:
+            # Thread failed with error - it should have exited, but ensure cleanup
+            self._abort_orphaned_thread()
+            raise RuntimeError(f"Server startup failed: {self._thread_error}")
+
+        if not ready:
+            # Timeout - thread may still be starting up, could bind port later
+            # Signal it to stop and wait briefly to prevent port race
+            self._abort_orphaned_thread()
+            raise RuntimeError("Server startup timed out")
+
+        self.running = True
+        logger.debug("MCP server started successfully")
+
+    def _abort_orphaned_thread(self):
+        """Signal orphaned thread to stop and wait briefly.
+
+        Called when start_sync times out or encounters an error.
+        Prevents the thread from binding the port after we've given up.
+        """
+        if self._uvicorn_server:
+            self._uvicorn_server.should_exit = True
+
+        if self._server_thread and self._server_thread.is_alive():
+            # Give it a brief moment to notice the stop flag
+            self._server_thread.join(timeout=1.0)
+
+            if self._server_thread.is_alive():
+                logger.warning(
+                    "Orphaned server thread still running after abort - "
+                    "may cause port conflicts on next start"
+                )
+
+        # Clear references regardless - we've done our best
+        self._server_thread = None
+        self._uvicorn_server = None
+        self._server_started = False
+        self.running = False
+
+    def stop_sync(self) -> bool:
+        """Synchronous stop - works from any context (including after %gui qt).
+
+        This is the primary method for stopping the server. It signals uvicorn
+        to exit, waits for the thread to finish, and cleans up resources.
+
+        Returns:
+            True if server stopped successfully, False if timeout occurred.
+            On timeout, state is NOT cleared to prevent starting duplicate servers.
+        """
+        # Always cleanup tools first, even if server thread is dead/never started
+        # This handles resource leaks after crashes or failed starts
+        self._cleanup_tools_sync()
+
+        if not self._server_thread or not self._server_thread.is_alive():
+            # Already stopped or never started - clean up any stale state
+            self._server_thread = None
+            self._uvicorn_server = None
+            self._server_started = False
+            self.running = False
+            return True
+
+        logger.debug("Stopping MCP server...")
+
+        # Phase 1: Request graceful shutdown
+        if self._uvicorn_server:
+            self._uvicorn_server.should_exit = True
+
+        # Wait briefly for graceful shutdown (allows clean client disconnection)
+        self._server_thread.join(timeout=0.5)
+
+        # Phase 2: Force exit if still running (kills active connections)
+        if self._server_thread.is_alive() and self._uvicorn_server:
+            logger.debug("Forcing server shutdown (active connections)")
+            self._uvicorn_server.force_exit = True
+
+        # Wait remaining time for forced shutdown
+        self._server_thread.join(timeout=1.5)
+
+        # Check if thread actually stopped
+        if self._server_thread.is_alive():
+            logger.warning("Server thread did not stop within timeout")
+            # Don't clear state - prevents starting duplicate server on same port
+            # Caller should NOT broadcast "stopped" or clear references
+            return False
+
+        # Thread stopped cleanly - clear state
+        self._server_thread = None
+        self._uvicorn_server = None
+        self._server_started = False
+        self.running = False
+        logger.debug("MCP server stopped")
+        return True
+
+    def _cleanup_tools_sync(self):
+        """Run async tools cleanup synchronously.
+
+        Strategy:
+        1. Try new_event_loop() - works when cleanup doesn't touch IPython APIs
+        2. If RuntimeError (IPython API access), try run_coroutine_threadsafe
+           on server loop if still alive
+        3. If both fail, log warning and continue (don't block server stop)
+        """
+        # First try: fresh event loop (simplest, works for most cleanup)
         try:
-            logger.debug(f"Starting Jupyter MCP server on {self.host}:{self.port}")
-
-            # Use uvicorn directly for better lifecycle control
-            import uvicorn
-
-            app = self.mcp.http_app()
-            config = uvicorn.Config(
-                app,
-                host=self.host,
-                port=self.port,
-                log_level="warning",
-            )
-            self._uvicorn_server = uvicorn.Server(config)
-            # Disable signal handlers to avoid interfering with ipykernel's ZMQ
-            self._uvicorn_server.install_signal_handlers = lambda: None
-
-            # Start the server in a separate task
-            self.server_task = asyncio.create_task(self._run_server())
-            self.running = True
-
-            print(f"🚀 QCoDeS MCP Server running on http://{self.host}:{self.port}")
-            print(f"🔑 Access token: {self.token}")
-
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(self.tools.cleanup())
+                logger.debug("Tools cleanup completed (new loop)")
+                return
+            finally:
+                loop.close()
+        except RuntimeError as e:
+            # May fail if cleanup touches IPython APIs expecting kernel loop
+            logger.debug(f"new_event_loop cleanup failed: {e}, trying server loop")
         except Exception as e:
-            logger.error(f"Failed to start MCP server: {e}")
-            raise
+            logger.warning(f"Tools cleanup failed (new loop): {e}")
+            return
 
-    async def _run_server(self):
-        """Run the uvicorn server."""
-        try:
-            await self._uvicorn_server.serve()
-        except asyncio.CancelledError:
-            logger.debug("MCP server task cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"MCP server error: {e}")
-            raise
+        # Fallback: use server loop if still alive
+        if self._server_loop and self._server_thread and self._server_thread.is_alive():
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self.tools.cleanup(), self._server_loop
+                )
+                # Wait with timeout to avoid blocking indefinitely
+                future.result(timeout=2.0)
+                logger.debug("Tools cleanup completed (server loop)")
+            except Exception as e:
+                logger.warning(f"Tools cleanup failed (server loop): {e}")
+
+    def is_running(self) -> bool:
+        """Thread-safe running check.
+
+        Uses our own _server_started flag rather than uvicorn internals.
+        This avoids dependency on uvicorn's internal API which may change.
+        """
+        thread_alive = (
+            self._server_thread is not None and self._server_thread.is_alive()
+        )
+        return thread_alive and self._server_started
+
+    async def start(self):
+        """Start the MCP server (async wrapper for start_sync).
+
+        This async method is kept for backward compatibility but internally
+        uses the synchronous thread-based approach.
+        """
+        self.start_sync()
+        print(f"🚀 QCoDeS MCP Server running on http://{self.host}:{self.port}")
+        print(f"🔑 Access token: {self.token}")
 
     async def stop(self):
-        """Stop the MCP server."""
-        if not self.running:
-            return
+        """Stop the MCP server (async wrapper for stop_sync).
 
-        try:
-            self.running = False
-
-            # Signal uvicorn to shutdown gracefully
-            if hasattr(self, "_uvicorn_server") and self._uvicorn_server:
-                self._uvicorn_server.should_exit = True
-                # Give it a moment to shut down gracefully
-                await asyncio.sleep(0.1)
-
-            # Clean up tools
-            await self.tools.cleanup()
-
-            # Cancel server task
-            if self.server_task and not self.server_task.done():
-                self.server_task.cancel()
-                try:
-                    await self.server_task
-                except asyncio.CancelledError:
-                    pass
-
-            logger.debug("Jupyter MCP server stopped")
+        This async method is kept for backward compatibility but internally
+        uses the synchronous thread-based approach. Cleanup is handled by
+        stop_sync() so we don't duplicate it here.
+        """
+        success = self.stop_sync()
+        if success:
             print("🛑 QCoDeS MCP Server stopped")
-
-        except Exception as e:
-            logger.error(f"Error stopping MCP server: {e}")
+        else:
+            print("⚠️  Server stop timed out - server may still be running")
 
     def set_safe_mode(self, safe_mode: bool) -> Dict[str, Any]:
         """Change the server's safe mode setting.

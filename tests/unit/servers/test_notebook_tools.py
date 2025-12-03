@@ -186,7 +186,7 @@ class TestNotebookToolRegistrar:
         response_data = json.loads(result[0].text)
         assert response_data == mock_cell
         mock_tools.get_editing_cell.assert_called_once_with(
-            fresh_ms=1000, line_start=None, line_end=None
+            fresh_ms=1000, line_start=None, line_end=None, max_lines=200
         )
 
     @pytest.mark.asyncio
@@ -202,7 +202,7 @@ class TestNotebookToolRegistrar:
         await get_cell_func(fresh_ms=1000)
 
         mock_tools.get_editing_cell.assert_called_once_with(
-            fresh_ms=1000, line_start=None, line_end=None
+            fresh_ms=1000, line_start=None, line_end=None, max_lines=200
         )
 
     @pytest.mark.asyncio

@@ -19,7 +19,9 @@ logger = get_logger("tools.notebook")
 class NotebookToolRegistrar:
     """Registers Jupyter notebook tools with the MCP server."""
 
-    def __init__(self, mcp_server, tools, ipython):
+    def __init__(
+        self, mcp_server, tools, ipython, safe_mode=True, dangerous_mode=False
+    ):
         """
         Initialize the notebook tool registrar.
 
@@ -27,10 +29,14 @@ class NotebookToolRegistrar:
             mcp_server: FastMCP server instance
             tools: QCodesReadOnlyTools instance
             ipython: IPython instance for direct notebook access
+            safe_mode: Whether server is in safe mode (read-only)
+            dangerous_mode: Whether server is in dangerous mode (auto-approve consents)
         """
         self.mcp = mcp_server
         self.tools = tools
         self.ipython = ipython
+        self.safe_mode = safe_mode
+        self.dangerous_mode = dangerous_mode
 
     def _get_frontend_output(
         self, cell_number: int, timeout_s: float = 0.5
@@ -610,13 +616,17 @@ class NotebookToolRegistrar:
                 if hasattr(self.mcp, "_tools"):
                     registered_tools = list(self.mcp._tools.keys())
 
+                # Determine mode: dangerous > unsafe > safe
+                if self.dangerous_mode:
+                    mode = "dangerous"
+                elif self.safe_mode:
+                    mode = "safe"
+                else:
+                    mode = "unsafe"
+
                 status = {
                     "status": "running",
-                    "mode": (
-                        "safe"
-                        if hasattr(self, "safe_mode") and self.safe_mode
-                        else "unsafe"
-                    ),
+                    "mode": mode,
                     "tools_count": len(registered_tools),
                     "tools": registered_tools[:20],  # Limit to first 20 for readability
                 }

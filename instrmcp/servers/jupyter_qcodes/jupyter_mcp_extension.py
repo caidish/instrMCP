@@ -21,7 +21,6 @@ logger = get_logger("comm")
 
 # Global server instance and mode tracking
 _server: Optional[JupyterMCPServer] = None
-_server_task: Optional[asyncio.Task] = None
 _desired_mode: bool = True  # True = safe, False = unsafe
 _dangerous_mode: bool = False  # True = bypass all consent dialogs
 _server_host: str = "127.0.0.1"  # Default host
@@ -105,7 +104,7 @@ def _get_current_config() -> dict:
     host = _server.host if _server else _server_host
     port = _server.port if _server else _server_port
 
-    server_running = bool(_server and _server.running)
+    server_running = bool(_server and _server.is_running())
 
     return {
         "mode": mode_info["mode"],
@@ -122,7 +121,7 @@ def _get_current_config() -> dict:
 
 def _do_set_mode(mode: str, announce: bool = False) -> str:
     """Update desired mode flags and broadcast config change."""
-    global _desired_mode, _dangerous_mode, _server
+    global _desired_mode, _dangerous_mode
 
     normalized = (mode or "").lower()
     if normalized not in {"safe", "unsafe", "dangerous"}:
@@ -143,7 +142,7 @@ def _do_set_mode(mode: str, announce: bool = False) -> str:
         mode_info = _get_mode_display()
         if mode_info["mode"] == "safe":
             print("🛡️  Mode set to safe")
-            if _server and _server.running:
+            if _server and _server.is_running():
                 print("⚠️  Server restart required for tool changes to take effect")
                 print("   Use: %mcp_restart")
             else:
@@ -151,7 +150,7 @@ def _do_set_mode(mode: str, announce: bool = False) -> str:
         elif mode_info["mode"] == "unsafe":
             print("⚠️  Mode set to unsafe")
             print("⚠️  UNSAFE MODE: execute_editing_cell tool will be available")
-            if _server and _server.running:
+            if _server and _server.is_running():
                 print("⚠️  Server restart required for tool changes to take effect")
                 print("   Use: %mcp_restart")
             else:
@@ -160,7 +159,7 @@ def _do_set_mode(mode: str, announce: bool = False) -> str:
             print("⚠️⚠️⚠️  DANGEROUS MODE ENABLED  ⚠️⚠️⚠️")
             print("All consent dialogs will be automatically approved!")
             print("This mode bypasses all safety confirmations.")
-            if _server and _server.running:
+            if _server and _server.is_running():
                 print("⚠️  Server restart required for changes to take effect")
                 print("   Use: %mcp_restart")
             else:
@@ -172,8 +171,6 @@ def _do_set_mode(mode: str, announce: bool = False) -> str:
 
 def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
     """Enable/disable an option, mirror to running server, and broadcast."""
-    global _enabled_options, _server
-
     if option not in VALID_OPTIONS:
         raise ValueError(
             f"Invalid option '{option}'. Valid options: {', '.join(sorted(VALID_OPTIONS))}"
@@ -187,7 +184,7 @@ def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
         _enabled_options.remove(option)
         changed = True
 
-    if changed and _server and _server.running:
+    if changed and _server and _server.is_running():
         try:
             _server.set_enabled_options(_enabled_options)
         except Exception as exc:  # pragma: no cover - defensive
@@ -203,11 +200,15 @@ def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
     return changed
 
 
-async def _do_start_server(announce: bool = True) -> None:
-    """Start the MCP server and broadcast status."""
-    global _server, _server_task
+def _do_start_server(announce: bool = True) -> None:
+    """Start the MCP server and broadcast status.
 
-    if _server and _server.running:
+    This is a synchronous function that uses the thread-isolated server.
+    It works from any context, including after %gui qt.
+    """
+    global _server
+
+    if _server and _server.is_running():
         if announce:
             print("✅ MCP server already running")
         return
@@ -230,14 +231,14 @@ async def _do_start_server(announce: bool = True) -> None:
             dangerous_mode=_dangerous_mode,
             enabled_options=_enabled_options,
         )
-        await _server.start()
-        _server_task = _server.server_task
+        _server.start_sync()
 
         mode_info = _get_mode_display()
         if announce:
             print(
                 f"✅ MCP server started in {mode_info['icon']} {mode_info['mode']} mode"
             )
+            print(f"   Running on http://{_server.host}:{_server.port}")
             if _dangerous_mode:
                 print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
             elif not _desired_mode:
@@ -249,56 +250,70 @@ async def _do_start_server(announce: bool = True) -> None:
         if announce:
             print(f"❌ Failed to start MCP server: {e}")
         logger.error(f"Failed to start MCP server: {e}")
+        raise
 
 
-async def _do_stop_server(announce: bool = True) -> None:
-    """Stop the MCP server and broadcast status."""
-    global _server, _server_task
+def _do_stop_server(announce: bool = True) -> bool:
+    """Stop the MCP server and broadcast status.
+
+    This is a synchronous function that uses the thread-isolated server.
+    It works from any context, including after %gui qt.
+
+    Returns:
+        True if server stopped successfully, False if timeout or error occurred.
+    """
+    global _server
 
     if not _server:
         if announce:
             print("❌ MCP server not initialized")
-        return
+        return True  # Nothing to stop
 
-    if not _server.running:
+    if not _server.is_running():
         if announce:
             print("✅ MCP server already stopped")
-        return
+        _server = None  # Clean up stale reference
+        return True
 
     if announce:
         print("🛑 Stopping MCP server...")
 
     try:
-        await _server.stop()
+        success = _server.stop_sync()
 
-        if _server_task and not _server_task.done():
-            _server_task.cancel()
-            try:
-                await _server_task
-            except asyncio.CancelledError:
-                pass
-
-        _server_task = None
-        _server = None
-        if announce:
-            print("✅ MCP server stopped")
-
-        broadcast_server_status("server_stopped", _get_current_config())
+        if success:
+            _server = None
+            if announce:
+                print("✅ MCP server stopped")
+            broadcast_server_status("server_stopped", _get_current_config())
+            return True
+        else:
+            # Timeout occurred - server thread still alive
+            # Do NOT clear _server or broadcast "stopped" - server is still running!
+            if announce:
+                print("⚠️  Server stop timed out - server may still be running")
+                print("   The server thread did not exit within 5 seconds.")
+                print("   Try again or restart the kernel if the issue persists.")
+            logger.error("Server stop timed out - thread still alive")
+            return False
 
     except Exception as e:
         if announce:
             print(f"❌ Failed to stop MCP server: {e}")
         logger.error(f"Failed to stop MCP server: {e}")
+        raise
 
 
-async def _do_restart_server(announce: bool = True) -> None:
-    """Restart the MCP server and broadcast status updates."""
-    global _server, _server_task
+def _do_restart_server(announce: bool = True) -> bool:
+    """Restart the MCP server and broadcast status updates.
 
-    if not _server:
-        if announce:
-            print("❌ No server to restart. Use %mcp_start instead.")
-        return
+    This is a synchronous function that uses the thread-isolated server.
+    It works from any context, including after %gui qt.
+
+    Returns:
+        True if restart succeeded, False if stop timed out (cannot restart).
+    """
+    global _server
 
     if announce:
         print("🔄 Restarting MCP server...")
@@ -310,21 +325,24 @@ async def _do_restart_server(announce: bool = True) -> None:
         if not ipython:
             if announce:
                 print("❌ Could not get IPython instance")
-            return
+            return False
 
-        # Notify frontends before shutting down
-        broadcast_server_status("server_stopped", _get_current_config())
-
-        await _stop_server_task()
-
-        if _server_task and not _server_task.done():
-            _server_task.cancel()
-            try:
-                await _server_task
-            except asyncio.CancelledError:
-                pass
+        # Stop existing server if running
+        if _server and _server.is_running():
+            success = _server.stop_sync()
+            if not success:
+                # Timeout occurred - cannot restart while old server is still running
+                if announce:
+                    print("⚠️  Cannot restart: previous server did not stop in time")
+                    print("   The server thread is still alive on the same port.")
+                    print("   Try again or restart the kernel if the issue persists.")
+                logger.error("Cannot restart: stop timed out")
+                return False
+            broadcast_server_status("server_stopped", _get_current_config())
 
         _server = None
+
+        # Create and start new server
         _server = JupyterMCPServer(
             ipython,
             safe_mode=_desired_mode,
@@ -332,25 +350,27 @@ async def _do_restart_server(announce: bool = True) -> None:
             enabled_options=_enabled_options,
         )
 
-        await _server.start()
-        _server_task = _server.server_task
+        _server.start_sync()
 
         mode_info = _get_mode_display()
         if announce:
             print(
                 f"✅ MCP server restarted in {mode_info['icon']} {mode_info['mode']} mode"
             )
+            print(f"   Running on http://{_server.host}:{_server.port}")
             if _dangerous_mode:
                 print("⚠️⚠️⚠️  All consent dialogs auto-approved!")
             elif not _desired_mode:
                 print("⚠️  UNSAFE MODE: execute_editing_cell tool is now available")
 
         broadcast_server_status("server_ready", _get_current_config())
+        return True
 
     except Exception as e:
         if announce:
             print(f"❌ Failed to restart MCP server: {e}")
         logger.error(f"Failed to restart MCP server: {e}")
+        raise
 
 
 def _handle_toolbar_control(comm, open_msg):
@@ -363,32 +383,32 @@ def _handle_toolbar_control(comm, open_msg):
     _toolbar_comms.add(comm)
     logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
 
-    def _send_result(fut, comm_ref):
-        """Callback to send result after async operation completes."""
+    def _send_sync_result(comm_ref, success: bool, error: str = None):
+        """Send result after synchronous operation completes."""
         comm_id = id(comm_ref) if comm_ref else "None"
-        logger.debug(f"_send_result callback fired, comm={comm_id}")
+        logger.debug(f"_send_sync_result: comm={comm_id}, success={success}")
 
         # Check if comm is still tracked (not closed/removed)
         if comm_ref not in _toolbar_comms:
-            logger.debug("_send_result: SKIP - comm not in _toolbar_comms")
+            logger.debug("_send_sync_result: SKIP - comm not in _toolbar_comms")
             return
 
         # Check if kernel is still present (not torn down)
         if getattr(comm_ref, "kernel", None) is None:
-            logger.debug("_send_result: SKIP - kernel is None")
+            logger.debug("_send_sync_result: SKIP - kernel is None")
             _toolbar_comms.discard(comm_ref)
             return
 
         payload = {
             "type": "result",
-            "success": not fut.exception(),
+            "success": success,
             "details": _get_current_config(),
         }
-        if fut.exception():
-            payload["error"] = str(fut.exception())
+        if error:
+            payload["error"] = error
 
         # _safe_comm_send will handle any remaining errors and discard comm if needed
-        _safe_comm_send(comm_ref, payload, caller="_send_result")
+        _safe_comm_send(comm_ref, payload, caller="_send_sync_result")
 
     def on_msg(msg):
         data = msg.get("content", {}).get("data", {}) if msg else {}
@@ -402,26 +422,52 @@ def _handle_toolbar_control(comm, open_msg):
             return
 
         if msg_type == "start_server":
-            logger.debug(f"on_msg: scheduling start_server")
-            future = asyncio.ensure_future(_do_start_server(announce=False))
-            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            logger.debug("on_msg: calling start_server (sync)")
+            try:
+                _do_start_server(announce=False)
+                _send_sync_result(comm, success=True)
+            except Exception as e:
+                logger.error(f"start_server failed: {e}")
+                _send_sync_result(comm, success=False, error=str(e))
             return
 
         if msg_type == "stop_server":
-            logger.debug(f"on_msg: scheduling stop_server")
-            future = asyncio.ensure_future(_do_stop_server(announce=False))
-            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            logger.debug("on_msg: calling stop_server (sync)")
+            try:
+                success = _do_stop_server(announce=False)
+                if success:
+                    _send_sync_result(comm, success=True)
+                else:
+                    _send_sync_result(
+                        comm,
+                        success=False,
+                        error="Server stop timed out - thread still alive",
+                    )
+            except Exception as e:
+                logger.error(f"stop_server failed: {e}")
+                _send_sync_result(comm, success=False, error=str(e))
             return
 
         if msg_type == "restart_server":
-            logger.debug(f"on_msg: scheduling restart_server")
-            future = asyncio.ensure_future(_do_restart_server(announce=False))
-            future.add_done_callback(lambda fut: _send_result(fut, comm))
+            logger.debug("on_msg: calling restart_server (sync)")
+            try:
+                success = _do_restart_server(announce=False)
+                if success:
+                    _send_sync_result(comm, success=True)
+                else:
+                    _send_sync_result(
+                        comm,
+                        success=False,
+                        error="Cannot restart: previous server did not stop in time",
+                    )
+            except Exception as e:
+                logger.error(f"restart_server failed: {e}")
+                _send_sync_result(comm, success=False, error=str(e))
             return
 
         if msg_type == "set_mode":
             # Reject mode changes when server is running
-            if _server and _server.running:
+            if _server and _server.is_running():
                 _safe_comm_send(
                     comm,
                     {
@@ -453,7 +499,7 @@ def _handle_toolbar_control(comm, open_msg):
 
         if msg_type == "set_option":
             # Reject option changes when server is running
-            if _server and _server.running:
+            if _server and _server.is_running():
                 _safe_comm_send(
                     comm,
                     {
@@ -526,8 +572,6 @@ class MCPMagics(Magics):
     @line_magic
     def mcp_status(self, line):
         """Show MCP server status."""
-        global _server, _server_task, _desired_mode, _dangerous_mode
-
         if _dangerous_mode:
             mode_icon = "☠️"
             mode_name = "dangerous"
@@ -544,11 +588,9 @@ class MCPMagics(Magics):
             print("   ⚠️  All consent dialogs auto-approved!")
 
         if _server:
-            print(f"   Server Running: {'✅' if _server.running else '❌'}")
+            is_running = _server.is_running()
+            print(f"   Server Running: {'✅' if is_running else '❌'}")
             print(f"   Host: {_server.host}:{_server.port}")
-            print(
-                f"   Task: {'✅ Active' if _server_task and not _server_task.done() else '❌ Inactive'}"
-            )
 
             if not _desired_mode:
                 print("   Unsafe tools: execute_editing_cell (when running)")
@@ -558,34 +600,40 @@ class MCPMagics(Magics):
                 print("   Unsafe tools: execute_editing_cell (will be available)")
 
         # Show available commands based on state
-        if not _server or not _server.running:
+        if not _server or not _server.is_running():
             print("   Available: %mcp_start")
         else:
             print("   Available: %mcp_close, %mcp_restart")
 
     @line_magic
     def mcp_start(self, line):
-        """Start the MCP server."""
+        """Start the MCP server.
+
+        This uses synchronous server start, which works from any context
+        including after %gui qt.
+        """
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_do_start_server(announce=True))
-        except RuntimeError:
-            print("❌ No event loop available for server start")
+            _do_start_server(announce=True)
+        except Exception as e:
+            # Error already printed by _do_start_server
+            pass
 
     @line_magic
     def mcp_close(self, line):
-        """Stop the MCP server."""
+        """Stop the MCP server.
+
+        This uses synchronous server stop, which works from any context
+        including after %gui qt.
+        """
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_do_stop_server(announce=True))
-        except RuntimeError:
-            print("❌ No event loop available for server stop")
+            _do_stop_server(announce=True)
+        except Exception as e:
+            # Error already printed by _do_stop_server
+            pass
 
     @line_magic
     def mcp_option(self, line):
         """Enable or disable optional MCP features using add/remove subcommands."""
-        global _server, _enabled_options
-
         parts = line.strip().split()
         valid_options = set(VALID_OPTIONS.keys())
 
@@ -691,7 +739,7 @@ class MCPMagics(Magics):
         # Update server if running (for all code paths that make changes)
         if subcommand in ["add", "remove"] or (subcommand not in ["list"] and parts):
             if changes_made:
-                if _server and _server.running:
+                if _server and _server.is_running():
                     print(
                         "⚠️  Server restart required for option changes to take effect"
                     )
@@ -703,18 +751,20 @@ class MCPMagics(Magics):
 
     @line_magic
     def mcp_restart(self, line):
-        """Restart the MCP server to apply mode changes."""
+        """Restart the MCP server to apply mode changes.
+
+        This uses synchronous server restart, which works from any context
+        including after %gui qt.
+        """
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_do_restart_server(announce=True))
-        except RuntimeError:
-            print("❌ No event loop available for restart")
+            _do_restart_server(announce=True)
+        except Exception as e:
+            # Error already printed by _do_restart_server
+            pass
 
 
 def load_ipython_extension(ipython):
     """Load the MCP extension when IPython starts."""
-    global _server, _server_task
-
     try:
         logger.debug("Loading Jupyter QCoDeS MCP extension...")
 
@@ -799,56 +849,30 @@ def load_ipython_extension(ipython):
 
 def unload_ipython_extension(ipython):
     """Unload the MCP extension when IPython shuts down."""
-    global _server, _server_task
+    global _server
 
     try:
         logger.debug("Unloading Jupyter QCoDeS MCP extension...")
 
-        if _server_task and not _server_task.done():
-            _server_task.cancel()
-
-        if _server:
-            # Try to get the event loop to stop the server
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(_stop_server_task())
-            except RuntimeError:
-                # No event loop, can't clean up properly
-                logger.warning("No event loop available for cleanup")
-
-        _server = None
-        _server_task = None
+        if _server and _server.is_running():
+            # Use sync stop - works from any context
+            success = _server.stop_sync()
+            if success:
+                _server = None
+                print("🛑 QCoDeS MCP Server stopped")
+            else:
+                # Timeout - server thread still running
+                # Don't clear _server to avoid duplicate starts
+                print("⚠️  Server stop timed out during unload")
+                logger.warning("Server stop timed out during extension unload")
+        else:
+            _server = None
+            print("🛑 QCoDeS MCP Server stopped")
 
         logger.debug("Jupyter QCoDeS MCP extension unloaded")
-        print("🛑 QCoDeS MCP Server stopped")
 
     except Exception as e:
         logger.error(f"Error unloading MCP extension: {e}")
-
-
-async def _start_server_task():
-    """Start the MCP server in the background."""
-    global _server
-
-    if not _server:
-        return
-
-    try:
-        await _server.start()
-    except Exception as e:
-        logger.error(f"MCP server error: {e}")
-        print(f"❌ MCP server error: {e}")
-
-
-async def _stop_server_task():
-    """Stop the MCP server."""
-    global _server
-
-    if _server:
-        try:
-            await _server.stop()
-        except Exception as e:
-            logger.error(f"Error stopping MCP server: {e}")
 
 
 def get_server() -> Optional[JupyterMCPServer]:
@@ -857,15 +881,13 @@ def get_server() -> Optional[JupyterMCPServer]:
 
 
 def get_server_status() -> dict:
-    """Get server status information."""
-    global _server, _server_task
+    """Get server status information.
 
+    Returns thread-safe status using the server's is_running() method.
+    """
     return {
         "server_exists": _server is not None,
-        "server_running": _server and _server.running,
-        "task_exists": _server_task is not None,
-        "task_done": _server_task and _server_task.done(),
-        "task_cancelled": _server_task and _server_task.cancelled(),
+        "server_running": _server is not None and _server.is_running(),
     }
 
 
