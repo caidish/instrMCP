@@ -316,22 +316,52 @@ def create_stdio_proxy_server(
     mcp = FastMCP(server_name)
     proxy = HttpMCPProxy(base_url)
 
-    # QCodes instrument tools
-    @mcp.tool(name="qcodes_instrument_info")
-    async def instrument_info(
-        name: str, with_values: bool = False
+    # QCodes meta-tool (consolidates 2 tools into 1)
+    @mcp.tool(name="qcodes")
+    async def qcodes(
+        action: str,
+        name: Optional[str] = None,
+        with_values: bool = False,
+        queries: Optional[str] = None,
     ) -> list[TextContent]:
+        """Unified QCodes tool for instrument and parameter operations.
+
+        STRICT PARAMETER REQUIREMENTS BY ACTION:
+
+        ═══ INSTRUMENT OPERATIONS ═══
+
+        action="instrument_info"
+            → REQUIRES: name
+            → Optional: with_values (include cached parameter values)
+            → Use name="*" to list all available instruments
+            Examples:
+              qcodes(action="instrument_info", name="*")
+              qcodes(action="instrument_info", name="lockin")
+              qcodes(action="instrument_info", name="dac", with_values=True)
+
+        action="get_values"
+            → REQUIRES: queries (JSON string)
+            → Single query: {"instrument": "name", "parameter": "param", "fresh": false}
+            → Batch query: [{"instrument": "name1", "parameter": "param1"}, ...]
+            → Hierarchical params: "ch01.voltage", "X", "dac.ch01.voltage"
+            Examples:
+              qcodes(action="get_values", queries='{"instrument": "lockin", "parameter": "X"}')
+              qcodes(action="get_values", queries='{"instrument": "dac", "parameter": "ch01.voltage", "fresh": true}')
+              qcodes(action="get_values", queries='[{"instrument": "lockin", "parameter": "X"}, {"instrument": "lockin", "parameter": "Y"}]')
+
+        Returns:
+            JSON with instrument info, parameter values, or error details.
+        """
         result = await proxy.call(
-            "qcodes_instrument_info", name=name, with_values=with_values
+            "qcodes",
+            action=action,
+            name=name,
+            with_values=with_values,
+            queries=queries,
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="qcodes_get_parameter_values")
-    async def get_parameter_values(queries: str) -> list[TextContent]:
-        result = await proxy.call("qcodes_get_parameter_values", queries=queries)
-        return [TextContent(type="text", text=str(result))]
-
-    # Unified notebook meta-tool (consolidates 13 tools into 1)
+    # Notebook meta-tool (consolidates 13 tools into 1)
     @mcp.tool(name="notebook")
     async def notebook(
         action: str,
@@ -499,126 +529,172 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    # Database integration tools (optional - only if database option enabled)
-    @mcp.tool(name="database_list_experiments")
-    async def list_experiments(
+    # Database meta-tool (consolidates 4 tools into 1)
+    @mcp.tool(name="database")
+    async def database(
+        action: str,
+        id: Optional[int] = None,
         database_path: Optional[str] = None,
     ) -> list[TextContent]:
+        """Unified database tool for QCodes database operations.
+
+        STRICT PARAMETER REQUIREMENTS BY ACTION:
+
+        ═══ DATABASE OPERATIONS ═══
+
+        action="list_experiments"
+            → No required params.
+            → Optional: database_path (uses MeasureIt/QCodes default if not specified)
+            Examples:
+              database(action="list_experiments")
+              database(action="list_experiments", database_path="/path/to/experiments.db")
+
+        action="get_dataset"
+            → REQUIRES: id (dataset run ID, e.g., 1, 2, 5)
+            → Optional: database_path
+            Examples:
+              database(action="get_dataset", id=1)
+              database(action="get_dataset", id=5, database_path="/path/to/experiments.db")
+
+        action="stats"
+            → No required params. Returns database statistics.
+            → Optional: database_path
+            Examples:
+              database(action="stats")
+              database(action="stats", database_path="/path/to/experiments.db")
+
+        action="list_available"
+            → No required params.
+            → Searches MeasureIt databases directory and QCodes config paths.
+            Example:
+              database(action="list_available")
+
+        Database Path Resolution (when database_path=None):
+            1. MeasureIt default: $MeasureItHome/Databases/Example_database.db
+            2. QCodes config: qc.config.core.db_location
+            3. Error with suggestions if neither exists
+
+        Returns:
+            JSON with database/experiment/dataset info or error details.
+        """
         result = await proxy.call(
-            "database_list_experiments", database_path=database_path
+            "database",
+            action=action,
+            id=id,
+            database_path=database_path,
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="database_get_dataset_info")
-    async def get_dataset_info(
-        id: int, database_path: Optional[str] = None
-    ) -> list[TextContent]:
-        result = await proxy.call(
-            "database_get_dataset_info", id=id, database_path=database_path
-        )
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="database_get_database_stats")
-    async def get_database_stats(
-        database_path: Optional[str] = None,
-    ) -> list[TextContent]:
-        result = await proxy.call(
-            "database_get_database_stats", database_path=database_path
-        )
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="database_list_available")
-    async def list_available_databases() -> list[TextContent]:
-        result = await proxy.call("database_list_available")
-        return [TextContent(type="text", text=str(result))]
-
-    # Dynamic tool meta-tools (only available in unsafe mode)
-    @mcp.tool(name="dynamic_register_tool")
-    async def register_dynamic_tool(
-        name: str,
-        version: str,
-        description: str,
-        author: str,
-        capabilities: str,
-        parameters: str,
-        returns: str,
-        source_code: str,
+    # Dynamic meta-tool (consolidates 6 tools into 1, only in unsafe mode)
+    @mcp.tool(name="dynamic")
+    async def dynamic(
+        action: str,
+        # Register/update params
+        name: Optional[str] = None,
+        source_code: Optional[str] = None,
+        version: Optional[str] = None,
+        description: Optional[str] = None,
+        author: Optional[str] = None,
+        capabilities: Optional[str] = None,
+        parameters: Optional[str] = None,
+        returns: Optional[str] = None,
         examples: Optional[str] = None,
         tags: Optional[str] = None,
+        # List filter params
+        tag: Optional[str] = None,
+        capability: Optional[str] = None,
+        # Revoke param
+        reason: Optional[str] = None,
     ) -> list[TextContent]:
-        """Register a new dynamic tool."""
+        """Unified dynamic tool for runtime tool management.
+
+        Create, update, inspect, and manage dynamically registered tools at runtime.
+        Tools persist across server restarts in ~/.instrmcp/registry/.
+
+        STRICT PARAMETER REQUIREMENTS BY ACTION:
+
+        ═══ READ OPERATIONS ═══
+
+        action="list"
+            → No required params.
+            → Optional: tag, capability, author (filter results)
+            Examples:
+              dynamic(action="list")
+              dynamic(action="list", author="me")
+              dynamic(action="list", capability="cap:numpy")
+              dynamic(action="list", tag="analysis")
+
+        action="inspect"
+            → REQUIRES: name
+            → Returns full tool specification including source code
+            Example:
+              dynamic(action="inspect", name="my_tool")
+
+        action="stats"
+            → No required params.
+            → Returns registry statistics (total tools, by author, by capability)
+            Example:
+              dynamic(action="stats")
+
+        ═══ WRITE OPERATIONS (unsafe mode only) ═══
+
+        action="register" [consent required]
+            → REQUIRES: name, source_code
+            → Optional: version (default "1.0.0"), description, author (default "unknown"),
+              capabilities (JSON array), parameters (JSON array), returns (JSON object),
+              examples (JSON array), tags (JSON array)
+            → User sees consent dialog with full source code before approval
+            Examples:
+              dynamic(action="register", name="add_nums", source_code="def add_nums(a, b): return a + b")
+              dynamic(action="register", name="analyze", source_code="def analyze(data): return sum(data)",
+                      capabilities='["cap:python.builtin"]',
+                      parameters='[{"name": "data", "type": "array", "required": true}]')
+
+        action="update" [consent required]
+            → REQUIRES: name, version (new version, must differ from current)
+            → Optional: source_code, description, capabilities, parameters, returns, examples, tags
+            → Only provided fields are updated; others keep existing values
+            → User sees consent dialog before approval
+            Example:
+              dynamic(action="update", name="add_nums", version="1.1.0",
+                      source_code="def add_nums(a, b, c=0): return a + b + c")
+
+        action="revoke"
+            → REQUIRES: name
+            → Optional: reason (for audit trail)
+            → Permanently removes tool from registry (cannot be undone)
+            → NO consent required (destructive but explicit)
+            Examples:
+              dynamic(action="revoke", name="my_tool")
+              dynamic(action="revoke", name="old_tool", reason="Replaced by new_tool")
+
+        JSON Parameter Formats:
+            capabilities: '["cap:numpy", "cap:custom.analysis"]'
+            parameters: '[{"name": "x", "type": "number", "description": "Input", "required": true}]'
+            returns: '{"type": "number", "description": "Result"}'
+            examples: '["example usage 1", "example usage 2"]'
+            tags: '["analysis", "math"]'
+
+        Returns:
+            JSON with operation result or error details including valid_actions hint.
+        """
         result = await proxy.call(
-            "dynamic_register_tool",
+            "dynamic",
+            action=action,
             name=name,
+            source_code=source_code,
             version=version,
             description=description,
             author=author,
             capabilities=capabilities,
             parameters=parameters,
             returns=returns,
-            source_code=source_code,
             examples=examples,
             tags=tags,
+            tag=tag,
+            capability=capability,
+            reason=reason,
         )
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="dynamic_update_tool")
-    async def update_dynamic_tool(
-        name: str,
-        version: str,
-        description: Optional[str] = None,
-        capabilities: Optional[str] = None,
-        parameters: Optional[str] = None,
-        returns: Optional[str] = None,
-        source_code: Optional[str] = None,
-        examples: Optional[str] = None,
-        tags: Optional[str] = None,
-    ) -> list[TextContent]:
-        """Update an existing dynamic tool."""
-        result = await proxy.call(
-            "dynamic_update_tool",
-            name=name,
-            version=version,
-            description=description,
-            capabilities=capabilities,
-            parameters=parameters,
-            returns=returns,
-            source_code=source_code,
-            examples=examples,
-            tags=tags,
-        )
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="dynamic_revoke_tool")
-    async def revoke_dynamic_tool(
-        name: str, reason: Optional[str] = None
-    ) -> list[TextContent]:
-        """Revoke (delete) a dynamic tool."""
-        result = await proxy.call("dynamic_revoke_tool", name=name, reason=reason)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="dynamic_list_tools")
-    async def list_dynamic_tools(
-        tag: Optional[str] = None,
-        capability: Optional[str] = None,
-        author: Optional[str] = None,
-    ) -> list[TextContent]:
-        """List all registered dynamic tools with optional filtering."""
-        result = await proxy.call(
-            "dynamic_list_tools", tag=tag, capability=capability, author=author
-        )
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="dynamic_inspect_tool")
-    async def inspect_dynamic_tool(name: str) -> list[TextContent]:
-        """Inspect a dynamic tool's complete specification."""
-        result = await proxy.call("dynamic_inspect_tool", name=name)
-        return [TextContent(type="text", text=str(result))]
-
-    @mcp.tool(name="dynamic_registry_stats")
-    async def get_dynamic_registry_stats() -> list[TextContent]:
-        """Get statistics about the dynamic tool registry."""
-        result = await proxy.call("dynamic_registry_stats")
         return [TextContent(type="text", text=str(result))]
 
     # Register resources
