@@ -31,6 +31,7 @@ classifiers = [
     "Topic :: System :: Hardware",
     "License :: OSI Approved :: MIT License",
     "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
+    "Framework :: Jupyter :: JupyterLab :: 4",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -88,11 +89,11 @@ full = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/instrmcp/instrMCP"
+Homepage = "https://github.com/caidish/instrMCP"
 Documentation = "https://instrmcp.readthedocs.io"
-Repository = "https://github.com/instrmcp/instrMCP.git"
-Issues = "https://github.com/instrmcp/instrMCP/issues"
-Changelog = "https://github.com/instrmcp/instrMCP/blob/main/CHANGELOG.md"
+Repository = "https://github.com/caidish/instrMCP.git"
+Issues = "https://github.com/caidish/instrMCP/issues"
+Changelog = "https://github.com/caidish/instrMCP/blob/main/CHANGELOG.md"
 
 [project.scripts]
 instrmcp = "instrmcp.cli:main"

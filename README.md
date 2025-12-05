@@ -1,6 +1,7 @@
 # InstrMCP: Instrumentation Control MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/instrmcp.svg)](https://pypi.org/project/instrmcp/)
+[![instrmcp](https://labextensions.dev/api/badge/instrmcp?metric=downloads&leftColor=%23555&rightColor=%23F37620&style=flat)](https://labextensions.dev/extensions/instrmcp)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
