@@ -561,95 +561,29 @@ class TestCreateStdioProxyServer:
         assert "qcodes_get_parameter_values" in tools
 
     @pytest.mark.asyncio
-    async def test_notebook_list_variables_tool(self):
-        """Test notebook_list_variables tool is created."""
+    async def test_notebook_meta_tool(self):
+        """Test unified notebook meta-tool is created (consolidates 13 individual tools)."""
         mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
         tools = await mcp.get_tools()
-        assert "notebook_list_variables" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_get_variable_info_tool(self):
-        """Test notebook_get_variable_info tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_get_variable_info" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_get_editing_cell_tool(self):
-        """Test notebook_get_editing_cell tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_get_editing_cell" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_update_editing_cell_tool(self):
-        """Test notebook_update_editing_cell tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_update_editing_cell" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_get_editing_cell_output_tool(self):
-        """Test notebook_get_editing_cell_output tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_get_editing_cell_output" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_get_notebook_cells_tool(self):
-        """Test notebook_get_notebook_cells tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_get_notebook_cells" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_server_status_tool(self):
-        """Test notebook_server_status tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_server_status" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_execute_cell_tool(self):
-        """Test notebook_execute_cell unsafe tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_execute_cell" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_add_cell_tool(self):
-        """Test notebook_add_cell unsafe tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_add_cell" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_delete_cell_tool(self):
-        """Test notebook_delete_cell unsafe tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_delete_cell" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_delete_cells_tool(self):
-        """Test notebook_delete_cells unsafe tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_delete_cells" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_apply_patch_tool(self):
-        """Test notebook_apply_patch unsafe tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_apply_patch" in tools
-
-    @pytest.mark.asyncio
-    async def test_notebook_move_cursor_tool(self):
-        """Test notebook_move_cursor tool is created."""
-        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
-        tools = await mcp.get_tools()
-        assert "notebook_move_cursor" in tools
+        assert "notebook" in tools
+        # Verify old individual tools are NOT present (consolidated into meta-tool)
+        old_tools = [
+            "notebook_list_variables",
+            "notebook_get_variable_info",
+            "notebook_get_editing_cell",
+            "notebook_update_editing_cell",
+            "notebook_get_editing_cell_output",
+            "notebook_get_notebook_cells",
+            "notebook_server_status",
+            "notebook_execute_cell",
+            "notebook_add_cell",
+            "notebook_delete_cell",
+            "notebook_delete_cells",
+            "notebook_apply_patch",
+            "notebook_move_cursor",
+        ]
+        for old_tool in old_tools:
+            assert old_tool not in tools, f"Old tool {old_tool} should be consolidated"
 
     @pytest.mark.asyncio
     async def test_measureit_get_status_tool(self):
@@ -685,26 +619,32 @@ class TestCreateStdioProxyServer:
         mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
         tools = await mcp.get_tools()
 
+        # Expected tools after consolidating 13 notebook tools into 1 meta-tool
         expected_tools = [
+            # QCodes tools
             "qcodes_instrument_info",
             "qcodes_get_parameter_values",
-            "notebook_list_variables",
-            "notebook_get_variable_info",
-            "notebook_get_editing_cell",
-            "notebook_update_editing_cell",
-            "notebook_get_editing_cell_output",
-            "notebook_get_notebook_cells",
-            "notebook_server_status",
-            "notebook_execute_cell",
-            "notebook_add_cell",
-            "notebook_delete_cell",
-            "notebook_delete_cells",
-            "notebook_apply_patch",
-            "notebook_move_cursor",
+            # Unified notebook meta-tool (replaces 13 individual tools)
+            "notebook",
+            # Resource tools
+            "mcp_list_resources",
+            "mcp_get_resource",
+            # MeasureIt tools
             "measureit_get_status",
+            "measureit_wait_for_all_sweeps",
+            "measureit_wait_for_sweep",
+            # Database tools
             "database_list_experiments",
             "database_get_dataset_info",
             "database_get_database_stats",
+            "database_list_available",
+            # Dynamic tool meta-tools
+            "dynamic_register_tool",
+            "dynamic_update_tool",
+            "dynamic_revoke_tool",
+            "dynamic_list_tools",
+            "dynamic_inspect_tool",
+            "dynamic_registry_stats",
         ]
 
         for expected_tool in expected_tools:
@@ -720,5 +660,6 @@ class TestCreateStdioProxyServer:
 
             # Verify all tools are created
             tools = await mcp.get_tools()
-            # 21 original tools + 6 dynamic tool meta-tools + 2 resource tools + 1 database_list_available = 30
-            assert len(tools) == 30
+            # After consolidating 13 notebook tools into 1 meta-tool:
+            # 2 QCodes + 1 notebook + 2 resource + 3 measureit + 4 database + 6 dynamic = 18
+            assert len(tools) == 18

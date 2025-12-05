@@ -66,30 +66,56 @@ The system uses a proxy pattern:
 
 ## MCP Tools Available
 
-All tools now use hierarchical naming with `/` separator for better organization.
+### QCodes Instrument Tools
 
-### QCodes Instrument Tools (`qcodes/*`)
+- `qcodes_instrument_info(name, with_values)` - Get instrument details and parameter values
+- `qcodes_get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
 
-- `qcodes/instrument_info(name, with_values)` - Get instrument details and parameter values
-- `qcodes/get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
+### Unified Notebook Meta-Tool
 
-### Jupyter Notebook Tools (`notebook/*`)
+The notebook functionality is consolidated into a single `notebook(action=...)` meta-tool with 13 actions.
+This reduces context window overhead by ~2,500 tokens compared to 13 separate tools.
 
-- `notebook/list_variables(type_filter)` - List notebook variables by type
-- `notebook/get_variable_info(name)` - Detailed variable information
-- `notebook/get_editing_cell(fresh_ms)` - Current JupyterLab cell content
-- `notebook/get_editing_cell_output()` - Get output of most recently executed cell
-- `notebook/get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
-- `notebook/server_status()` - Check server mode and status
+**Usage:** `notebook(action="<action_name>", ...params)`
 
-### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
+**Safe Actions (available in all modes):**
 
-- `notebook/update_editing_cell(content)` - Update current cell content (requires consent)
-- `notebook/execute_cell()` - Execute current cell (requires consent)
-- `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
-- `notebook/delete_cell()` - Delete the currently active cell (requires consent)
-- `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
-- `notebook/apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (requires consent)
+| Action | Parameters | Description |
+|--------|------------|-------------|
+| `list_variables` | `type_filter` (optional) | List notebook variables by type |
+| `get_variable_info` | `name` (required) | Detailed variable information |
+| `get_editing_cell` | `fresh_ms`, `line_start`, `line_end`, `max_lines` | Current JupyterLab cell content |
+| `get_editing_cell_output` | (none) | Get output of most recently executed cell |
+| `get_notebook_cells` | `num_cells`, `include_output` | Get recent notebook cells |
+| `move_cursor` | `target` (required: "above", "below", "bottom", or number) | Navigate to different cell |
+| `server_status` | (none) | Check server mode and status |
+
+**Unsafe Actions (require unsafe mode + consent):**
+
+| Action | Parameters | Consent | Description |
+|--------|------------|---------|-------------|
+| `update_editing_cell` | `content` (required) | YES | Update current cell content |
+| `execute_cell` | (none) | YES | Execute current cell |
+| `add_cell` | `cell_type`, `position`, `content` | NO | Add new cell relative to active cell |
+| `delete_cell` | (none) | YES | Delete the currently active cell |
+| `delete_cells` | `cell_numbers` (required, JSON) | YES | Delete multiple cells by number |
+| `apply_patch` | `old_text`, `new_text` (required) | YES | Apply text replacement patch |
+
+**Examples:**
+```python
+# Safe mode examples
+notebook(action="list_variables", type_filter="array")
+notebook(action="get_editing_cell", fresh_ms=500, line_start=1, line_end=10)
+notebook(action="move_cursor", target="below")
+notebook(action="server_status")
+
+# Unsafe mode examples (require consent)
+notebook(action="execute_cell")
+notebook(action="update_editing_cell", content="print('hello')")
+notebook(action="add_cell", cell_type="code", position="below", content="x = 1")
+notebook(action="delete_cells", cell_numbers="[1, 2, 5]")
+notebook(action="apply_patch", old_text="old", new_text="new")
+```
 
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
@@ -147,19 +173,22 @@ The server supports optional features that can be enabled/disabled via magic com
 | Unsafe | `%mcp_unsafe` | All tools | Yes |
 | Dangerous | `%mcp_dangerous` | All tools | No (auto-approved) |
 
-### Unsafe Mode Tools
+### Unsafe Mode Actions
 
-Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consent in unsafe mode, auto-approved in dangerous mode):
+The following notebook actions are only available when `%mcp_unsafe` or `%mcp_dangerous` is active:
 
-- `notebook/execute_cell()` - Execute code in the active cell
-- `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook
-  - `cell_type`: "code", "markdown", or "raw" (default: "code")
-  - `position`: "above" or "below" active cell (default: "below")
-  - `content`: Initial cell content (default: empty)
-- `notebook/delete_cell()` - Delete the active cell (clears content if last cell)
-- `notebook/apply_patch(old_text, new_text)` - Replace text in active cell
-  - More efficient than `notebook_update_editing_cell` for small changes
-  - Replaces first occurrence of `old_text` with `new_text`
+| Action | Consent | Description |
+|--------|---------|-------------|
+| `notebook(action="execute_cell")` | YES | Execute code in the active cell |
+| `notebook(action="update_editing_cell", content="...")` | YES | Replace entire cell content |
+| `notebook(action="add_cell", cell_type="code", position="below")` | NO | Add new cell above/below active cell |
+| `notebook(action="delete_cell")` | YES | Delete the active cell |
+| `notebook(action="delete_cells", cell_numbers="[1,2]")` | YES | Delete multiple cells by index |
+| `notebook(action="apply_patch", old_text="...", new_text="...")` | YES | Find/replace text in active cell |
+
+**Consent behavior:**
+- **Unsafe mode**: Actions marked "YES" show approval dialog
+- **Dangerous mode**: All consents auto-approved (bypass mode)
 
 ### Optional Features
 

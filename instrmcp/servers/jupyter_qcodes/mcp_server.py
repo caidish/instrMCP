@@ -14,10 +14,9 @@ from typing import Dict, Any, Optional
 from fastmcp import FastMCP
 
 from .tools import QCodesReadOnlyTools
-from .tools_unsafe import UnsafeToolRegistrar
 from .registrars import (
     QCodesToolRegistrar,
-    NotebookToolRegistrar,
+    NotebookMetaToolRegistrar,
     MeasureItToolRegistrar,
     DatabaseToolRegistrar,
     ResourceRegistrar,
@@ -111,31 +110,28 @@ class JupyterMCPServer:
         qcodes_registrar = QCodesToolRegistrar(self.mcp, self.tools)
         qcodes_registrar.register_all()
 
-        # Notebook tools (read-only)
-        notebook_registrar = NotebookToolRegistrar(
-            self.mcp,
-            self.tools,
-            self.ipython,
-            safe_mode=self.safe_mode,
-            dangerous_mode=self.dangerous_mode,
-        )
-        notebook_registrar.register_all()
-
-        # Unsafe mode tools (if enabled)
-        # Create consent manager for unsafe tools
+        # Create consent manager for unsafe operations (if not safe mode)
+        consent_manager = None
         if not self.safe_mode:
             from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
 
             # Use infinite timeout for consent requests
             # User will wait as long as needed to review and approve
             # In dangerous mode, bypass all consent dialogs
-            consent_manager_for_unsafe = ConsentManager(
+            consent_manager = ConsentManager(
                 self.ipython, timeout_seconds=None, bypass_mode=self.dangerous_mode
             )
-            unsafe_registrar = UnsafeToolRegistrar(
-                self.mcp, self.tools, consent_manager_for_unsafe
-            )
-            unsafe_registrar.register_all()
+
+        # Notebook meta-tool (consolidated from 13 tools into 1)
+        notebook_registrar = NotebookMetaToolRegistrar(
+            self.mcp,
+            self.tools,
+            self.ipython,
+            safe_mode=self.safe_mode,
+            dangerous_mode=self.dangerous_mode,
+            consent_manager=consent_manager,
+        )
+        notebook_registrar.register_all()
 
         # Optional: MeasureIt tools
         if MEASUREIT_AVAILABLE and "measureit" in self.enabled_options:
