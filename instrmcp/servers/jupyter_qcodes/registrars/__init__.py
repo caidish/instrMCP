@@ -6,14 +6,14 @@ registration by category, making the codebase more maintainable.
 """
 
 from .qcodes_tools import QCodesToolRegistrar
-from .notebook_meta_tool import NotebookMetaToolRegistrar
+from .notebook_tools import NotebookToolRegistrar
 from .measureit_tools import MeasureItToolRegistrar
 from .database_tools import DatabaseToolRegistrar
 from .resources import ResourceRegistrar
 
 __all__ = [
     "QCodesToolRegistrar",
-    "NotebookMetaToolRegistrar",
+    "NotebookToolRegistrar",
     "MeasureItToolRegistrar",
     "DatabaseToolRegistrar",
     "ResourceRegistrar",

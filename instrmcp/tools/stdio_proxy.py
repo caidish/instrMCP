@@ -331,117 +331,61 @@ def create_stdio_proxy_server(
         result = await proxy.call("qcodes_get_parameter_values", queries=queries)
         return [TextContent(type="text", text=str(result))]
 
-    # Unified notebook meta-tool (consolidates 13 tools into 1)
-    @mcp.tool(name="notebook")
-    async def notebook(
-        action: str,
-        name: Optional[str] = None,
-        type_filter: Optional[str] = None,
+    # Jupyter notebook variable tools
+    @mcp.tool(name="notebook_list_variables")
+    async def list_variables(type_filter: Optional[str] = None) -> list[TextContent]:
+        result = await proxy.call("notebook_list_variables", type_filter=type_filter)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_get_variable_info")
+    async def get_variable_info(name: str) -> list[TextContent]:
+        result = await proxy.call("notebook_get_variable_info", name=name)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_get_editing_cell")
+    async def get_editing_cell(
         fresh_ms: int = 1000,
         line_start: Optional[int] = None,
         line_end: Optional[int] = None,
-        max_lines: int = 200,
-        num_cells: int = 2,
-        include_output: bool = True,
-        target: Optional[str] = None,
-        content: Optional[str] = None,
-        cell_type: str = "code",
-        position: str = "below",
-        cell_numbers: Optional[str] = None,
-        old_text: Optional[str] = None,
-        new_text: Optional[str] = None,
     ) -> list[TextContent]:
-        """Unified notebook tool for all Jupyter notebook operations.
-
-        STRICT PARAMETER REQUIREMENTS BY ACTION:
-
-        ═══ READ OPERATIONS (always available) ═══
-
-        action="list_variables"
-            → No required params.
-            → Optional: type_filter (e.g., "array", "DataFrame", "int", "float", "str", "dict", "list")
-            Examples:
-              notebook(action="list_variables")
-              notebook(action="list_variables", type_filter="array")
-              notebook(action="list_variables", type_filter="DataFrame")
-
-        action="get_variable_info"
-            → REQUIRES: name
-            Example: notebook(action="get_variable_info", name="my_var")
-
-        action="get_editing_cell"
-            → No required params.
-            → Optional: fresh_ms (cache timeout), line_start, line_end, max_lines
-            Examples:
-              notebook(action="get_editing_cell")
-              notebook(action="get_editing_cell", line_start=1, line_end=50)
-
-        action="get_editing_cell_output"
-            → No required params. Returns output of last executed cell.
-
-        action="get_notebook_cells"
-            → No required params.
-            → Optional: num_cells (default 2), include_output (default True)
-            Example: notebook(action="get_notebook_cells", num_cells=5)
-
-        action="move_cursor"
-            → REQUIRES: target (one of: "above", "below", "bottom", or cell number as string)
-            Examples:
-              notebook(action="move_cursor", target="below")
-              notebook(action="move_cursor", target="3")
-
-        action="server_status"
-            → No required params. Returns server mode (safe/unsafe/dangerous).
-
-        ═══ WRITE OPERATIONS (unsafe mode only) ═══
-        Note: These actions require user consent via dialog (except add_cell).
-
-        action="update_editing_cell" [consent required]
-            → REQUIRES: content
-            Example: notebook(action="update_editing_cell", content="x = 42\\nprint(x)")
-
-        action="execute_cell" [consent required]
-            → No required params. Executes the currently active cell.
-
-        action="add_cell" [NO consent required]
-            → No required params.
-            → Optional: cell_type ("code"/"markdown"), position ("above"/"below"), content
-            Example: notebook(action="add_cell", cell_type="markdown", position="above", content="# Header")
-
-        action="delete_cell" [consent required]
-            → No required params. Deletes the currently active cell.
-
-        action="delete_cells" [consent required]
-            → REQUIRES: cell_numbers (JSON array string)
-            Example: notebook(action="delete_cells", cell_numbers="[1, 2, 5]")
-
-        action="apply_patch" [consent required]
-            → REQUIRES: old_text AND new_text
-            Example: notebook(action="apply_patch", old_text="x = 10", new_text="x = 20")
-
-        Returns:
-            JSON with operation result or error details.
-        """
         result = await proxy.call(
-            "notebook",
-            action=action,
-            name=name,
-            type_filter=type_filter,
+            "notebook_get_editing_cell",
             fresh_ms=fresh_ms,
             line_start=line_start,
             line_end=line_end,
-            max_lines=max_lines,
-            num_cells=num_cells,
-            include_output=include_output,
-            target=target,
-            content=content,
-            cell_type=cell_type,
-            position=position,
-            cell_numbers=cell_numbers,
-            old_text=old_text,
-            new_text=new_text,
         )
         return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_update_editing_cell")
+    async def update_editing_cell(content: str) -> list[TextContent]:
+        result = await proxy.call("notebook_update_editing_cell", content=content)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_get_editing_cell_output")
+    async def get_editing_cell_output() -> list[TextContent]:
+        result = await proxy.call("notebook_get_editing_cell_output")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_get_notebook_cells")
+    async def get_notebook_cells(
+        num_cells: int = 2, include_output: bool = True
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_get_notebook_cells",
+            num_cells=num_cells,
+            include_output=include_output,
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_server_status")
+    async def server_status() -> list[TextContent]:
+        result = await proxy.call("notebook_server_status")
+        info = {
+            "mode": "proxy",
+            "proxy_target": base_url,
+            "jupyter_server_status": result,
+        }
+        return [TextContent(type="text", text=str(info))]
 
     @mcp.tool(name="mcp_list_resources")
     async def list_resources() -> list[TextContent]:
@@ -476,6 +420,43 @@ def create_stdio_proxy_server(
             - mcp_get_resource("resource://database_config")
         """
         result = await proxy.call("mcp_get_resource", uri=uri)
+        return [TextContent(type="text", text=str(result))]
+
+    # Unsafe notebook tools
+    @mcp.tool(name="notebook_execute_cell")
+    async def execute_editing_cell() -> list[TextContent]:
+        result = await proxy.call("notebook_execute_cell")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_add_cell")
+    async def add_new_cell(
+        cell_type: str = "code", position: str = "below", content: str = ""
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_add_cell", cell_type=cell_type, position=position, content=content
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_delete_cell")
+    async def delete_editing_cell() -> list[TextContent]:
+        result = await proxy.call("notebook_delete_cell")
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_delete_cells")
+    async def delete_cells_by_number(cell_numbers: str) -> list[TextContent]:
+        result = await proxy.call("notebook_delete_cells", cell_numbers=cell_numbers)
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_apply_patch")
+    async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_apply_patch", old_text=old_text, new_text=new_text
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(name="notebook_move_cursor")
+    async def move_cursor(target: str) -> list[TextContent]:
+        result = await proxy.call("notebook_move_cursor", target=target)
         return [TextContent(type="text", text=str(result))]
 
     # MeasureIt integration tools (optional - only if measureit option enabled)

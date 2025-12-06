@@ -5,14 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 **Environment Setup:**
-
 ```bash
 # Always use conda environment instrMCPdev for testing
 source ~/miniforge3/etc/profile.d/conda.sh && conda activate instrMCPdev
 ```
 
 **Package Management:**
-
 ```bash
 pip install -e .              # Install for development
 pip install -e .[dev]         # With dev dependencies
@@ -21,7 +19,6 @@ instrmcp version              # Test installation
 ```
 
 **Code Quality (CI Requirements - see `.github/workflows/lint.yml`):**
-
 ```bash
 black --check instrmcp/ tests/                    # Format check (must pass)
 flake8 instrmcp/ tests/ --select=E9,F63,F7,F82    # Critical errors only (must pass)
@@ -30,7 +27,6 @@ mypy instrmcp/ --ignore-missing-imports           # Type check (non-blocking)
 ```
 
 **Testing:**
-
 ```bash
 pytest                                              # All tests
 pytest -v                                           # Verbose
@@ -41,7 +37,6 @@ pytest tests/unit/test_cache.py::TestReadCache::test_cache_initialization  # Spe
 ```
 
 **Server Management:**
-
 ```bash
 instrmcp jupyter --port 3000              # Start Jupyter MCP server
 instrmcp jupyter --port 3000 --unsafe     # With code execution
@@ -52,13 +47,11 @@ instrmcp config                           # Show configuration
 ## Architecture Overview
 
 ### Communication Flow
-
-```text
+```
 Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
 ```
 
 ### Key Directories
-
 - `instrmcp/servers/jupyter_qcodes/` - Main MCP server with QCodes + Jupyter integration
 - `instrmcp/servers/jupyter_qcodes/registrars/` - Tool registrars (qcodes, notebook, database, measureit)
 - `instrmcp/tools/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
@@ -66,26 +59,21 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 - `instrmcp/cli.py` - Command-line interface
 
 ### Key Files for Tool Changes
-
 When adding/removing MCP tools, update ALL of these:
-
 1. `instrmcp/servers/jupyter_qcodes/registrars/` - Add tool implementation
 2. `instrmcp/tools/stdio_proxy.py` - Add/remove tool proxy
 3. `docs/ARCHITECTURE.md` - Update tool documentation
 4. `README.md` - Update feature documentation
 
 ### Safe vs Unsafe vs Dangerous Mode
-
 - **Safe Mode**: Read-only access to instruments and notebooks (default)
 - **Unsafe Mode**: Allows code execution (`--unsafe` flag or `%mcp_unsafe` magic)
 - **Dangerous Mode**: Unsafe mode with all consent dialogs auto-approved (`%mcp_dangerous` magic)
 
-Unsafe mode tools require user consent via dialog for: `notebook(action="update_editing_cell")`, `notebook(action="execute_cell")`, `notebook(action="delete_cell")`, `notebook(action="delete_cells")`, `notebook(action="apply_patch")`, `dynamic_register_tool`, `dynamic_update_tool`. In dangerous mode, all consents are automatically approved.
+Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`, `dynamic_register_tool`, `dynamic_update_tool`. In dangerous mode, all consents are automatically approved.
 
 ### JupyterLab Extension
-
 Located in `instrmcp/extensions/jupyterlab/`. After modifying TypeScript:
-
 ```bash
 cd instrmcp/extensions/jupyterlab && jlpm run build
 pip install -e . --force-reinstall --no-deps
@@ -94,14 +82,15 @@ pip install -e . --force-reinstall --no-deps
 
 ## MCP Tools Reference
 
-- **Core Tools:** `mcp_list_resources`, `mcp_get_resource`
-- **QCodes:** `qcodes_instrument_info`, `qcodes_get_parameter_values`
-- **Notebook (unified):** `notebook(action=...)` - Single meta-tool with 13 actions:
-  - Safe actions: `list_variables`, `get_variable_info`, `get_editing_cell`, `get_editing_cell_output`, `get_notebook_cells`, `move_cursor`, `server_status`
-  - Unsafe actions (require consent): `update_editing_cell`, `execute_cell`, `add_cell`, `delete_cell`, `delete_cells`, `apply_patch`
-- **MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_wait_for_all_sweeps`
-- **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
-- **Dynamic Tools:** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
+All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_get_editing_cell`).
+
+**Core Tools:** `mcp_list_resources`, `mcp_get_resource`
+**QCodes:** `qcodes_instrument_info`, `qcodes_get_parameter_values`
+**Notebook:** `notebook_list_variables`, `notebook_get_variable_info`, `notebook_get_editing_cell`, `notebook_get_editing_cell_output`, `notebook_get_notebook_cells`, `notebook_server_status`, `notebook_move_cursor`
+**Unsafe Notebook:** `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`
+**MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_wait_for_all_sweeps`
+**Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
+**Dynamic Tools:** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
 
 See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 
@@ -130,4 +119,3 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `pytest` to verify tests pass
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
-

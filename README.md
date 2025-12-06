@@ -247,11 +247,11 @@ The `mcp_list_resources()` tool helps LLMs discover and effectively use MCP reso
 ```
 
 ### 2. Consent System for Cell Modifications
-Cell modification actions now require user consent in unsafe mode:
+Cell modification tools now require user consent in unsafe mode:
 
-**Actions requiring consent:**
-- `notebook(action="update_editing_cell", content="...")` - Shows old/new content comparison before replacing entire cell
-- `notebook(action="apply_patch", old_text="...", new_text="...")` - Shows visual diff dialog with exact changes
+**Tools requiring consent:**
+- `notebook_update_editing_cell` - Shows old/new content comparison before replacing entire cell
+- `notebook_apply_patch` - Shows visual diff dialog with exact changes
 
 **Features:**
 - **Visual Diff Display**: Red deletions, green additions, context lines
@@ -260,7 +260,7 @@ Cell modification actions now require user consent in unsafe mode:
 - **Consent Workflow**: "Decline" | "Allow" | "Always Allow" buttons
 - **Battle-Tested Diffing**: Uses industry-standard `diff` library (v8.0.2) from GitHub/GitLab
 
-**Example:** When LLM calls `notebook(action="apply_patch", old_text="x = 10", new_text="x = 20")`, user sees:
+**Example:** When LLM calls `notebook_apply_patch(old_text="x = 10", new_text="x = 20")`, user sees:
 ```diff
 - x = 10  ← Red background with strikethrough
 + x = 20  ← Green background
@@ -278,10 +278,10 @@ Control LLM context window consumption with line range selection:
 **Example:**
 ```python
 # Get only first 50 lines of a large cell
-notebook(action="get_editing_cell", line_start=1, line_end=50)
+get_editing_cell(line_start=1, line_end=50)
 
 # Get lines 100-200 for focused analysis
-notebook(action="get_editing_cell", line_start=100, line_end=200)
+get_editing_cell(line_start=100, line_end=200)
 ```
 
 ### 4. Dynamic Tool Creation
