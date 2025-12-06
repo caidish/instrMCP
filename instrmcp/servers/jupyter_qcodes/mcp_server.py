@@ -15,13 +15,13 @@ from fastmcp import FastMCP
 
 from .tools import QCodesReadOnlyTools
 from .registrars import (
+    QCodesToolRegistrar,
     NotebookMetaToolRegistrar,
-    QCodesMetaToolRegistrar,
-    DatabaseMetaToolRegistrar,
-    DynamicMetaToolRegistrar,
     MeasureItToolRegistrar,
+    DatabaseToolRegistrar,
     ResourceRegistrar,
 )
+from .dynamic_registrar import DynamicToolRegistrar
 from instrmcp.logging_config import get_logger
 
 # MeasureIt integration (optional)
@@ -104,18 +104,10 @@ class JupyterMCPServer:
         resource_registrar.register_all()
 
     def _register_tools(self):
-        """Register all MCP tools using registrars.
+        """Register all MCP tools using registrars."""
 
-        Tool organization (all consolidated into meta-tools):
-        - qcodes: 2 actions (instrument_info, get_values)
-        - notebook: 13 actions (read/write operations)
-        - database: 4 actions (list_experiments, get_dataset, stats, list_available)
-        - dynamic: 6 actions (register, update, revoke, list, inspect, stats)
-        - measureit: 3 tools (status, wait_for_sweep, wait_for_all)
-        """
-
-        # QCodes meta-tool (2 actions: instrument_info, get_values)
-        qcodes_registrar = QCodesMetaToolRegistrar(self.mcp, self.tools)
+        # QCodes instrument tools
+        qcodes_registrar = QCodesToolRegistrar(self.mcp, self.tools)
         qcodes_registrar.register_all()
 
         # Create consent manager for unsafe operations (if not safe mode)
@@ -130,7 +122,7 @@ class JupyterMCPServer:
                 self.ipython, timeout_seconds=None, bypass_mode=self.dangerous_mode
             )
 
-        # Notebook meta-tool (13 actions: read/write operations)
+        # Notebook meta-tool (consolidated from 13 tools into 1)
         notebook_registrar = NotebookMetaToolRegistrar(
             self.mcp,
             self.tools,
@@ -141,30 +133,29 @@ class JupyterMCPServer:
         )
         notebook_registrar.register_all()
 
-        # Optional: MeasureIt tools (3 tools, not consolidated yet)
+        # Optional: MeasureIt tools
         if MEASUREIT_AVAILABLE and "measureit" in self.enabled_options:
             measureit_registrar = MeasureItToolRegistrar(self.mcp, self.tools)
             measureit_registrar.register_all()
 
-        # Optional: Database meta-tool (4 actions)
+        # Optional: Database tools
         if DATABASE_AVAILABLE and "database" in self.enabled_options:
-            database_registrar = DatabaseMetaToolRegistrar(self.mcp, db_integration)
+            database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
             database_registrar.register_all()
 
-        # Dynamic meta-tool (6 actions: register, update, revoke, list, inspect, stats)
+        # Dynamic tool creation (meta-tools)
         # Only available in unsafe mode
         if not self.safe_mode:
             auto_correct_json = "auto_correct_json" in self.enabled_options
             # Consent is enabled by default, can be bypassed via INSTRMCP_CONSENT_BYPASS=1
             # In dangerous mode, bypass all consent dialogs
             require_consent = True
-            dynamic_registrar = DynamicMetaToolRegistrar(
+            dynamic_registrar = DynamicToolRegistrar(
                 self.mcp,
                 self.ipython,
                 auto_correct_json=auto_correct_json,
                 require_consent=require_consent,
                 bypass_consent=self.dangerous_mode,
-                is_unsafe_mode=True,  # Always true here (we're in unsafe mode block)
             )
             dynamic_registrar.register_all()
 

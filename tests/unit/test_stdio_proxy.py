@@ -542,8 +542,8 @@ class TestCreateStdioProxyServer:
         assert mcp is not None
 
     @pytest.mark.asyncio
-    async def test_qcodes_meta_tool(self):
-        """Test qcodes meta-tool is created (consolidates 2 tools)."""
+    async def test_qcodes_instrument_info_tool(self):
+        """Test qcodes_instrument_info tool is created and callable."""
         with patch.object(HttpMCPProxy, "call", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = {"name": "mock_dac", "parameters": {}}
 
@@ -551,10 +551,14 @@ class TestCreateStdioProxyServer:
 
             # Find the tool by checking registered tools
             tools = await mcp.get_tools()
-            assert "qcodes" in tools
-            # Old individual tools should NOT be present
-            assert "qcodes_instrument_info" not in tools
-            assert "qcodes_get_parameter_values" not in tools
+            assert "qcodes_instrument_info" in tools
+
+    @pytest.mark.asyncio
+    async def test_qcodes_get_parameter_values_tool(self):
+        """Test qcodes_get_parameter_values tool is created."""
+        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
+        tools = await mcp.get_tools()
+        assert "qcodes_get_parameter_values" in tools
 
     @pytest.mark.asyncio
     async def test_notebook_meta_tool(self):
@@ -589,30 +593,25 @@ class TestCreateStdioProxyServer:
         assert "measureit_get_status" in tools
 
     @pytest.mark.asyncio
-    async def test_database_meta_tool(self):
-        """Test database meta-tool is created (consolidates 4 tools)."""
+    async def test_database_list_experiments_tool(self):
+        """Test database_list_experiments optional tool is created."""
         mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
         tools = await mcp.get_tools()
-        assert "database" in tools
-        # Old individual tools should NOT be present
-        assert "database_list_experiments" not in tools
-        assert "database_get_dataset_info" not in tools
-        assert "database_get_database_stats" not in tools
-        assert "database_list_available" not in tools
+        assert "database_list_experiments" in tools
 
     @pytest.mark.asyncio
-    async def test_dynamic_meta_tool(self):
-        """Test dynamic meta-tool is created (consolidates 6 tools)."""
+    async def test_database_get_dataset_info_tool(self):
+        """Test database_get_dataset_info optional tool is created."""
         mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
         tools = await mcp.get_tools()
-        assert "dynamic" in tools
-        # Old individual tools should NOT be present
-        assert "dynamic_register_tool" not in tools
-        assert "dynamic_update_tool" not in tools
-        assert "dynamic_revoke_tool" not in tools
-        assert "dynamic_list_tools" not in tools
-        assert "dynamic_inspect_tool" not in tools
-        assert "dynamic_registry_stats" not in tools
+        assert "database_get_dataset_info" in tools
+
+    @pytest.mark.asyncio
+    async def test_database_get_database_stats_tool(self):
+        """Test database_get_database_stats optional tool is created."""
+        mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
+        tools = await mcp.get_tools()
+        assert "database_get_database_stats" in tools
 
     @pytest.mark.asyncio
     async def test_all_tools_created(self):
@@ -620,27 +619,32 @@ class TestCreateStdioProxyServer:
         mcp = create_stdio_proxy_server("http://127.0.0.1:8123")
         tools = await mcp.get_tools()
 
-        # Expected meta-tools after consolidation:
-        # - qcodes: 2 actions (instrument_info, get_values)
-        # - notebook: 13 actions
-        # - database: 4 actions (list_experiments, get_dataset, stats, list_available)
-        # - dynamic: 6 actions (register, update, revoke, list, inspect, stats)
+        # Expected tools after consolidating 13 notebook tools into 1 meta-tool
         expected_tools = [
-            # QCodes meta-tool (replaces 2 individual tools)
-            "qcodes",
-            # Notebook meta-tool (replaces 13 individual tools)
+            # QCodes tools
+            "qcodes_instrument_info",
+            "qcodes_get_parameter_values",
+            # Unified notebook meta-tool (replaces 13 individual tools)
             "notebook",
             # Resource tools
             "mcp_list_resources",
             "mcp_get_resource",
-            # MeasureIt tools (not yet consolidated)
+            # MeasureIt tools
             "measureit_get_status",
             "measureit_wait_for_all_sweeps",
             "measureit_wait_for_sweep",
-            # Database meta-tool (replaces 4 individual tools)
-            "database",
-            # Dynamic meta-tool (replaces 6 individual tools)
-            "dynamic",
+            # Database tools
+            "database_list_experiments",
+            "database_get_dataset_info",
+            "database_get_database_stats",
+            "database_list_available",
+            # Dynamic tool meta-tools
+            "dynamic_register_tool",
+            "dynamic_update_tool",
+            "dynamic_revoke_tool",
+            "dynamic_list_tools",
+            "dynamic_inspect_tool",
+            "dynamic_registry_stats",
         ]
 
         for expected_tool in expected_tools:
@@ -656,6 +660,6 @@ class TestCreateStdioProxyServer:
 
             # Verify all tools are created
             tools = await mcp.get_tools()
-            # After consolidating into meta-tools:
-            # 1 qcodes + 1 notebook + 2 resource + 3 measureit + 1 database + 1 dynamic = 9
-            assert len(tools) == 9
+            # After consolidating 13 notebook tools into 1 meta-tool:
+            # 2 QCodes + 1 notebook + 2 resource + 3 measureit + 4 database + 6 dynamic = 18
+            assert len(tools) == 18
