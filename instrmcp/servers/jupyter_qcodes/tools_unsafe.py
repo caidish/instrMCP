@@ -45,7 +45,16 @@ class UnsafeToolRegistrar:
     def _register_update_editing_cell(self):
         """Register the notebook/update_editing_cell tool."""
 
-        @self.mcp.tool(name="notebook_update_editing_cell")
+        @self.mcp.tool(
+            name="notebook_update_editing_cell",
+            annotations={
+                "title": "Update Active Cell",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def update_editing_cell(content: str) -> List[TextContent]:
             """Update the content of the currently editing cell in JupyterLab frontend.
 
@@ -129,18 +138,43 @@ class UnsafeToolRegistrar:
     def _register_execute_cell(self):
         """Register the notebook/execute_cell tool."""
 
-        @self.mcp.tool(name="notebook_execute_cell")
-        async def execute_editing_cell() -> List[TextContent]:
-            """Execute the currently editing cell in the JupyterLab frontend.
+        @self.mcp.tool(
+            name="notebook_execute_cell",
+            annotations={
+                "title": "Execute Cell",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
+        )
+        async def execute_editing_cell(timeout: float = 30.0) -> List[TextContent]:
+            """Execute the currently editing cell and return the output.
 
             UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
-            The code will run in the frontend with output appearing in the notebook.
+            The code will run in the frontend and this tool will wait for execution to complete,
+            returning the cell output in the response.
+
+            Args:
+                timeout: Maximum seconds to wait for execution to complete (default: 30.0)
+
+            Returns:
+                JSON response with execution result including:
+                - success: Whether the execution request was sent successfully
+                - status: Execution status ("completed", "error", or "timeout")
+                - execution_count: The IPython execution count for this cell
+                - input: The code that was executed
+                - outputs: List of cell outputs (stdout, display_data, etc.)
+                - output: Expression return value if any
+                - has_output: Whether the cell produced output
+                - has_error: Whether an error occurred
+                - error: Error information if execution failed
+                - sweep_detected: True if .start() was detected in the code
+                - suggestion: Hint to use wait tools if sweep was detected
 
             Note:
-                - Use notebook_get_editing_cell_output to retrieve the execution result,
-                  including any output or errors from the cell.
-                - If running a measurement sweep, use measureit_get_status and
-                  measureit_wait_for_sweep/measureit_wait_for_all_sweeps to monitor progress.
+                - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or
+                  measureit_wait_for_all_sweeps() to wait for completion before proceeding.
             """
             # Request consent if consent manager is available
             if self.consent_manager:
@@ -197,7 +231,7 @@ class UnsafeToolRegistrar:
 
             start = time.perf_counter()
             try:
-                result = await self.tools.execute_editing_cell()
+                result = await self.tools.execute_editing_cell(timeout=timeout)
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call("notebook_execute_cell", {}, duration, "success")
                 return [
@@ -218,7 +252,16 @@ class UnsafeToolRegistrar:
     def _register_add_cell(self):
         """Register the notebook/add_cell tool."""
 
-        @self.mcp.tool(name="notebook_add_cell")
+        @self.mcp.tool(
+            name="notebook_add_cell",
+            annotations={
+                "title": "Add Cell",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def add_new_cell(
             cell_type: str = "code", position: str = "below", content: str = ""
         ) -> List[TextContent]:
@@ -250,7 +293,16 @@ class UnsafeToolRegistrar:
     def _register_delete_cell(self):
         """Register the notebook/delete_cell tool."""
 
-        @self.mcp.tool(name="notebook_delete_cell")
+        @self.mcp.tool(
+            name="notebook_delete_cell",
+            annotations={
+                "title": "Delete Cell",
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def delete_editing_cell() -> List[TextContent]:
             """Delete the currently editing cell.
 
@@ -330,7 +382,16 @@ class UnsafeToolRegistrar:
     def _register_delete_cells(self):
         """Register the notebook/delete_cells tool."""
 
-        @self.mcp.tool(name="notebook_delete_cells")
+        @self.mcp.tool(
+            name="notebook_delete_cells",
+            annotations={
+                "title": "Delete Multiple Cells",
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def delete_cells_by_number(cell_numbers: str) -> List[TextContent]:
             """Delete multiple cells by their execution count numbers.
 
@@ -458,7 +519,16 @@ class UnsafeToolRegistrar:
     def _register_apply_patch(self):
         """Register the notebook/apply_patch tool."""
 
-        @self.mcp.tool(name="notebook_apply_patch")
+        @self.mcp.tool(
+            name="notebook_apply_patch",
+            annotations={
+                "title": "Apply Patch",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def apply_patch(old_text: str, new_text: str) -> List[TextContent]:
             """Apply a patch to the current cell content.
 

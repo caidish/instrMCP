@@ -36,7 +36,15 @@ class MeasureItToolRegistrar:
     def _register_get_status(self):
         """Register the measureit/get_status tool."""
 
-        @self.mcp.tool(name="measureit_get_status")
+        @self.mcp.tool(
+            name="measureit_get_status",
+            annotations={
+                "title": "MeasureIt Status",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_measureit_status() -> List[TextContent]:
             """Check if any MeasureIt sweep is currently running.
 
@@ -66,7 +74,15 @@ class MeasureItToolRegistrar:
     def _register_wait_for_all_sweeps(self):
         """Register the measureit/wait_for_all_sweeps tool."""
 
-        @self.mcp.tool(name="measureit_wait_for_all_sweeps")
+        @self.mcp.tool(
+            name="measureit_wait_for_all_sweeps",
+            annotations={
+                "title": "Wait for All Sweeps",
+                "readOnlyHint": True,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def wait_for_all_sweeps() -> List[TextContent]:
             """Wait until all currently running MeasureIt sweeps finish."""
             try:
@@ -87,7 +103,15 @@ class MeasureItToolRegistrar:
     def _register_wait_for_sweep(self):
         """Register the measureit/wait_for_sweep tool."""
 
-        @self.mcp.tool(name="measureit_wait_for_sweep")
+        @self.mcp.tool(
+            name="measureit_wait_for_sweep",
+            annotations={
+                "title": "Wait for Sweep",
+                "readOnlyHint": True,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def wait_for_sweep(variable_name: str) -> List[TextContent]:
             """Wait until the specified MeasureIt sweep finishes."""
             try:

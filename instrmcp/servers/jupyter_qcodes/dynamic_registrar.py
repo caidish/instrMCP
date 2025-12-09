@@ -391,7 +391,16 @@ Corrected JSON:"""
     def register_all(self):
         """Register all dynamic tool meta-tools with the MCP server."""
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_register_tool",
+            annotations={
+                "title": "Register Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_register_tool(
             name: str,
             source_code: str,
@@ -599,7 +608,16 @@ Corrected JSON:"""
                 log_tool_error("register", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_update_tool",
+            annotations={
+                "title": "Update Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_update_tool(
             name: str,
             version: str,
@@ -783,7 +801,16 @@ Corrected JSON:"""
                 log_tool_error("update", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_revoke_tool",
+            annotations={
+                "title": "Revoke Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_revoke_tool(name: str, reason: Optional[str] = None) -> str:
             """Revoke (delete) a dynamic tool.
 
@@ -837,7 +864,15 @@ Corrected JSON:"""
                 log_tool_error("revoke", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_list_tools",
+            annotations={
+                "title": "List Dynamic Tools",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_list_tools(
             tag: Optional[str] = None,
             capability: Optional[str] = None,
@@ -872,7 +907,15 @@ Corrected JSON:"""
                     {"status": "error", "message": f"Failed to list tools: {e}"}
                 )
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_inspect_tool",
+            annotations={
+                "title": "Inspect Dynamic Tool",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_inspect_tool(name: str) -> str:
             """Inspect a dynamic tool's complete specification.
 
@@ -904,7 +947,15 @@ Corrected JSON:"""
                     {"status": "error", "message": f"Failed to inspect tool: {e}"}
                 )
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_registry_stats",
+            annotations={
+                "title": "Registry Statistics",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_registry_stats() -> str:
             """Get statistics about the dynamic tool registry.
 

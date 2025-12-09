@@ -39,7 +39,15 @@ class QCodesToolRegistrar:
     def _register_instrument_info(self):
         """Register the qcodes_instrument_info tool."""
 
-        @self.mcp.tool(name="qcodes_instrument_info")
+        @self.mcp.tool(
+            name="qcodes_instrument_info",
+            annotations={
+                "title": "Get Instrument Info",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def instrument_info(
             name: str, with_values: bool = False
         ) -> List[TextContent]:
@@ -89,7 +97,15 @@ class QCodesToolRegistrar:
     def _register_get_parameter_values(self):
         """Register the qcodes_get_parameter_values tool."""
 
-        @self.mcp.tool(name="qcodes_get_parameter_values")
+        @self.mcp.tool(
+            name="qcodes_get_parameter_values",
+            annotations={
+                "title": "Get Parameter Values",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_parameter_values(queries: str) -> List[TextContent]:
             """Get QCodes parameter values - supports both single parameter and batch queries.
 

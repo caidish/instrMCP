@@ -317,7 +317,15 @@ def create_stdio_proxy_server(
     proxy = HttpMCPProxy(base_url)
 
     # QCodes instrument tools
-    @mcp.tool(name="qcodes_instrument_info")
+    @mcp.tool(
+        name="qcodes_instrument_info",
+        annotations={
+            "title": "Get Instrument Info",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def instrument_info(
         name: str, with_values: bool = False
     ) -> list[TextContent]:
@@ -326,23 +334,55 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="qcodes_get_parameter_values")
+    @mcp.tool(
+        name="qcodes_get_parameter_values",
+        annotations={
+            "title": "Get Parameter Values",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_parameter_values(queries: str) -> list[TextContent]:
         result = await proxy.call("qcodes_get_parameter_values", queries=queries)
         return [TextContent(type="text", text=str(result))]
 
     # Jupyter notebook variable tools
-    @mcp.tool(name="notebook_list_variables")
+    @mcp.tool(
+        name="notebook_list_variables",
+        annotations={
+            "title": "List Notebook Variables",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def list_variables(type_filter: Optional[str] = None) -> list[TextContent]:
         result = await proxy.call("notebook_list_variables", type_filter=type_filter)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_get_variable_info")
+    @mcp.tool(
+        name="notebook_get_variable_info",
+        annotations={
+            "title": "Get Variable Info",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_variable_info(name: str) -> list[TextContent]:
         result = await proxy.call("notebook_get_variable_info", name=name)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_get_editing_cell")
+    @mcp.tool(
+        name="notebook_get_editing_cell",
+        annotations={
+            "title": "Get Active Cell",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_editing_cell(
         fresh_ms: int = 1000,
         line_start: Optional[int] = None,
@@ -356,17 +396,42 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_update_editing_cell")
+    @mcp.tool(
+        name="notebook_update_editing_cell",
+        annotations={
+            "title": "Update Active Cell",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def update_editing_cell(content: str) -> list[TextContent]:
         result = await proxy.call("notebook_update_editing_cell", content=content)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_get_editing_cell_output")
+    @mcp.tool(
+        name="notebook_get_editing_cell_output",
+        annotations={
+            "title": "Get Cell Output",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_editing_cell_output() -> list[TextContent]:
         result = await proxy.call("notebook_get_editing_cell_output")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_get_notebook_cells")
+    @mcp.tool(
+        name="notebook_get_notebook_cells",
+        annotations={
+            "title": "Get Recent Cells",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_notebook_cells(
         num_cells: int = 2, include_output: bool = True
     ) -> list[TextContent]:
@@ -377,7 +442,15 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_server_status")
+    @mcp.tool(
+        name="notebook_server_status",
+        annotations={
+            "title": "Server Status",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def server_status() -> list[TextContent]:
         result = await proxy.call("notebook_server_status")
         info = {
@@ -387,7 +460,15 @@ def create_stdio_proxy_server(
         }
         return [TextContent(type="text", text=str(info))]
 
-    @mcp.tool(name="mcp_list_resources")
+    @mcp.tool(
+        name="mcp_list_resources",
+        annotations={
+            "title": "List MCP Resources",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def list_resources() -> list[TextContent]:
         """
         List all available MCP resources and guide on when to use them.
@@ -399,7 +480,15 @@ def create_stdio_proxy_server(
         result = await proxy.call("mcp_list_resources")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="mcp_get_resource")
+    @mcp.tool(
+        name="mcp_get_resource",
+        annotations={
+            "title": "Get MCP Resource",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_resource(uri: str) -> list[TextContent]:
         """
         Retrieve the content of a specific MCP resource by its URI.
@@ -423,12 +512,30 @@ def create_stdio_proxy_server(
         return [TextContent(type="text", text=str(result))]
 
     # Unsafe notebook tools
-    @mcp.tool(name="notebook_execute_cell")
-    async def execute_editing_cell() -> list[TextContent]:
-        result = await proxy.call("notebook_execute_cell")
+    @mcp.tool(
+        name="notebook_execute_cell",
+        annotations={
+            "title": "Execute Cell",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+    )
+    async def execute_editing_cell(timeout: float = 30.0) -> list[TextContent]:
+        result = await proxy.call("notebook_execute_cell", timeout=timeout)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_add_cell")
+    @mcp.tool(
+        name="notebook_add_cell",
+        annotations={
+            "title": "Add Cell",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def add_new_cell(
         cell_type: str = "code", position: str = "below", content: str = ""
     ) -> list[TextContent]:
@@ -437,42 +544,102 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_delete_cell")
+    @mcp.tool(
+        name="notebook_delete_cell",
+        annotations={
+            "title": "Delete Cell",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def delete_editing_cell() -> list[TextContent]:
         result = await proxy.call("notebook_delete_cell")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_delete_cells")
+    @mcp.tool(
+        name="notebook_delete_cells",
+        annotations={
+            "title": "Delete Multiple Cells",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def delete_cells_by_number(cell_numbers: str) -> list[TextContent]:
         result = await proxy.call("notebook_delete_cells", cell_numbers=cell_numbers)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_apply_patch")
+    @mcp.tool(
+        name="notebook_apply_patch",
+        annotations={
+            "title": "Apply Patch",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
         result = await proxy.call(
             "notebook_apply_patch", old_text=old_text, new_text=new_text
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="notebook_move_cursor")
+    @mcp.tool(
+        name="notebook_move_cursor",
+        annotations={
+            "title": "Move Cursor",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def move_cursor(target: str) -> list[TextContent]:
         result = await proxy.call("notebook_move_cursor", target=target)
         return [TextContent(type="text", text=str(result))]
 
     # MeasureIt integration tools (optional - only if measureit option enabled)
-    @mcp.tool(name="measureit_get_status")
+    @mcp.tool(
+        name="measureit_get_status",
+        annotations={
+            "title": "MeasureIt Status",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_measureit_status() -> list[TextContent]:
         """Check if any MeasureIt sweep is currently running."""
         result = await proxy.call("measureit_get_status")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="measureit_wait_for_all_sweeps")
+    @mcp.tool(
+        name="measureit_wait_for_all_sweeps",
+        annotations={
+            "title": "Wait for All Sweeps",
+            "readOnlyHint": True,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def wait_for_all_sweeps() -> list[TextContent]:
         """Wait until all currently running MeasureIt sweeps finish."""
         result = await proxy.call("measureit_wait_for_all_sweeps")
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="measureit_wait_for_sweep")
+    @mcp.tool(
+        name="measureit_wait_for_sweep",
+        annotations={
+            "title": "Wait for Sweep",
+            "readOnlyHint": True,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def wait_for_sweep(variable_name: str) -> list[TextContent]:
         """Wait until the specified MeasureIt sweep finishes."""
         result = await proxy.call(
@@ -481,7 +648,15 @@ def create_stdio_proxy_server(
         return [TextContent(type="text", text=str(result))]
 
     # Database integration tools (optional - only if database option enabled)
-    @mcp.tool(name="database_list_experiments")
+    @mcp.tool(
+        name="database_list_experiments",
+        annotations={
+            "title": "List Experiments",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def list_experiments(
         database_path: Optional[str] = None,
     ) -> list[TextContent]:
@@ -490,7 +665,15 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="database_get_dataset_info")
+    @mcp.tool(
+        name="database_get_dataset_info",
+        annotations={
+            "title": "Get Dataset Info",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_dataset_info(
         id: int, database_path: Optional[str] = None
     ) -> list[TextContent]:
@@ -499,7 +682,15 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="database_get_database_stats")
+    @mcp.tool(
+        name="database_get_database_stats",
+        annotations={
+            "title": "Database Statistics",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_database_stats(
         database_path: Optional[str] = None,
     ) -> list[TextContent]:
@@ -508,13 +699,30 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="database_list_available")
+    @mcp.tool(
+        name="database_list_available",
+        annotations={
+            "title": "List Databases",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def list_available_databases() -> list[TextContent]:
         result = await proxy.call("database_list_available")
         return [TextContent(type="text", text=str(result))]
 
     # Dynamic tool meta-tools (only available in unsafe mode)
-    @mcp.tool(name="dynamic_register_tool")
+    @mcp.tool(
+        name="dynamic_register_tool",
+        annotations={
+            "title": "Register Dynamic Tool",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def register_dynamic_tool(
         name: str,
         version: str,
@@ -543,7 +751,16 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="dynamic_update_tool")
+    @mcp.tool(
+        name="dynamic_update_tool",
+        annotations={
+            "title": "Update Dynamic Tool",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def update_dynamic_tool(
         name: str,
         version: str,
@@ -570,7 +787,16 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="dynamic_revoke_tool")
+    @mcp.tool(
+        name="dynamic_revoke_tool",
+        annotations={
+            "title": "Revoke Dynamic Tool",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def revoke_dynamic_tool(
         name: str, reason: Optional[str] = None
     ) -> list[TextContent]:
@@ -578,7 +804,15 @@ def create_stdio_proxy_server(
         result = await proxy.call("dynamic_revoke_tool", name=name, reason=reason)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="dynamic_list_tools")
+    @mcp.tool(
+        name="dynamic_list_tools",
+        annotations={
+            "title": "List Dynamic Tools",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def list_dynamic_tools(
         tag: Optional[str] = None,
         capability: Optional[str] = None,
@@ -590,13 +824,29 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="dynamic_inspect_tool")
+    @mcp.tool(
+        name="dynamic_inspect_tool",
+        annotations={
+            "title": "Inspect Dynamic Tool",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def inspect_dynamic_tool(name: str) -> list[TextContent]:
         """Inspect a dynamic tool's complete specification."""
         result = await proxy.call("dynamic_inspect_tool", name=name)
         return [TextContent(type="text", text=str(result))]
 
-    @mcp.tool(name="dynamic_registry_stats")
+    @mcp.tool(
+        name="dynamic_registry_stats",
+        annotations={
+            "title": "Registry Statistics",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     async def get_dynamic_registry_stats() -> list[TextContent]:
         """Get statistics about the dynamic tool registry."""
         result = await proxy.call("dynamic_registry_stats")

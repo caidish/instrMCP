@@ -80,7 +80,15 @@ class NotebookToolRegistrar:
     def _register_list_variables(self):
         """Register the notebook/list_variables tool."""
 
-        @self.mcp.tool(name="notebook_list_variables")
+        @self.mcp.tool(
+            name="notebook_list_variables",
+            annotations={
+                "title": "List Notebook Variables",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def list_variables(type_filter: str = None) -> List[TextContent]:
             """List variables in the Jupyter namespace.
 
@@ -117,7 +125,15 @@ class NotebookToolRegistrar:
     def _register_get_variable_info(self):
         """Register the notebook/get_variable_info tool."""
 
-        @self.mcp.tool(name="notebook_get_variable_info")
+        @self.mcp.tool(
+            name="notebook_get_variable_info",
+            annotations={
+                "title": "Get Variable Info",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_variable_info(name: str) -> List[TextContent]:
             """Get detailed information about a notebook variable.
 
@@ -151,7 +167,15 @@ class NotebookToolRegistrar:
     def _register_get_editing_cell(self):
         """Register the notebook/get_editing_cell tool."""
 
-        @self.mcp.tool(name="notebook_get_editing_cell")
+        @self.mcp.tool(
+            name="notebook_get_editing_cell",
+            annotations={
+                "title": "Get Active Cell",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_editing_cell(
             fresh_ms: int = 1000,
             line_start: Optional[int] = None,
@@ -212,7 +236,15 @@ class NotebookToolRegistrar:
     def _register_get_editing_cell_output(self):
         """Register the notebook/get_editing_cell_output tool."""
 
-        @self.mcp.tool(name="notebook_get_editing_cell_output")
+        @self.mcp.tool(
+            name="notebook_get_editing_cell_output",
+            annotations={
+                "title": "Get Cell Output",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_editing_cell_output() -> List[TextContent]:
             """Get the output of the most recently executed cell, including errors.
 
@@ -388,7 +420,15 @@ class NotebookToolRegistrar:
     def _register_get_notebook_cells(self):
         """Register the notebook/get_notebook_cells tool."""
 
-        @self.mcp.tool(name="notebook_get_notebook_cells")
+        @self.mcp.tool(
+            name="notebook_get_notebook_cells",
+            annotations={
+                "title": "Get Recent Cells",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_notebook_cells(
             num_cells: int = 2, include_output: bool = True
         ) -> List[TextContent]:
@@ -566,7 +606,16 @@ class NotebookToolRegistrar:
     def _register_move_cursor(self):
         """Register the notebook/move_cursor tool."""
 
-        @self.mcp.tool(name="notebook_move_cursor")
+        @self.mcp.tool(
+            name="notebook_move_cursor",
+            annotations={
+                "title": "Move Cursor",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def move_cursor(target: str) -> List[TextContent]:
             """Move cursor to a different cell in the notebook.
 
@@ -607,7 +656,15 @@ class NotebookToolRegistrar:
     def _register_server_status(self):
         """Register the notebook/server_status tool."""
 
-        @self.mcp.tool(name="notebook_server_status")
+        @self.mcp.tool(
+            name="notebook_server_status",
+            annotations={
+                "title": "Server Status",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def server_status() -> List[TextContent]:
             """Get server status and configuration."""
             try:

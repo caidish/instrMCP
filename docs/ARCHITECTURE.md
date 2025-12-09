@@ -85,7 +85,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
 - `notebook/update_editing_cell(content)` - Update current cell content (requires consent)
-- `notebook/execute_cell()` - Execute current cell (requires consent)
+- `notebook/execute_cell(timeout)` - Execute current cell and return output (requires consent)
 - `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
 - `notebook/delete_cell()` - Delete the currently active cell (requires consent)
 - `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
@@ -151,7 +151,9 @@ The server supports optional features that can be enabled/disabled via magic com
 
 Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consent in unsafe mode, auto-approved in dangerous mode):
 
-- `notebook/execute_cell()` - Execute code in the active cell
+- `notebook/execute_cell(timeout)` - Execute code in the active cell and return output
+  - `timeout`: Max seconds to wait for completion (default: 30.0)
+  - Returns: success, status ("completed"/"error"/"timeout"), execution_count, input, outputs, output, has_output, has_error, error
 - `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook
   - `cell_type`: "code", "markdown", or "raw" (default: "code")
   - `position`: "above" or "below" active cell (default: "below")
@@ -177,6 +179,45 @@ Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consen
 - `%mcp_status` - Show server status and available commands
 
 **Note:** Server restart is required after changing modes or options for changes to take effect.
+
+## Tool Annotations
+
+All MCP tools include annotations per the [MCP specification (2025-06-18)](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) to help AI models understand tool behavior:
+
+### Annotation Types
+
+| Annotation | Default | Description |
+|------------|---------|-------------|
+| `title` | - | Human-readable display name (e.g., "Get Instrument Info") |
+| `readOnlyHint` | `false` | If `true`, tool doesn't modify state |
+| `destructiveHint` | `true` | For write tools, if `true` may delete/destroy data |
+| `idempotentHint` | `false` | If `true`, repeated calls have same effect |
+| `openWorldHint` | `true` | If `true`, interacts with external systems |
+
+### Tool Classification
+
+**Read-Only Tools** (`readOnlyHint: true`):
+- All QCodes tools (`qcodes_instrument_info`, `qcodes_get_parameter_values`)
+- All notebook read tools (`notebook_list_variables`, `notebook_get_*`)
+- All MeasureIt status tools, Database tools, Dynamic list/inspect/stats tools
+- Resource tools (`mcp_list_resources`, `mcp_get_resource`)
+
+**Write Tools - Non-Destructive** (`readOnlyHint: false`, `destructiveHint: false`):
+- `notebook_move_cursor`, `notebook_update_editing_cell`, `notebook_apply_patch`
+- `notebook_execute_cell` (also `openWorldHint: true` - executes code)
+- `notebook_add_cell`
+- `dynamic_register_tool`, `dynamic_update_tool`
+
+**Destructive Tools** (`readOnlyHint: false`, `destructiveHint: true`):
+- `notebook_delete_cell`, `notebook_delete_cells`
+- `dynamic_revoke_tool`
+
+### Benefits for AI Models
+
+1. **Efficiency**: AI can identify safe read-only tools for exploration
+2. **Safety**: Clients can warn before destructive operations
+3. **Retry Logic**: Idempotent tools can be safely retried on failure
+4. **No Token Cost**: Annotations are metadata, not part of the conversation
 
 ## Configuration
 

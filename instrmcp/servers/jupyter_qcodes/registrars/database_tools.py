@@ -37,7 +37,15 @@ class DatabaseToolRegistrar:
     def _register_list_experiments(self):
         """Register the database/list_experiments tool."""
 
-        @self.mcp.tool(name="database_list_experiments")
+        @self.mcp.tool(
+            name="database_list_experiments",
+            annotations={
+                "title": "List Experiments",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def list_experiments(
             database_path: Optional[str] = None,
         ) -> List[TextContent]:
@@ -64,7 +72,15 @@ class DatabaseToolRegistrar:
     def _register_get_dataset_info(self):
         """Register the database/get_dataset_info tool."""
 
-        @self.mcp.tool(name="database_get_dataset_info")
+        @self.mcp.tool(
+            name="database_get_dataset_info",
+            annotations={
+                "title": "Get Dataset Info",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_dataset_info(
             id: int, database_path: Optional[str] = None
         ) -> List[TextContent]:
@@ -89,7 +105,15 @@ class DatabaseToolRegistrar:
     def _register_get_database_stats(self):
         """Register the database/get_database_stats tool."""
 
-        @self.mcp.tool(name="database_get_database_stats")
+        @self.mcp.tool(
+            name="database_get_database_stats",
+            annotations={
+                "title": "Database Statistics",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_database_stats(
             database_path: Optional[str] = None,
         ) -> List[TextContent]:
@@ -116,7 +140,15 @@ class DatabaseToolRegistrar:
     def _register_list_available_databases(self):
         """Register the database_list_available tool."""
 
-        @self.mcp.tool(name="database_list_available")
+        @self.mcp.tool(
+            name="database_list_available",
+            annotations={
+                "title": "List Databases",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def list_available_databases() -> List[TextContent]:
             """List all available QCodes databases.
 

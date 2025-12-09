@@ -22,7 +22,7 @@ class TestQCodesToolRegistrar:
         mcp._tools = {}
 
         # Mock the @mcp.tool decorator
-        def tool_decorator(name=None):
+        def tool_decorator(name=None, annotations=None):
             def wrapper(func):
                 tool_name = name or func.__name__
                 mcp._tools[tool_name] = func

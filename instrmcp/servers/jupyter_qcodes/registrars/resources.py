@@ -55,7 +55,15 @@ class ResourceRegistrar:
         """Register tools to help models discover and use MCP resources."""
         from mcp.types import TextContent
 
-        @self.mcp.tool(name="mcp_list_resources")
+        @self.mcp.tool(
+            name="mcp_list_resources",
+            annotations={
+                "title": "List MCP Resources",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def list_resources():
             """
             List all available MCP resources and guide on when to use them.
@@ -184,7 +192,15 @@ class ResourceRegistrar:
 
             return [TextContent(type="text", text=json.dumps(guide, indent=2))]
 
-        @self.mcp.tool(name="mcp_get_resource")
+        @self.mcp.tool(
+            name="mcp_get_resource",
+            annotations={
+                "title": "Get MCP Resource",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def get_resource(uri: str):
             """
             Retrieve the content of a specific MCP resource by its URI.
