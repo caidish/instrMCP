@@ -165,6 +165,12 @@ Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consen
 
 ### Optional Features
 
+**Auto-Detection**: When the extension loads, it automatically detects and enables available features:
+- `measureit` - Auto-enabled if MeasureIt package is installed
+- `database` - Auto-enabled if QCodes database support is available
+- `auto_correct_json` - Always auto-enabled (built-in feature)
+
+**Manual Control**:
 - `%mcp_option measureit` - Enable MeasureIt template resources
 - `%mcp_option -measureit` - Disable MeasureIt template resources
 - `%mcp_option database` - Enable database integration tools and resources

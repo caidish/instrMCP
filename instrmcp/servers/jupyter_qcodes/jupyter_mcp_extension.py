@@ -89,6 +89,73 @@ VALID_OPTIONS: Dict[str, str] = {
 }
 
 
+def _auto_detect_options() -> Dict[str, bool]:
+    """Auto-detect available optional features and return detection results.
+
+    Checks for:
+    - measureit: MeasureIt package availability
+    - database: QCodes database availability
+    - auto_correct_json: Always enabled (built-in feature)
+
+    Returns:
+        Dictionary mapping option names to detection status (True if detected)
+    """
+    import importlib.util
+
+    detected = {}
+
+    # Check for MeasureIt
+    try:
+        measureit_spec = importlib.util.find_spec("measureit")
+        detected["measureit"] = measureit_spec is not None
+        if detected["measureit"]:
+            logger.debug("Auto-detected: MeasureIt package available")
+    except Exception as e:
+        logger.debug(f"MeasureIt detection failed: {e}")
+        detected["measureit"] = False
+
+    # Check for QCodes database support
+    try:
+        qcodes_spec = importlib.util.find_spec("qcodes")
+        if qcodes_spec is not None:
+            # Further check if qcodes.dataset is available
+            from qcodes.dataset import experiments  # noqa: F401
+
+            detected["database"] = True
+            logger.debug("Auto-detected: QCodes database available")
+        else:
+            detected["database"] = False
+    except Exception as e:
+        logger.debug(f"QCodes database detection failed: {e}")
+        detected["database"] = False
+
+    # auto_correct_json is always available (built-in feature)
+    detected["auto_correct_json"] = True
+    logger.debug("Auto-detected: auto_correct_json enabled by default")
+
+    return detected
+
+
+def _apply_auto_detected_options() -> list:
+    """Apply auto-detected options to the global _enabled_options set.
+
+    Returns:
+        List of option names that were auto-enabled.
+    """
+    detected = _auto_detect_options()
+    auto_enabled = []
+
+    for option, available in detected.items():
+        if available and option not in _enabled_options:
+            _enabled_options.add(option)
+            auto_enabled.append(option)
+
+    if auto_enabled:
+        logger.info(f"Auto-enabled options: {', '.join(auto_enabled)}")
+
+    return auto_enabled
+
+
 def _get_mode_display() -> Dict[str, str]:
     """Return the current mode name and icon."""
     if _dangerous_mode:
@@ -816,6 +883,9 @@ def load_ipython_extension(ipython):
         except Exception as e:
             logger.error(f"Failed to register toolbar control comm target: {e}")
 
+        # Auto-detect and enable available optional features
+        auto_enabled = _apply_auto_detected_options()
+
         # Broadcast initial server status (not started yet)
         broadcast_server_status("server_not_started", _get_current_config())
 
@@ -838,6 +908,8 @@ def load_ipython_extension(ipython):
         logger.debug("Jupyter QCoDeS MCP extension loaded successfully")
         print("✅ QCoDeS MCP extension loaded")
         print("🛡️  Default mode: safe")
+        if auto_enabled:
+            print(f"🔍 Auto-enabled: {', '.join(sorted(auto_enabled))}")
         print("📋 Use %mcp_status to check server status")
         print("⚠️  Use %mcp_unsafe to switch to unsafe mode (if needed)")
         print("🚀 Use %mcp_start to start the server")
