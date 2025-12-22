@@ -147,7 +147,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_var_func = mock_mcp_server._tools["notebook_get_variable_info"]
-        result = await get_var_func(name="x")
+        result = await get_var_func(name="x", detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_info
@@ -181,7 +181,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_cell_func = mock_mcp_server._tools["notebook_get_editing_cell"]
-        result = await get_cell_func(fresh_ms=1000)
+        result = await get_cell_func(fresh_ms=1000, detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_cell
@@ -216,7 +216,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
-        result = await get_output_func()
+        result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["cell_number"] == 2
@@ -239,6 +239,7 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["has_output"] is False
+        assert response_data["status"] == "completed_no_output"
 
     @pytest.mark.asyncio
     async def test_get_editing_cell_output_running(
@@ -251,10 +252,30 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func(detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["status"] == "running"
+        assert response_data["has_output"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_editing_cell_output_running_concise(
+        self, registrar, mock_ipython, mock_mcp_server
+    ):
+        """Ensure concise output preserves running status."""
+        mock_ipython.user_ns = {"In": ["", "import time; time.sleep(10)"], "Out": {}}
+        mock_ipython.execution_count = 1
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
         result = await get_output_func()
 
         response_data = json.loads(result[0].text)
         assert response_data["status"] == "running"
+        assert (
+            response_data["message"]
+            == "Cell is currently executing - no output available yet"
+        )
         assert response_data["has_output"] is False
 
     @pytest.mark.asyncio
@@ -274,7 +295,7 @@ class TestNotebookToolRegistrar:
         ):
             registrar.register_all()
             get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
-            result = await get_output_func()
+            result = await get_output_func(detailed=True)
 
             response_data = json.loads(result[0].text)
             assert response_data["has_error"] is True
@@ -293,7 +314,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
-        result = await get_cells_func(num_cells=2, include_output=True)
+        result = await get_cells_func(num_cells=2, include_output=True, detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["count"] == 2
@@ -324,7 +345,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         move_cursor_func = mock_mcp_server._tools["notebook_move_cursor"]
-        result = await move_cursor_func(target="below")
+        result = await move_cursor_func(target="below", detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_result
@@ -363,7 +384,7 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["status"] == "running"
-        assert "tools_count" in response_data
+        assert "dynamic_tools_count" in response_data
         assert "tools" in response_data
 
     @pytest.mark.asyncio
@@ -395,7 +416,9 @@ class TestNotebookToolRegistrar:
         ):
             registrar.register_all()
             get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
-            result = await get_cells_func(num_cells=2, include_output=True)
+            result = await get_cells_func(
+                num_cells=2, include_output=True, detailed=True
+            )
 
             response_data = json.loads(result[0].text)
             assert response_data["error_count"] >= 0
@@ -424,7 +447,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
-        result = await get_output_func()
+        result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["cell_number"] == 1
@@ -461,7 +484,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
-        result = await get_output_func()
+        result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["cell_number"] == 1
@@ -504,7 +527,7 @@ class TestNotebookToolRegistrar:
 
         registrar.register_all()
         get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
-        result = await get_cells_func(num_cells=2, include_output=True)
+        result = await get_cells_func(num_cells=2, include_output=True, detailed=True)
 
         response_data = json.loads(result[0].text)
         cells = response_data["cells"]
@@ -642,7 +665,7 @@ class TestUnsafeToolRegistrarUpdateCell:
         registrar.register_all()
 
         update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content=new_content)
+        result = await update_cell_func(content=new_content, detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_result

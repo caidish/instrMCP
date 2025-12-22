@@ -3,36 +3,36 @@
 Plan to add a `detailed: bool = False` option to every MCP tool. Default behavior stays concise; when `detailed=True`, return current/full payload. Below, "concise" lists the fields to keep; "detailed" means existing response structure.
 
 ## QCodes tools
-- [ ] **qcodes_instrument_info**
+- [x] **qcodes_instrument_info**
   - Concise: `status/success`, `name` (or list), brief parameter summary (counts per level), omit full parameter dict/values and timing.
   - Detailed: everything now returned.
-- [ ] **qcodes_get_parameter_values**
+- [x] **qcodes_get_parameter_values**
   - Concise: per query `{instrument, parameter, value, error?}`; only include value
   - Detailed: everything now returned.
 
 ## General formatting rules to implement
-- [ ] Default `detailed=False`; when False, drop bridge_status/request_ids/debug warnings and truncate large blobs (outputs, reprs) to a short summary.
-- [ ] Keep return types JSON; don't change field names unless pruning for concise mode.
+- [x] Default `detailed=False`; when False, drop bridge_status/request_ids/debug warnings and truncate large blobs (outputs, reprs) to a short summary.
+- [x] Keep return types JSON; don't change field names unless pruning for concise mode.
 
 ## Notebook (safe) tools
 - **notebook_list_variables**
   - No need of concise or detailed; keep as is.
-- [ ] **notebook_get_variable_info**
+- [x] **notebook_get_variable_info**
   - Concise: `name`, `type`, `qcodes_instrument` flag, brief repr (first 10 chars).
   - Detailed: everything now returned.
-- [ ] **notebook_get_editing_cell**
+- [x] **notebook_get_editing_cell**
   - Concise: `cell_type`, `cell_index`,  `cell_content`
   - Detailed: everthing now returned.
-- [ ] **notebook_get_editing_cell_output**
+- [x] **notebook_get_editing_cell_output**
   - Concise: latest cell `outputs`,`has_output/has_error`
   - Detailed: everything now returned.
-- [ ] **notebook_get_notebook_cells**
+- [x] **notebook_get_notebook_cells**
   - Concise: recent cells with `cell_number`, `input` (truncated), `has_output`, `has_error`, `status`
   - Detailed: everything now returned.
-- [ ] **notebook_move_cursor**
+- [x] **notebook_move_cursor**
   - Concise: `success`
   - Detailed: everything now returned.
-- [ ] **notebook_server_status**
+- [x] **notebook_server_status**
   - no need to change; keep as is.
   - change tools_count to be dynamic_tools_count.
 ## Resource tools
@@ -42,10 +42,10 @@ No need to change; keep as is.
 No need to change; keep as is.
 
 ## Database tools
-- [ ] **database_list_experiments**
+- [x] **database_list_experiments**
   - Concise: experiments database_path, and only names.
   - Detailed: everything now returned.
-- [ ] **database_get_dataset_info**
+- [x] **database_get_dataset_info**
   - Concise: `id`, `name`, `sample`, `metadata`
   - Detailed: everything now returned.
   Enhancement: has a new option: code suggestion: generate a code example how to retrieve the dataset.
@@ -257,43 +257,43 @@ For this tool output:
   - Keep as is; no change needed.
 
 ## Notebook (unsafe) tools
-- [ ] **notebook_update_editing_cell**
+- [x] **notebook_update_editing_cell**
   - Concise: `success`, `message`
   - Detailed: full response incl. as now returned.
-- [ ] **notebook_execute_cell**
-  - Concise: `success`, `status`, `execution_count`, summary output (first item or scalar), `error_type/message` if error; drop bridge_status/warning/full outputs unless error.
+- [x] **notebook_execute_cell**
+  - Concise: `signal_success`, `status`, `execution_count`, summary output, `error_type/message` if error; drop bridge_status/warning/full outputs unless error.
   - Detailed: full response incl. as now returned.
-  - Bug: success should be revised to be `signal_success` to not mislead users.
-- [ ] **notebook_add_cell**
+  - Bug: success should be revised to be `signal_success` to not mislead users. ✅ Fixed
+- [x] **notebook_add_cell**
   - Concise: `success`
   - Detailed: full response incl. as now returned.
-- [ ] **notebook_delete_cell**
+- [x] **notebook_delete_cell**
   - Concise: `success`
   - Detailed: full response incl. as now returned.
-- [ ] **notebook_delete_cells**
+- [x] **notebook_delete_cells**
   - Concise: `success`
   - Detailed: full response incl. as now returned.
-- [ ] **notebook_apply_patch**
+- [x] **notebook_apply_patch**
   - Concise: `success`
   - Detailed: full response incl. as now returned.
 
 ## Dynamic meta-tools
-- [ ] **dynamic_register_tool**
+- [x] **dynamic_register_tool**
   - Concise: `status`, `tool_name`, `version`, `message`; drop corrected_fields unless error.
   - Detailed: full response incl. as now returned. path, full error traces.
-- [ ] **dynamic_update_tool**
+- [x] **dynamic_update_tool**
   - Concise: `status`, `tool_name`
   - Detailed: full response incl. as now returned.
-- [ ] **dynamic_revoke_tool**
+- [x] **dynamic_revoke_tool**
   - Concise: `status`
   - Detailed: full response incl. as now returned.
-- [ ] **dynamic_list_tools**
+- [x] **dynamic_list_tools**
   - Concise: `count`, list of tool names (maybe filtered), basic fields (name, version).
   - Detailed: full response incl. as now returned.
-- [ ] **dynamic_inspect_tool**
+- [x] **dynamic_inspect_tool**
   - Concise: `status`, `tool_name`
   - Detailed: full response incl. as now returned.
-- [ ] **dynamic_registry_stats**
+- [x] **dynamic_registry_stats**
   - Concise: `status`
   - Detailed: full response incl. as now returned.
 

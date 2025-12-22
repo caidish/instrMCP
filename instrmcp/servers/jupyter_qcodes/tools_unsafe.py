@@ -33,6 +33,76 @@ class UnsafeToolRegistrar:
         self.tools = tools
         self.consent_manager = consent_manager
 
+    # ===== Concise mode helpers =====
+
+    def _to_concise_update_cell(self, result: dict) -> dict:
+        """Convert full update cell result to concise format.
+
+        Concise: success, message.
+        """
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", ""),
+        }
+
+    def _to_concise_execute_cell(self, result: dict) -> dict:
+        """Convert full execute cell result to concise format.
+
+        Concise: signal_success, status, execution_count, summary output, error info if error.
+        Also renames 'success' to 'signal_success' to clarify it indicates the signal was sent,
+        not that the cell code executed without error.
+        """
+        concise = {
+            "signal_success": result.get("success", False),
+            "status": result.get("status"),
+            "execution_count": result.get("execution_count"),
+        }
+
+        # Include error info if present
+        if result.get("has_error"):
+            error_info = result.get("error", {})
+            concise["has_error"] = True
+            if isinstance(error_info, dict):
+                concise["error_type"] = error_info.get("type")
+                concise["error_message"] = error_info.get("message")
+            else:
+                concise["error_message"] = str(error_info)
+
+        # Include summary output (first item or expression value)
+        outputs = result.get("outputs", [])
+        if outputs:
+            # Get first output text
+            first_output = outputs[0] if isinstance(outputs, list) else outputs
+            if isinstance(first_output, dict):
+                text = first_output.get("text", "")
+                if len(text) > 200:
+                    text = text[:200] + "..."
+                concise["output_summary"] = text
+            else:
+                concise["output_summary"] = str(first_output)[:200]
+        elif result.get("output"):
+            output = str(result.get("output"))
+            if len(output) > 200:
+                output = output[:200] + "..."
+            concise["output_summary"] = output
+
+        # Preserve sweep detection fields
+        if result.get("sweep_detected"):
+            concise["sweep_detected"] = True
+            concise["sweep_names"] = result.get("sweep_names", [])
+            concise["suggestion"] = result.get("suggestion")
+
+        return concise
+
+    def _to_concise_success_only(self, result: dict) -> dict:
+        """Convert to concise format with just success.
+
+        Used by: add_cell, delete_cell, delete_cells, apply_patch.
+        """
+        return {"success": result.get("success", False)}
+
+    # ===== End concise mode helpers =====
+
     def register_all(self):
         """Register all unsafe mode tools."""
         self._register_update_editing_cell()
@@ -55,7 +125,9 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def update_editing_cell(content: str) -> List[TextContent]:
+        async def update_editing_cell(
+            content: str, detailed: bool = False
+        ) -> List[TextContent]:
             """Update the content of the currently editing cell in JupyterLab frontend.
 
             UNSAFE: This tool modifies the content of the currently active cell.
@@ -64,6 +136,7 @@ class UnsafeToolRegistrar:
 
             Args:
                 content: New Python code content to set in the active cell
+                detailed: If False (default), return concise summary; if True, return full info
             """
             # Request consent if consent manager is available
             if self.consent_manager:
@@ -122,6 +195,11 @@ class UnsafeToolRegistrar:
 
             try:
                 result = await self.tools.update_editing_cell(content)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_update_cell(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -148,7 +226,9 @@ class UnsafeToolRegistrar:
                 "openWorldHint": True,
             },
         )
-        async def execute_editing_cell(timeout: float = 30.0) -> List[TextContent]:
+        async def execute_editing_cell(
+            timeout: float = 30.0, detailed: bool = False
+        ) -> List[TextContent]:
             """Execute the currently editing cell and return the output.
 
             UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
@@ -157,15 +237,16 @@ class UnsafeToolRegistrar:
 
             Args:
                 timeout: Maximum seconds to wait for execution to complete (default: 30.0)
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON response with execution result including:
-                - success: Whether the execution request was sent successfully
+                - signal_success: Whether the execution request was sent successfully (was 'success')
                 - status: Execution status ("completed", "error", or "timeout")
                 - execution_count: The IPython execution count for this cell
-                - input: The code that was executed
-                - outputs: List of cell outputs (stdout, display_data, etc.)
-                - output: Expression return value if any
+                - input: The code that was executed (detailed mode only)
+                - outputs: List of cell outputs (detailed mode only, concise gets output_summary)
+                - output: Expression return value if any (detailed mode only)
                 - has_output: Whether the cell produced output
                 - has_error: Whether an error occurred
                 - error: Error information if execution failed
@@ -233,7 +314,17 @@ class UnsafeToolRegistrar:
             try:
                 result = await self.tools.execute_editing_cell(timeout=timeout)
                 duration = (time.perf_counter() - start) * 1000
-                log_tool_call("notebook_execute_cell", {}, duration, "success")
+                log_tool_call(
+                    "notebook_execute_cell",
+                    {"detailed": detailed},
+                    duration,
+                    "success",
+                )
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_execute_cell(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -263,7 +354,10 @@ class UnsafeToolRegistrar:
             },
         )
         async def add_new_cell(
-            cell_type: str = "code", position: str = "below", content: str = ""
+            cell_type: str = "code",
+            position: str = "below",
+            content: str = "",
+            detailed: bool = False,
         ) -> List[TextContent]:
             """Add a new cell in the notebook.
 
@@ -274,9 +368,15 @@ class UnsafeToolRegistrar:
                 cell_type: Type of cell to create ("code", "markdown", "raw") - default: "code"
                 position: Position relative to active cell ("above", "below") - default: "below"
                 content: Initial content for the new cell - default: empty string
+                detailed: If False (default), return just success; if True, return full info
             """
             try:
                 result = await self.tools.add_new_cell(cell_type, position, content)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_success_only(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -303,12 +403,15 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def delete_editing_cell() -> List[TextContent]:
+        async def delete_editing_cell(detailed: bool = False) -> List[TextContent]:
             """Delete the currently editing cell.
 
             UNSAFE: This tool deletes the currently active cell from the notebook. Only available in unsafe mode.
             Use with caution as this action cannot be undone easily. If this is the last cell in the notebook,
             a new empty code cell will be created automatically.
+
+            Args:
+                detailed: If False (default), return just success; if True, return full info
             """
             # Request consent if consent manager is available
             if self.consent_manager:
@@ -366,6 +469,11 @@ class UnsafeToolRegistrar:
 
             try:
                 result = await self.tools.delete_editing_cell()
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_success_only(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -392,7 +500,9 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def delete_cells_by_number(cell_numbers: str) -> List[TextContent]:
+        async def delete_cells_by_number(
+            cell_numbers: str, detailed: bool = False
+        ) -> List[TextContent]:
             """Delete multiple cells by their execution count numbers.
 
             UNSAFE: This tool deletes cells from the notebook by their execution counts.
@@ -402,6 +512,7 @@ class UnsafeToolRegistrar:
                 cell_numbers: JSON string containing a list of execution count numbers to delete.
                              Example: "[1, 2, 5]" to delete cells 1, 2, and 5
                              Can also be a single number: "3"
+                detailed: If False (default), return just success; if True, return full info
 
             Returns:
                 JSON with deletion status and detailed results for each cell, including:
@@ -502,6 +613,11 @@ class UnsafeToolRegistrar:
             # Now execute the deletion
             try:
                 result = await self.tools.delete_cells_by_number(cell_list)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_success_only(result)
+
                 return [
                     TextContent(
                         type="text",
@@ -529,7 +645,9 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def apply_patch(old_text: str, new_text: str) -> List[TextContent]:
+        async def apply_patch(
+            old_text: str, new_text: str, detailed: bool = False
+        ) -> List[TextContent]:
             """Apply a patch to the current cell content.
 
             UNSAFE: This tool modifies the content of the currently active cell. Only available in unsafe mode.
@@ -538,6 +656,7 @@ class UnsafeToolRegistrar:
             Args:
                 old_text: Text to find and replace (cannot be empty)
                 new_text: Text to replace with (can be empty to delete text)
+                detailed: If False (default), return just success; if True, return full info
             """
             # Request consent if consent manager is available
             if self.consent_manager:
@@ -597,6 +716,11 @@ class UnsafeToolRegistrar:
 
             try:
                 result = await self.tools.apply_patch(old_text, new_text)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_success_only(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)

@@ -38,6 +38,77 @@ class NotebookToolRegistrar:
         self.safe_mode = safe_mode
         self.dangerous_mode = dangerous_mode
 
+    # ===== Concise mode helpers =====
+
+    def _to_concise_variable_info(self, info: dict) -> dict:
+        """Convert full variable info to concise format.
+
+        Concise: name, type, qcodes_instrument flag, brief repr (first 10 chars).
+        """
+        repr_full = info.get("repr", "")
+        brief_repr = repr_full[:10] + "..." if len(repr_full) > 10 else repr_full
+        return {
+            "name": info.get("name"),
+            "type": info.get("type"),
+            "qcodes_instrument": info.get("qcodes_instrument", False),
+            "repr": brief_repr,
+        }
+
+    def _to_concise_editing_cell(self, result: dict) -> dict:
+        """Convert full editing cell info to concise format.
+
+        Concise: cell_type, cell_index, cell_content.
+        """
+        return {
+            "cell_type": result.get("cell_type"),
+            "cell_index": result.get("cell_index"),
+            "cell_content": result.get("cell_content"),
+        }
+
+    def _to_concise_editing_cell_output(self, info: dict) -> dict:
+        """Convert full editing cell output to concise format.
+
+        Concise: status, message, outputs, has_output, has_error.
+        """
+        return {
+            "status": info.get("status"),
+            "message": info.get("message"),
+            "outputs": info.get("outputs") or info.get("output"),
+            "has_output": info.get("has_output", False),
+            "has_error": info.get("has_error", False),
+        }
+
+    def _to_concise_notebook_cells(self, result: dict) -> dict:
+        """Convert full notebook cells to concise format.
+
+        Concise: recent cells with cell_number, input (truncated), has_output, has_error, status.
+        """
+        concise_cells = []
+        for cell in result.get("cells", []):
+            input_text = cell.get("input", "")
+            truncated_input = (
+                input_text[:100] + "..." if len(input_text) > 100 else input_text
+            )
+            concise_cells.append(
+                {
+                    "cell_number": cell.get("cell_number"),
+                    "input": truncated_input,
+                    "has_output": cell.get("has_output", False),
+                    "has_error": cell.get("has_error", False),
+                    "status": cell.get("status"),
+                }
+            )
+        return {"cells": concise_cells, "count": len(concise_cells)}
+
+    def _to_concise_move_cursor(self, result: dict) -> dict:
+        """Convert full move cursor result to concise format.
+
+        Concise: success only.
+        """
+        return {"success": result.get("success", False)}
+
+    # ===== End concise mode helpers =====
+
     def _get_frontend_output(
         self, cell_number: int, timeout_s: float = 0.5
     ) -> Optional[dict]:
@@ -134,25 +205,36 @@ class NotebookToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def get_variable_info(name: str) -> List[TextContent]:
+        async def get_variable_info(
+            name: str, detailed: bool = False
+        ) -> List[TextContent]:
             """Get detailed information about a notebook variable.
 
             Args:
                 name: Variable name
+                detailed: If False (default), return concise summary; if True, return full info
             """
             start = time.perf_counter()
             try:
                 info = await self.tools.get_variable_info(name)
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
-                    "notebook_get_variable_info", {"name": name}, duration, "success"
+                    "notebook_get_variable_info",
+                    {"name": name, "detailed": detailed},
+                    duration,
+                    "success",
                 )
+
+                # Apply concise mode filtering
+                if not detailed:
+                    info = self._to_concise_variable_info(info)
+
                 return [TextContent(type="text", text=json.dumps(info, indent=2))]
             except Exception as e:
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
                     "notebook_get_variable_info",
-                    {"name": name},
+                    {"name": name, "detailed": detailed},
                     duration,
                     "error",
                     str(e),
@@ -181,6 +263,7 @@ class NotebookToolRegistrar:
             line_start: Optional[int] = None,
             line_end: Optional[int] = None,
             max_lines: int = 200,
+            detailed: bool = False,
         ) -> List[TextContent]:
             """Get the currently editing cell content from JupyterLab frontend.
 
@@ -192,6 +275,7 @@ class NotebookToolRegistrar:
                 line_start: Optional starting line number (1-indexed).
                 line_end: Optional ending line number (1-indexed, inclusive).
                 max_lines: Maximum number of lines to return (default: 200).
+                detailed: If False (default), return concise summary; if True, return full info
 
             Line selection logic:
                 - If both line_start and line_end are provided: return those lines exactly
@@ -206,6 +290,7 @@ class NotebookToolRegistrar:
                 "line_start": line_start,
                 "line_end": line_end,
                 "max_lines": max_lines,
+                "detailed": detailed,
             }
             try:
                 result = await self.tools.get_editing_cell(
@@ -216,6 +301,11 @@ class NotebookToolRegistrar:
                 )
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call("notebook_get_editing_cell", args, duration, "success")
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_editing_cell(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -245,13 +335,23 @@ class NotebookToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def get_editing_cell_output() -> List[TextContent]:
+        async def get_editing_cell_output(detailed: bool = False) -> List[TextContent]:
             """Get the output of the most recently executed cell, including errors.
 
             This tool retrieves the output from the last executed cell in the notebook.
             If a cell is currently running, it will indicate that status instead.
             If a cell raised an error, the error information will be included.
+
+            Args:
+                detailed: If False (default), return concise summary; if True, return full info
             """
+
+            def format_response(info: dict) -> List[TextContent]:
+                """Helper to format response with optional concise filtering."""
+                if not detailed:
+                    info = self._to_concise_editing_cell_output(info)
+                return [TextContent(type="text", text=json.dumps(info, indent=2))]
+
             try:
                 import sys
                 import traceback
@@ -283,11 +383,7 @@ class NotebookToolRegistrar:
                                 "has_error": False,
                                 "output": None,
                             }
-                            return [
-                                TextContent(
-                                    type="text", text=json.dumps(cell_info, indent=2)
-                                )
-                            ]
+                            return format_response(cell_info)
 
                         # Find the most recent completed cell (has both input and output)
                         for i in range(len(In) - 1, 0, -1):  # Start from most recent
@@ -310,12 +406,7 @@ class NotebookToolRegistrar:
                                             "has_output": True,
                                             "has_error": False,
                                         }
-                                        return [
-                                            TextContent(
-                                                type="text",
-                                                text=json.dumps(cell_info, indent=2),
-                                            )
-                                        ]
+                                        return format_response(cell_info)
                                 except Exception as e:
                                     logger.warning(
                                         f"Error extracting frontend output for cell {i}: {e}"
@@ -333,12 +424,7 @@ class NotebookToolRegistrar:
                                         "has_output": True,
                                         "has_error": False,
                                     }
-                                    return [
-                                        TextContent(
-                                            type="text",
-                                            text=json.dumps(cell_info, indent=2),
-                                        )
-                                    ]
+                                    return format_response(cell_info)
                                 elif i < current_execution_count:
                                     # Cell was executed but produced no output
                                     # Check if this was due to an error
@@ -391,12 +477,7 @@ class NotebookToolRegistrar:
                                             "has_output": False,
                                             "has_error": False,
                                         }
-                                    return [
-                                        TextContent(
-                                            type="text",
-                                            text=json.dumps(cell_info, indent=2),
-                                        )
-                                    ]
+                                    return format_response(cell_info)
 
                 # Fallback: no recent executed cells
                 result = {
@@ -406,7 +487,7 @@ class NotebookToolRegistrar:
                     "has_output": False,
                     "has_error": False,
                 }
-                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+                return format_response(result)
 
             except Exception as e:
                 logger.error(f"Error in get_editing_cell_output: {e}")
@@ -430,13 +511,14 @@ class NotebookToolRegistrar:
             },
         )
         async def get_notebook_cells(
-            num_cells: int = 2, include_output: bool = True
+            num_cells: int = 2, include_output: bool = True, detailed: bool = False
         ) -> List[TextContent]:
             """Get recent notebook cells with input, output, and error information.
 
             Args:
                 num_cells: Number of recent cells to retrieve (default: 2 for performance)
                 include_output: Include cell outputs and errors (default: True)
+                detailed: If False (default), return concise summary; if True, return full info
             """
             try:
                 import sys
@@ -593,6 +675,10 @@ class NotebookToolRegistrar:
                     "note": "Only the most recent error can be captured. Older errors are not available.",
                 }
 
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_notebook_cells(result)
+
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
             except Exception as e:
@@ -616,7 +702,7 @@ class NotebookToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def move_cursor(target: str) -> List[TextContent]:
+        async def move_cursor(target: str, detailed: bool = False) -> List[TextContent]:
             """Move cursor to a different cell in the notebook.
 
             Changes which cell is currently active (selected) in JupyterLab.
@@ -628,6 +714,7 @@ class NotebookToolRegistrar:
                        - "below": Move to cell below current
                        - "bottom": Move to the last cell in the notebook (by file order)
                        - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+                detailed: If False (default), return just success; if True, return full info
 
             Returns:
                 JSON with operation status, old index, and new index
@@ -640,6 +727,11 @@ class NotebookToolRegistrar:
             """
             try:
                 result = await self.tools.move_cursor(target)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_move_cursor(result)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
@@ -684,7 +776,7 @@ class NotebookToolRegistrar:
                 status = {
                     "status": "running",
                     "mode": mode,
-                    "tools_count": len(registered_tools),
+                    "dynamic_tools_count": len(registered_tools),
                     "tools": registered_tools[:20],  # Limit to first 20 for readability
                 }
 

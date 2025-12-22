@@ -6,6 +6,7 @@ and Jupyter notebook functionality without arbitrary code execution.
 """
 
 import asyncio
+import re
 import time
 import logging
 from typing import Dict, List, Any, Optional, Union
@@ -1046,8 +1047,13 @@ class QCodesReadOnlyTools:
             Dictionary with execution status AND output/error details
         """
         try:
-            # 1. Capture current execution count
+            # 1. Capture current execution count and cell text from bridge
             initial_count = getattr(self.ipython, "execution_count", 0)
+            # Get cell text from bridge snapshot BEFORE execution (most reliable)
+            bridge_snapshot = active_cell_bridge.get_active_cell()
+            cell_text_from_bridge = (
+                bridge_snapshot.get("text", "") if bridge_snapshot else ""
+            )
 
             # 2. Send execution request to frontend
             exec_result = active_cell_bridge.execute_active_cell()
@@ -1087,16 +1093,28 @@ class QCodesReadOnlyTools:
                 "warning": "UNSAFE: Code was executed in the active cell",
             }
 
-            # 6. Detect if a MeasureIt sweep was started
-            cell_input = output_result.get("input", "")
-            if ".start(" in cell_input or ".start()" in cell_input:
+            # 6. Detect if a MeasureIt sweep was started and extract sweep names
+            # Use bridge text (captured before execution) as fallback if IPython In[] is empty
+            cell_input = output_result.get("input", "") or cell_text_from_bridge
+            sweep_pattern = r"(\w+)\.start\s*\("
+            sweep_matches = re.findall(sweep_pattern, cell_input)
+
+            if sweep_matches:
                 combined_result["sweep_detected"] = True
-                combined_result["suggestion"] = (
-                    "A sweep appears to have been started (.start() detected). "
-                    "Use measureit_wait_for_sweep(variable_name) or "
-                    "measureit_wait_for_all_sweeps() to wait for completion before "
-                    "proceeding with subsequent operations."
-                )
+                combined_result["sweep_names"] = sweep_matches
+                if len(sweep_matches) == 1:
+                    combined_result["suggestion"] = (
+                        f"A sweep appears to have been started. "
+                        f"Use measureit_wait_for_sweep with sweep name "
+                        f"'{sweep_matches[0]}' to wait for completion."
+                    )
+                else:
+                    names = ", ".join(f"'{n}'" for n in sweep_matches)
+                    combined_result["suggestion"] = (
+                        f"Multiple sweeps appear to have been started ({names}). "
+                        f"Use measureit_wait_for_sweep with sweep names or "
+                        f"measureit_wait_for_all_sweeps() to wait for completion."
+                    )
 
             return combined_result
 

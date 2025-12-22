@@ -75,9 +75,11 @@ class TestQCodesToolRegistrar:
         # Register tools
         registrar.register_all()
 
-        # Call the registered tool
+        # Call the registered tool with detailed=True to get full response
         instrument_info_func = mock_mcp_server._tools["qcodes_instrument_info"]
-        result = await instrument_info_func(name="mock_dac", with_values=True)
+        result = await instrument_info_func(
+            name="mock_dac", with_values=True, detailed=True
+        )
 
         # Verify
         assert isinstance(result, list)
@@ -98,7 +100,9 @@ class TestQCodesToolRegistrar:
 
         registrar.register_all()
         instrument_info_func = mock_mcp_server._tools["qcodes_instrument_info"]
-        result = await instrument_info_func(name="mock_dac", with_values=False)
+        result = await instrument_info_func(
+            name="mock_dac", with_values=False, detailed=True
+        )
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_info
@@ -132,7 +136,7 @@ class TestQCodesToolRegistrar:
 
         registrar.register_all()
         get_values_func = mock_mcp_server._tools["qcodes_get_parameter_values"]
-        result = await get_values_func(queries=json.dumps(query))
+        result = await get_values_func(queries=json.dumps(query), detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_result
@@ -152,7 +156,7 @@ class TestQCodesToolRegistrar:
 
         registrar.register_all()
         get_values_func = mock_mcp_server._tools["qcodes_get_parameter_values"]
-        result = await get_values_func(queries=json.dumps(queries))
+        result = await get_values_func(queries=json.dumps(queries), detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_result
@@ -208,7 +212,9 @@ class TestQCodesToolRegistrar:
 
         registrar.register_all()
         instrument_info_func = mock_mcp_server._tools["qcodes_instrument_info"]
-        result = await instrument_info_func(name="mock_dac", with_values=True)
+        result = await instrument_info_func(
+            name="mock_dac", with_values=True, detailed=True
+        )
 
         response_data = json.loads(result[0].text)
         assert response_data == mock_info
