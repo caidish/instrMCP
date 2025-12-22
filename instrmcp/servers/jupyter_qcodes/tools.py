@@ -843,7 +843,7 @@ class QCodesReadOnlyTools:
                 "source": "error",
             }
 
-    def _get_cell_output(
+    async def _get_cell_output(
         self, cell_number: int, timeout_s: float = 0.5
     ) -> Optional[Dict[str, Any]]:
         """
@@ -866,107 +866,161 @@ class QCodesReadOnlyTools:
         if not result.get("success"):
             return None
 
-        # Wait a bit for response to arrive and be cached
-        time.sleep(0.1)
+        # Wait a bit for response to arrive and be cached (non-blocking)
+        await asyncio.sleep(0.1)
 
         # Check cache again
         return active_cell_bridge.get_cached_cell_output(cell_number)
 
-    async def _wait_for_execution_output(
-        self, target_execution_count: int, timeout: float = 30.0
+    async def _wait_for_execution(
+        self, initial_count: int, timeout: float = 30.0
     ) -> Dict[str, Any]:
-        """Wait for cell execution to complete and return output.
+        """Wait for cell execution to complete.
+
+        Two-phase approach:
+        1. Wait for execution_count to increase (execution started)
+        2. Wait for last_execution_result to change (execution completed)
+
+        The primary completion signal is `last_execution_result` identity change,
+        which is set at the END of IPython's run_cell. This handles all cells
+        including long-running silent ones (e.g., `time.sleep(10); x = 1`).
+
+        After completion is detected, a short grace period allows frontend
+        outputs to propagate before returning.
 
         Args:
-            target_execution_count: The execution count to wait for
+            initial_count: The execution_count before triggering execution
             timeout: Maximum seconds to wait (default: 30)
 
         Returns:
             Dictionary with execution status and output
         """
         import sys
-        import traceback
+        import traceback as tb_module
 
         start_time = time.time()
         poll_interval = 0.1  # 100ms
+        OUTPUT_GRACE = 0.2  # seconds to wait for frontend outputs after completion
 
-        # Track initial error state to detect new errors
-        initial_last_type = getattr(sys, "last_type", None)
+        # Capture initial state for identity comparison
+        initial_last_traceback = getattr(sys, "last_traceback", None)
+        initial_last_result = getattr(self.ipython, "last_execution_result", None)
+
+        target_count = None
+        completion_detected_time = None  # When last_execution_result changed
 
         while (time.time() - start_time) < timeout:
-            # Check IPython's In/Out cache
+            current_count = getattr(self.ipython, "execution_count", 0)
+
+            # Phase 1: Wait for execution to START
+            if target_count is None:
+                if current_count > initial_count:
+                    target_count = current_count
+                    # Execution started - continue to phase 2
+                else:
+                    await asyncio.sleep(poll_interval)
+                    continue
+
+            # Phase 2: Wait for execution to COMPLETE
             In = self.ipython.user_ns.get("In", [])
             Out = self.ipython.user_ns.get("Out", {})
+            cell_input = In[target_count] if target_count < len(In) else ""
 
-            # Check if execution has completed (In list grew)
-            if len(In) > target_execution_count:
-                cell_input = (
-                    In[target_execution_count]
-                    if target_execution_count < len(In)
-                    else ""
-                )
+            # Check 1: Error detected (compare traceback object identity, not type)
+            current_last_traceback = getattr(sys, "last_traceback", None)
+            if (
+                current_last_traceback is not None
+                and current_last_traceback is not initial_last_traceback
+            ):
+                # New error occurred - return immediately
+                error_type = getattr(sys, "last_type", None)
+                return {
+                    "status": "error",
+                    "has_error": True,
+                    "has_output": False,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "error_type": error_type.__name__ if error_type else "Unknown",
+                    "error_message": str(getattr(sys, "last_value", "")),
+                    "traceback": "".join(tb_module.format_tb(current_last_traceback)),
+                }
 
-                # Check for errors first (new error since we started)
-                current_last_type = getattr(sys, "last_type", None)
-                if (
-                    current_last_type is not None
-                    and current_last_type != initial_last_type
-                ):
-                    error_info = {
-                        "status": "error",
-                        "has_error": True,
-                        "has_output": False,
-                        "cell_number": target_execution_count,
-                        "input": cell_input,
-                        "error_type": (
-                            current_last_type.__name__
-                            if current_last_type
-                            else "Unknown"
-                        ),
-                        "error_message": str(getattr(sys, "last_value", "")),
-                    }
-                    # Try to get traceback
-                    if hasattr(sys, "last_traceback") and sys.last_traceback:
-                        try:
-                            error_info["traceback"] = "".join(
-                                traceback.format_tb(sys.last_traceback)
-                            )
-                        except Exception:
-                            pass
-                    return error_info
+            # Check 2: last_execution_result changed (primary completion signal)
+            current_last_result = getattr(self.ipython, "last_execution_result", None)
+            execution_completed = (
+                current_last_result is not None
+                and current_last_result is not initial_last_result
+            )
 
-                # Try frontend output first (has stdout, display_data, etc.)
-                frontend_output = self._get_cell_output(target_execution_count)
-                if frontend_output and frontend_output.get("has_output"):
+            if execution_completed and completion_detected_time is None:
+                completion_detected_time = time.time()
+
+            # Check 3: Frontend outputs populated
+            frontend_output = await self._get_cell_output(target_count)
+            if frontend_output:
+                outputs = frontend_output.get("outputs", [])
+
+                # Check if outputs contain an error
+                for output in outputs:
+                    if output.get("type") == "error":
+                        return {
+                            "status": "error",
+                            "has_error": True,
+                            "has_output": True,
+                            "cell_number": target_count,
+                            "input": cell_input,
+                            "error_type": output.get("ename", "Unknown"),
+                            "error_message": output.get("evalue", ""),
+                            "traceback": "\n".join(output.get("traceback", [])),
+                            "outputs": outputs,
+                        }
+
+                # Check if outputs contain data
+                if frontend_output.get("has_output"):
                     return {
                         "status": "completed",
                         "has_error": False,
                         "has_output": True,
-                        "cell_number": target_execution_count,
+                        "cell_number": target_count,
                         "input": cell_input,
-                        "outputs": frontend_output.get("outputs", []),
+                        "outputs": outputs,
                     }
 
-                # Fall back to Out cache (expression return values)
-                if target_execution_count in Out:
-                    return {
-                        "status": "completed",
-                        "has_error": False,
-                        "has_output": True,
-                        "cell_number": target_execution_count,
-                        "input": cell_input,
-                        "output": str(Out[target_execution_count]),
-                    }
+            # Check 4: Out cache populated (expression result)
+            if target_count in Out:
+                return {
+                    "status": "completed",
+                    "has_error": False,
+                    "has_output": True,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "output": str(Out[target_count]),
+                }
 
-                # Execution completed but no output (e.g., assignment statements)
+            # Check 5: Execution count advanced beyond target (another cell ran)
+            if current_count > target_count:
                 return {
                     "status": "completed",
                     "has_error": False,
                     "has_output": False,
-                    "cell_number": target_execution_count,
+                    "cell_number": target_count,
                     "input": cell_input,
                     "message": "Cell executed successfully with no output",
                 }
+
+            # Check 6: Completion detected + grace period elapsed (silent cell)
+            # Only return after execution_result changed AND grace period passed
+            if completion_detected_time is not None:
+                grace_elapsed = time.time() - completion_detected_time
+                if grace_elapsed >= OUTPUT_GRACE:
+                    return {
+                        "status": "completed",
+                        "has_error": False,
+                        "has_output": False,
+                        "cell_number": target_count,
+                        "input": cell_input,
+                        "message": "Cell executed (no output)",
+                    }
 
             await asyncio.sleep(poll_interval)
 
@@ -975,6 +1029,7 @@ class QCodesReadOnlyTools:
             "status": "timeout",
             "has_error": False,
             "has_output": False,
+            "cell_number": target_count or 0,
             "message": f"Timeout after {timeout}s waiting for execution to complete",
         }
 
@@ -991,9 +1046,8 @@ class QCodesReadOnlyTools:
             Dictionary with execution status AND output/error details
         """
         try:
-            # 1. Record pre-execution state
-            current_count = getattr(self.ipython, "execution_count", 0)
-            target_count = current_count  # This will be the next execution's count
+            # 1. Capture current execution count
+            initial_count = getattr(self.ipython, "execution_count", 0)
 
             # 2. Send execution request to frontend
             exec_result = active_cell_bridge.execute_active_cell()
@@ -1007,21 +1061,33 @@ class QCodesReadOnlyTools:
                 )
                 return exec_result
 
-            # 3. Wait for execution to complete and get output
-            output_result = await self._wait_for_execution_output(target_count, timeout)
+            # 3. Wait for execution to complete (polls execution_count)
+            output_result = await self._wait_for_execution(initial_count, timeout)
 
-            # 4. Combine results
+            # 4. Handle timeout
+            if output_result.get("status") == "timeout":
+                return {
+                    "success": True,
+                    "executed": True,
+                    "execution_count": 0,
+                    **output_result,
+                    "source": "execute_editing_cell",
+                    "bridge_status": active_cell_bridge.get_bridge_status(),
+                    "warning": "UNSAFE: Code was executed in the active cell",
+                }
+
+            # 5. Combine results
             combined_result = {
                 "success": True,
                 "executed": True,
-                "execution_count": target_count,
+                "execution_count": output_result.get("cell_number", 0),
                 **output_result,
                 "source": "execute_editing_cell",
                 "bridge_status": active_cell_bridge.get_bridge_status(),
                 "warning": "UNSAFE: Code was executed in the active cell",
             }
 
-            # 5. Detect if a MeasureIt sweep was started
+            # 6. Detect if a MeasureIt sweep was started
             cell_input = output_result.get("input", "")
             if ".start(" in cell_input or ".start()" in cell_input:
                 combined_result["sweep_detected"] = True
