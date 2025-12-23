@@ -146,7 +146,7 @@ class TestWaitForExecution:
 
         asyncio.create_task(simulate_execution())
 
-        async def mock_get_output(cell_number):
+        async def mock_get_output(cell_number, bypass_cache=False):
             return frontend_output
 
         with patch.object(tools, "_get_cell_output", side_effect=mock_get_output):
@@ -334,7 +334,7 @@ class TestWaitForExecution:
 
         asyncio.create_task(simulate_execution())
 
-        async def mock_get_output(cell_number):
+        async def mock_get_output(cell_number, bypass_cache=False):
             return frontend_output
 
         # Don't trigger sys.last_traceback check
@@ -433,6 +433,220 @@ class TestWaitForExecution:
         assert result["status"] == "completed"
         # Should have waited ~0.3s for execution + ~0.2s grace period
         assert (end - start) >= 0.4
+
+    @pytest.mark.asyncio
+    async def test_grace_period_uses_cache_only(self, tools, mock_ipython):
+        """Test that during grace period, only cache is checked (no frontend requests)."""
+        initial_count = 0
+        initial_result = None
+        mock_ipython.last_execution_result = initial_result
+
+        completion_detected = False
+        frontend_calls_after_completion = []
+
+        async def simulate_execution():
+            nonlocal completion_detected
+            await asyncio.sleep(0.05)
+            mock_ipython.execution_count = 1
+            mock_ipython.user_ns["In"].append("x = 1")
+            await asyncio.sleep(0.1)
+            completion_detected = True
+            mock_ipython.last_execution_result = MockExecutionResult(1, result=None)
+
+        asyncio.create_task(simulate_execution())
+
+        async def track_get_cell_output(cell_number, bypass_cache=False):
+            # Track calls made after completion
+            if completion_detected:
+                frontend_calls_after_completion.append(
+                    {"cell_number": cell_number, "bypass_cache": bypass_cache}
+                )
+            return None
+
+        with (
+            patch.object(
+                tools, "_get_cell_output", side_effect=track_get_cell_output
+            ) as mock_get,
+            patch(
+                "instrmcp.servers.jupyter_qcodes.tools.active_cell_bridge.get_cached_cell_output"
+            ) as mock_cache,
+        ):
+            mock_cache.return_value = None
+            result = await tools._wait_for_execution(initial_count, timeout=5.0)
+
+        assert result["status"] == "completed"
+
+        # Before completion: _get_cell_output called normally
+        # During grace period: NO calls to _get_cell_output (only cache checked)
+        # After grace period: ONE final call with bypass_cache=True
+
+        # Filter calls made after completion
+        calls_during_grace = [
+            c for c in frontend_calls_after_completion if not c["bypass_cache"]
+        ]
+        final_bypass_calls = [
+            c for c in frontend_calls_after_completion if c["bypass_cache"]
+        ]
+
+        # During grace period: should NOT call _get_cell_output (only cache)
+        assert len(calls_during_grace) == 0, (
+            "Expected no frontend calls during grace period, "
+            f"but got {len(calls_during_grace)} calls"
+        )
+
+        # After grace period: should have exactly ONE bypass_cache=True call
+        assert (
+            len(final_bypass_calls) == 1
+        ), f"Expected 1 final bypass call, got {len(final_bypass_calls)}"
+
+        # Verify cache was checked during grace period
+        assert mock_cache.called, "Cache should be checked during grace period"
+
+    @pytest.mark.asyncio
+    async def test_final_fetch_bypasses_cache(self, tools, mock_ipython):
+        """Test that final fetch after grace period uses bypass_cache=True."""
+        initial_count = 0
+        initial_result = None
+        mock_ipython.last_execution_result = initial_result
+
+        final_fetch_params = None
+
+        async def simulate_execution():
+            await asyncio.sleep(0.05)
+            mock_ipython.execution_count = 1
+            mock_ipython.user_ns["In"].append("x = 1")
+            await asyncio.sleep(0.1)
+            mock_ipython.last_execution_result = MockExecutionResult(1, result=None)
+
+        asyncio.create_task(simulate_execution())
+
+        call_count = 0
+
+        async def track_bypass_cache(cell_number, bypass_cache=False):
+            nonlocal final_fetch_params, call_count
+            call_count += 1
+            # Track the last call with bypass_cache=True
+            if bypass_cache:
+                final_fetch_params = {
+                    "cell_number": cell_number,
+                    "bypass_cache": bypass_cache,
+                    "call_order": call_count,
+                }
+            return None
+
+        with (
+            patch.object(
+                tools, "_get_cell_output", side_effect=track_bypass_cache
+            ) as mock_get,
+            patch(
+                "instrmcp.servers.jupyter_qcodes.tools.active_cell_bridge.get_cached_cell_output"
+            ) as mock_cache,
+        ):
+            mock_cache.return_value = None
+            result = await tools._wait_for_execution(initial_count, timeout=5.0)
+
+        assert result["status"] == "completed"
+
+        # Verify final fetch used bypass_cache=True
+        assert (
+            final_fetch_params is not None
+        ), "Expected a final fetch with bypass_cache=True"
+        assert final_fetch_params["bypass_cache"] is True
+        assert final_fetch_params["cell_number"] == 1
+
+    @pytest.mark.asyncio
+    async def test_final_fetch_only_once(self, tools, mock_ipython):
+        """Test that post_completion_fetch_done flag prevents duplicate final fetches."""
+        initial_count = 0
+        initial_result = None
+        mock_ipython.last_execution_result = initial_result
+
+        bypass_cache_calls = []
+
+        async def simulate_rapid_execution():
+            await asyncio.sleep(0.05)
+            mock_ipython.execution_count = 1
+            mock_ipython.user_ns["In"].append("x = 1")
+            await asyncio.sleep(0.1)
+            mock_ipython.last_execution_result = MockExecutionResult(1, result=None)
+            # Wait for grace period to elapse, then bump execution_count
+            await asyncio.sleep(0.6)  # Grace period (0.5s) + buffer
+            mock_ipython.execution_count = 2  # Trigger Check 5
+
+        asyncio.create_task(simulate_rapid_execution())
+
+        async def track_bypass_calls(cell_number, bypass_cache=False):
+            if bypass_cache:
+                bypass_cache_calls.append(
+                    {"cell_number": cell_number, "time": time.time()}
+                )
+            return None
+
+        with (
+            patch.object(tools, "_get_cell_output", side_effect=track_bypass_calls),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.tools.active_cell_bridge.get_cached_cell_output"
+            ) as mock_cache,
+        ):
+            mock_cache.return_value = None
+            result = await tools._wait_for_execution(initial_count, timeout=5.0)
+
+        assert result["status"] == "completed"
+
+        # Should have exactly ONE bypass_cache=True call, even though both
+        # Check 5 (execution_count > target) and Check 6 (grace elapsed) could trigger
+        assert (
+            len(bypass_cache_calls) == 1
+        ), f"Expected exactly 1 bypass call, got {len(bypass_cache_calls)}"
+
+    @pytest.mark.asyncio
+    async def test_late_output_captured_by_final_fetch(self, tools, mock_ipython):
+        """Test that outputs arriving after completion are captured by final fetch."""
+        initial_count = 0
+        initial_result = None
+        mock_ipython.last_execution_result = initial_result
+
+        # Simulate output that arrives late (during grace period)
+        late_output = None
+
+        async def simulate_execution_with_late_output():
+            nonlocal late_output
+            await asyncio.sleep(0.05)
+            mock_ipython.execution_count = 1
+            mock_ipython.user_ns["In"].append(
+                "import time; print('late'); time.sleep(0.01)"
+            )
+            await asyncio.sleep(0.1)
+            # Execution completes, but output hasn't arrived yet
+            mock_ipython.last_execution_result = MockExecutionResult(1, result=None)
+            # Output arrives during grace period (after completion)
+            await asyncio.sleep(0.2)
+            late_output = {
+                "has_output": True,
+                "outputs": [{"type": "stream", "name": "stdout", "text": "late\n"}],
+            }
+
+        asyncio.create_task(simulate_execution_with_late_output())
+
+        async def mock_get_output(cell_number, bypass_cache=False):
+            # Only return late output when bypass_cache=True (final fetch)
+            if bypass_cache:
+                return late_output
+            return None
+
+        with (
+            patch.object(tools, "_get_cell_output", side_effect=mock_get_output),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.tools.active_cell_bridge.get_cached_cell_output"
+            ) as mock_cache,
+        ):
+            mock_cache.return_value = None
+            result = await tools._wait_for_execution(initial_count, timeout=5.0)
+
+        # Late output should be captured by final fetch
+        assert result["status"] == "completed"
+        assert result["has_output"] is True
+        assert result["outputs"][0]["text"] == "late\n"
 
 
 class TestAsyncGetCellOutput:

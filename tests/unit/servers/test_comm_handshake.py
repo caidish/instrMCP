@@ -592,3 +592,142 @@ class TestCommHandshakeIntegration:
             result = get_active_cell()
             assert result is not None
             assert result["text"] == "print('test')"
+
+    def test_fresh_snapshot_metadata(self, fake_ipython, cleanup_active_cell_globals):
+        """Test that fresh snapshot returns stale=False, source='live' with valid age_ms."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ):
+            register_comm_target()
+
+            # Open comm and send snapshot
+            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "x = 42",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Get active cell (should be fresh)
+            result = get_active_cell()
+
+            # Verify fresh snapshot metadata
+            assert result is not None
+            assert result["stale"] is False
+            assert result["source"] == "live"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] >= 0
+            assert result["age_ms"] < 1000  # Should be very fresh
+            assert "stale_reason" not in result  # No stale reason for fresh data
+
+    def test_no_active_comms_fallback_metadata(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """Test that no active comms fallback returns stale=True, source='cache', stale_reason='no_active_comms'."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ):
+            register_comm_target()
+
+            # Open comm, send snapshot, then close comm
+            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "y = 100",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Close the comm so no active comms remain
+            comm.close()
+
+            # Wait a bit to ensure staleness
+            time.sleep(0.1)
+
+            # Request fresh data with fresh_ms requirement
+            result = get_active_cell(fresh_ms=50)
+
+            # Verify stale metadata due to no active comms
+            assert result is not None
+            assert result["stale"] is True
+            assert result["source"] == "cache"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] > 50  # Should be older than fresh_ms threshold
+            assert result["stale_reason"] == "no_active_comms"
+
+    def test_timeout_fallback_metadata(self, fake_ipython, cleanup_active_cell_globals):
+        """Test that timeout fallback returns stale=True, source='cache', stale_reason='timeout'."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ):
+            register_comm_target()
+
+            # Open comm and send initial snapshot
+            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "z = 200",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Wait to make snapshot stale
+            time.sleep(0.2)
+
+            # Request fresh data with a very short timeout (frontend won't respond in time)
+            # The comm is active but won't send a new snapshot, causing timeout
+            result = get_active_cell(fresh_ms=50, timeout_s=0.1)
+
+            # Verify stale metadata due to timeout
+            assert result is not None
+            assert result["stale"] is True
+            assert result["source"] == "cache"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] > 50  # Should be older than fresh_ms threshold
+            assert result["stale_reason"] == "timeout"

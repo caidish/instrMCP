@@ -473,7 +473,7 @@ class QCodesReadOnlyTools:
         key = self._make_cache_key(instrument_name, parameter_name)
         now = time.time()
 
-        # Check cache first
+        # Check cache first (fast path for non-fresh reads)
         cached = await self.cache.get(key)
 
         if not fresh and cached:
@@ -486,17 +486,24 @@ class QCodesReadOnlyTools:
                 "stale": False,
             }
 
-        # Check rate limiting
-        if cached and not await self.rate_limiter.can_access(instrument_name):
-            value, timestamp = cached
-            return {
-                "value": value,
-                "timestamp": timestamp,
-                "age_seconds": now - timestamp,
-                "source": "cache",
-                "stale": True,
-                "message": f"Rate limited (min interval: {self.min_interval_s}s)",
-            }
+        # Check rate limiting BEFORE any live read (applies to all live reads)
+        can_access = await self.rate_limiter.can_access(instrument_name)
+
+        if not can_access:
+            # Rate limited - return cached value if available
+            if cached:
+                value, timestamp = cached
+                return {
+                    "value": value,
+                    "timestamp": timestamp,
+                    "age_seconds": now - timestamp,
+                    "source": "cache",
+                    "stale": True,
+                    "rate_limited": True,
+                    "message": f"Rate limited (min interval: {self.min_interval_s}s)",
+                }
+            # No cache - must wait for rate limit before reading
+            # (fall through to live read which will wait_if_needed)
 
         # Read fresh value from hardware
         try:
@@ -845,7 +852,7 @@ class QCodesReadOnlyTools:
             }
 
     async def _get_cell_output(
-        self, cell_number: int, timeout_s: float = 0.5
+        self, cell_number: int, timeout_s: float = 0.5, bypass_cache: bool = False
     ) -> Optional[Dict[str, Any]]:
         """
         Request and retrieve cell output from JupyterLab frontend.
@@ -853,14 +860,17 @@ class QCodesReadOnlyTools:
         Args:
             cell_number: Execution count of the cell
             timeout_s: Timeout for waiting for response
+            bypass_cache: If True, skip cache and always request fresh from frontend.
+                         Use this for final fetch to ensure late outputs are captured.
 
         Returns:
             Dictionary with output data or None if not available
         """
-        # First check cache
-        cached = active_cell_bridge.get_cached_cell_output(cell_number)
-        if cached:
-            return cached
+        # First check cache (unless bypassing)
+        if not bypass_cache:
+            cached = active_cell_bridge.get_cached_cell_output(cell_number)
+            if cached:
+                return cached
 
         # Request from frontend
         result = active_cell_bridge.get_cell_outputs([cell_number], timeout_s=timeout_s)
@@ -872,6 +882,56 @@ class QCodesReadOnlyTools:
 
         # Check cache again
         return active_cell_bridge.get_cached_cell_output(cell_number)
+
+    def _process_frontend_output(
+        self,
+        frontend_output: Optional[Dict[str, Any]],
+        target_count: int,
+        cell_input: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Process frontend output and return result dict if error or output found.
+
+        Args:
+            frontend_output: Output from frontend (may be None)
+            target_count: Cell execution count
+            cell_input: Cell source code
+
+        Returns:
+            Result dict if error or output found, None otherwise
+        """
+        if not frontend_output:
+            return None
+
+        outputs = frontend_output.get("outputs", [])
+
+        # Check if outputs contain an error
+        for output in outputs:
+            if output.get("type") == "error":
+                return {
+                    "status": "error",
+                    "has_error": True,
+                    "has_output": True,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "error_type": output.get("ename", "Unknown"),
+                    "error_message": output.get("evalue", ""),
+                    "traceback": "\n".join(output.get("traceback", [])),
+                    "outputs": outputs,
+                }
+
+        # Check if outputs contain data
+        if frontend_output.get("has_output"):
+            return {
+                "status": "completed",
+                "has_error": False,
+                "has_output": True,
+                "cell_number": target_count,
+                "input": cell_input,
+                "outputs": outputs,
+            }
+
+        return None
 
     async def _wait_for_execution(
         self, initial_count: int, timeout: float = 30.0
@@ -901,7 +961,7 @@ class QCodesReadOnlyTools:
 
         start_time = time.time()
         poll_interval = 0.1  # 100ms
-        OUTPUT_GRACE = 0.2  # seconds to wait for frontend outputs after completion
+        OUTPUT_GRACE = 0.5  # seconds to wait for frontend outputs after completion
 
         # Capture initial state for identity comparison
         initial_last_traceback = getattr(sys, "last_traceback", None)
@@ -909,6 +969,7 @@ class QCodesReadOnlyTools:
 
         target_count = None
         completion_detected_time = None  # When last_execution_result changed
+        post_completion_fetch_done = False  # Track if we've done final frontend fetch
 
         while (time.time() - start_time) < timeout:
             current_count = getattr(self.ipython, "execution_count", 0)
@@ -956,36 +1017,25 @@ class QCodesReadOnlyTools:
             if execution_completed and completion_detected_time is None:
                 completion_detected_time = time.time()
 
-            # Check 3: Frontend outputs populated
-            frontend_output = await self._get_cell_output(target_count)
-            if frontend_output:
-                outputs = frontend_output.get("outputs", [])
+            # Check 3: Frontend outputs
+            # Strategy: Before completion, poll frontend. After completion, only check
+            # cache during grace period to avoid spamming frontend. After grace elapses,
+            # do ONE final frontend fetch to catch late outputs.
+            if completion_detected_time is None:
+                # Before completion: poll frontend as usual
+                frontend_output = await self._get_cell_output(target_count)
+            else:
+                # After completion: only check cache (no new frontend requests)
+                frontend_output = active_cell_bridge.get_cached_cell_output(
+                    target_count
+                )
 
-                # Check if outputs contain an error
-                for output in outputs:
-                    if output.get("type") == "error":
-                        return {
-                            "status": "error",
-                            "has_error": True,
-                            "has_output": True,
-                            "cell_number": target_count,
-                            "input": cell_input,
-                            "error_type": output.get("ename", "Unknown"),
-                            "error_message": output.get("evalue", ""),
-                            "traceback": "\n".join(output.get("traceback", [])),
-                            "outputs": outputs,
-                        }
-
-                # Check if outputs contain data
-                if frontend_output.get("has_output"):
-                    return {
-                        "status": "completed",
-                        "has_error": False,
-                        "has_output": True,
-                        "cell_number": target_count,
-                        "input": cell_input,
-                        "outputs": outputs,
-                    }
+            # Process frontend output (check for errors or data)
+            result = self._process_frontend_output(
+                frontend_output, target_count, cell_input
+            )
+            if result:
+                return result
 
             # Check 4: Out cache populated (expression result)
             if target_count in Out:
@@ -999,7 +1049,18 @@ class QCodesReadOnlyTools:
                 }
 
             # Check 5: Execution count advanced beyond target (another cell ran)
+            # Do final fetch before returning to catch any late outputs
             if current_count > target_count:
+                if not post_completion_fetch_done:
+                    post_completion_fetch_done = True
+                    final_output = await self._get_cell_output(
+                        target_count, bypass_cache=True
+                    )
+                    result = self._process_frontend_output(
+                        final_output, target_count, cell_input
+                    )
+                    if result:
+                        return result
                 return {
                     "status": "completed",
                     "has_error": False,
@@ -1010,10 +1071,23 @@ class QCodesReadOnlyTools:
                 }
 
             # Check 6: Completion detected + grace period elapsed (silent cell)
-            # Only return after execution_result changed AND grace period passed
+            # After grace period, do ONE final frontend fetch to catch late outputs
             if completion_detected_time is not None:
                 grace_elapsed = time.time() - completion_detected_time
                 if grace_elapsed >= OUTPUT_GRACE:
+                    # Final frontend fetch after grace period (only once)
+                    if not post_completion_fetch_done:
+                        post_completion_fetch_done = True
+                        final_output = await self._get_cell_output(
+                            target_count, bypass_cache=True
+                        )
+                        result = self._process_frontend_output(
+                            final_output, target_count, cell_input
+                        )
+                        if result:
+                            return result
+
+                    # No output after final fetch - return completed with no output
                     return {
                         "status": "completed",
                         "has_error": False,

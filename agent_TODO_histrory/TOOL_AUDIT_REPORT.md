@@ -12,7 +12,7 @@
 Systematic audit of MCP tools in the jupyter_qcodes server. After verification against actual code:
 
 - **Critical**: ~~1 confirmed issue (error signal handling)~~ ✅ **FIXED** (2025-12-23)
-- **High**: 3 confirmed issues (polling, staleness, rate limiting)
+- **High**: ~~3 issues (grace period polling, stale snapshot, rate limiting)~~ ✅ **ALL FIXED** (2025-12-23)
 - **Medium**: 4 issues (security considerations, assumptions)
 - **Low**: Several code quality observations
 
@@ -326,9 +326,9 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
 | Priority | Issue | Location | Impact |
 |----------|-------|----------|--------|
 | ✅ ~~Critical~~ | ~~**Error signals ignored in output**~~ | `notebook_tools.py:397-442` | **FIXED** (2025-12-23): Now checks `output_type="error"` and `type="error"` in outputs array |
-| 🔴 High | **Grace period spams frontend** | `tools.py:900-1020` | Polls `get_cell_outputs` every 100ms even after completion detected; fixed short grace period misses late outputs |
-| 🔴 High | **Stale snapshot not marked** | `active_cell_bridge.py:60-140` | Returns old snapshot when no active comms, without staleness indicator → callers mistake stale for live |
-| 🔴 High | **Rate limit bypass on first read** | `tools.py:460-540` | Rate limiting only applies when cache exists; first read always goes live, bypassing hardware minimum intervals |
+| ✅ ~~High~~ | ~~**Grace period spams frontend**~~ | `tools.py:900-1070` | **FIXED** (2025-12-23): After completion, uses cache-only reads during grace period; one final frontend fetch after grace elapses; grace increased to 0.5s |
+| ✅ ~~High~~ | ~~**Stale snapshot not marked**~~ | `active_cell_bridge.py:138-245` | **FIXED** (2025-12-23): Added `stale`, `source`, `age_ms`, and `stale_reason` metadata to all return paths |
+| ✅ ~~High~~ | ~~**Rate limit bypass on first read**~~ | `tools.py:463-542` | **FIXED** (2025-12-23): Rate limiting now checked unconditionally before all live reads; added `rate_limited` flag |
 | ⚠️ Medium | LLM JSON correction could inject code | `dynamic_registrar.py` | Security (requires malicious LLM) |
 | ⚠️ Medium | No sandboxing for dynamic tools | `dynamic_registrar.py` | Security (user-controlled) |
 | ⚠️ Medium | IPython In[] assumptions | Multiple files | Functional |
@@ -350,9 +350,9 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
 1. ~~**Fix error detection in get_editing_cell_output**: Check `outputs` array for `type: "error"` and set `has_error=True` accordingly~~ ✅ **FIXED** (2025-12-23)
 
 ### Short-term Improvements (High)
-2. **Stop polling after completion**: In `_wait_for_execution`, don't call `get_cell_outputs` during grace period
-3. **Mark stale snapshots**: In `get_active_cell`, add `"stale": True` flag when returning old snapshot due to no active comms
-4. **Apply rate limit on first read**: Check rate limit BEFORE checking cache, not only when cache exists
+2. ~~**Stop polling after completion**: In `_wait_for_execution`, don't call `get_cell_outputs` during grace period~~ ✅ **FIXED** (2025-12-23)
+3. ~~**Mark stale snapshots**: In `get_active_cell`, add `"stale": True` flag when returning old snapshot due to no active comms~~ ✅ **FIXED** (2025-12-23)
+4. ~~**Apply rate limit on first read**: Check rate limit BEFORE checking cache, not only when cache exists~~ ✅ **FIXED** (2025-12-23)
 
 ### Consider (Medium)
 5. **Add sandboxing for dynamic tools**: Restrict namespace access for dynamically registered tools (user-controlled risk)
@@ -376,3 +376,6 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
   - Fixed inflated issue counts in executive summary
 - **Fixes Applied**:
   - 2025-12-23: Fixed critical "Error signals ignored in output" bug in `notebook_tools.py:397-442` - now properly detects `output_type="error"` and `type="error"` in frontend outputs and sets `has_error=True` with error details
+  - 2025-12-23: Fixed high "Grace period spams frontend" bug in `tools.py:900-1070` - after completion detected, uses cache-only reads during grace period; single final frontend fetch after grace elapses; increased grace period from 0.2s to 0.5s
+  - 2025-12-23: Fixed high "Stale snapshot not marked" bug in `active_cell_bridge.py:138-245` - added `_wrap_snapshot_with_metadata()` helper; all return paths now include `stale`, `source`, `age_ms`, and optional `stale_reason` metadata
+  - 2025-12-23: Fixed high "Rate limit bypass on first read" bug in `tools.py:463-542` - rate limiting now checked unconditionally before all live reads; if rate limited with no cache, waits for rate limit; added `rate_limited` flag to response

@@ -5,6 +5,7 @@ Handles communication between JupyterLab frontend and kernel to capture
 the currently editing cell content via Jupyter comm protocol.
 """
 
+import copy
 import time
 import threading
 import logging
@@ -135,6 +136,41 @@ def request_frontend_snapshot():
             logger.debug(f"Failed to send request to comm {comm.comm_id}: {e}")
 
 
+def _wrap_snapshot_with_metadata(
+    snapshot: Optional[Dict[str, Any]],
+    stale: bool,
+    source: str,
+    age_ms: float,
+    stale_reason: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Wrap a snapshot with staleness metadata.
+
+    Args:
+        snapshot: The snapshot dict to wrap (will be deep copied)
+        stale: Whether the data is stale
+        source: "live" (fresh enough to use) or "cache" (stale/fallback).
+                Note: "live" means data meets freshness threshold, not necessarily
+                that it was just fetched from frontend.
+        age_ms: Age of the snapshot in milliseconds
+        stale_reason: Reason for staleness (e.g., "no_active_comms", "timeout")
+
+    Returns:
+        Deep copy of snapshot with metadata added, or None if snapshot is None
+    """
+    if snapshot is None:
+        return None
+
+    # Use deepcopy to prevent mutations from corrupting the cached _LAST_SNAPSHOT
+    result = copy.deepcopy(snapshot)
+    result["stale"] = stale
+    result["source"] = source
+    result["age_ms"] = age_ms
+    if stale_reason:
+        result["stale_reason"] = stale_reason
+    return result
+
+
 def get_active_cell(
     fresh_ms: Optional[int] = None, timeout_s: float = 0.3
 ) -> Optional[Dict[str, Any]]:
@@ -147,7 +183,12 @@ def get_active_cell(
         timeout_s: How long to wait for fresh data from frontend (default 0.3s)
 
     Returns:
-        Dictionary with cell information or None if no data available
+        Dictionary with cell information or None if no data available.
+        Includes metadata fields:
+        - stale (bool): Whether the data is stale
+        - source (str): "live" or "cache"
+        - age_ms (float): Age of the snapshot in milliseconds
+        - stale_reason (str, optional): Reason for staleness if stale=True
     """
     now = time.time()
 
@@ -156,16 +197,28 @@ def get_active_cell(
             # No snapshot yet, try requesting from frontend
             pass
         else:
-            age_ms = (now - _LAST_TS) * 1000 if _LAST_TS else float("inf")
-            if fresh_ms is None or age_ms <= fresh_ms:
+            age_ms = (now - _LAST_TS) * 1000 if _LAST_TS else None
+            # Snapshot is fresh if: no freshness required OR (age is known AND within threshold)
+            if fresh_ms is None or (age_ms is not None and age_ms <= fresh_ms):
                 # Snapshot is fresh enough
-                return _LAST_SNAPSHOT.copy()
+                return _wrap_snapshot_with_metadata(
+                    _LAST_SNAPSHOT, stale=False, source="live", age_ms=age_ms
+                )
 
     # Need fresh data - request from frontends and wait
     if not _ACTIVE_COMMS:
         logger.debug("No active comms available for fresh data request")
         with _STATE_LOCK:
-            return _LAST_SNAPSHOT.copy() if _LAST_SNAPSHOT else None
+            if _LAST_SNAPSHOT is None:
+                return None
+            age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
+            return _wrap_snapshot_with_metadata(
+                _LAST_SNAPSHOT,
+                stale=True,
+                source="cache",
+                age_ms=age_ms,
+                stale_reason="no_active_comms",
+            )
 
     # Request fresh data
     request_frontend_snapshot()
@@ -177,13 +230,24 @@ def get_active_cell(
 
         with _STATE_LOCK:
             if _LAST_SNAPSHOT is not None:
-                age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else float("inf")
-                if fresh_ms is None or age_ms <= fresh_ms:
-                    return _LAST_SNAPSHOT.copy()
+                age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
+                if fresh_ms is None or (age_ms is not None and age_ms <= fresh_ms):
+                    return _wrap_snapshot_with_metadata(
+                        _LAST_SNAPSHOT, stale=False, source="live", age_ms=age_ms
+                    )
 
-    # Timeout - return what we have
+    # Timeout - return what we have (marked as stale)
     with _STATE_LOCK:
-        return _LAST_SNAPSHOT.copy() if _LAST_SNAPSHOT else None
+        if _LAST_SNAPSHOT is None:
+            return None
+        age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
+        return _wrap_snapshot_with_metadata(
+            _LAST_SNAPSHOT,
+            stale=True,
+            source="cache",
+            age_ms=age_ms,
+            stale_reason="timeout",
+        )
 
 
 def get_bridge_status() -> Dict[str, Any]:
