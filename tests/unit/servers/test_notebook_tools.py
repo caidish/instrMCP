@@ -494,6 +494,97 @@ class TestNotebookToolRegistrar:
         assert response_data["has_output"] is True
 
     @pytest.mark.asyncio
+    async def test_get_editing_cell_output_with_frontend_error(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test that frontend error outputs are correctly detected and flagged.
+
+        This tests the fix for the critical bug where frontend outputs with
+        output_type='error' were incorrectly treated as success (has_error=False).
+        """
+        # Setup IPython with no Out dict entry
+        mock_ipython.user_ns = {
+            "In": ["", "1/0"],  # Division by zero
+            "Out": {},
+        }
+        mock_ipython.execution_count = 2
+
+        # Mock the frontend output response with an error output
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {
+                            "output_type": "error",
+                            "ename": "ZeroDivisionError",
+                            "evalue": "division by zero",
+                            "traceback": [
+                                "---------------------------------------------------------------------------",
+                                "ZeroDivisionError                         Traceback (most recent call last)",
+                                "Cell In[1], line 1\n----> 1 1/0",
+                                "ZeroDivisionError: division by zero",
+                            ],
+                        }
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func(detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["cell_number"] == 1
+        assert response_data["status"] == "error"
+        assert response_data["has_error"] is True
+        assert response_data["has_output"] is True
+        assert "error" in response_data
+        assert response_data["error"]["type"] == "ZeroDivisionError"
+        assert response_data["error"]["message"] == "division by zero"
+
+    @pytest.mark.asyncio
+    async def test_get_editing_cell_output_with_type_error_format(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test that type='error' format (alternative to output_type) is also detected."""
+        # Setup IPython with no Out dict entry
+        mock_ipython.user_ns = {
+            "In": ["", "raise ValueError('test')"],
+            "Out": {},
+        }
+        mock_ipython.execution_count = 2
+
+        # Mock the frontend output with type='error' instead of output_type='error'
+        def mock_get_frontend_output(cell_number):
+            if cell_number == 1:
+                return {
+                    "has_output": True,
+                    "outputs": [
+                        {
+                            "type": "error",
+                            "ename": "ValueError",
+                            "evalue": "test",
+                            "traceback": ["ValueError: test"],
+                        }
+                    ],
+                }
+            return None
+
+        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+
+        registrar.register_all()
+        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        result = await get_output_func(detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["status"] == "error"
+        assert response_data["has_error"] is True
+        assert response_data["error"]["type"] == "ValueError"
+
+    @pytest.mark.asyncio
     async def test_get_notebook_cells_with_stdout_capture(
         self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
     ):

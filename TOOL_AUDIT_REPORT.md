@@ -11,7 +11,7 @@
 
 Systematic audit of MCP tools in the jupyter_qcodes server. After verification against actual code:
 
-- **Critical**: 1 confirmed issue (error signal handling)
+- **Critical**: ~~1 confirmed issue (error signal handling)~~ ✅ **FIXED** (2025-12-23)
 - **High**: 3 confirmed issues (polling, staleness, rate limiting)
 - **Medium**: 4 issues (security considerations, assumptions)
 - **Low**: Several code quality observations
@@ -325,7 +325,7 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
 
 | Priority | Issue | Location | Impact |
 |----------|-------|----------|--------|
-| 🔴 Critical | **Error signals ignored in output** | `notebook_tools.py:360-440` | Frontend `type: "error"` outputs treated as success (`has_error=False`) |
+| ✅ ~~Critical~~ | ~~**Error signals ignored in output**~~ | `notebook_tools.py:397-442` | **FIXED** (2025-12-23): Now checks `output_type="error"` and `type="error"` in outputs array |
 | 🔴 High | **Grace period spams frontend** | `tools.py:900-1020` | Polls `get_cell_outputs` every 100ms even after completion detected; fixed short grace period misses late outputs |
 | 🔴 High | **Stale snapshot not marked** | `active_cell_bridge.py:60-140` | Returns old snapshot when no active comms, without staleness indicator → callers mistake stale for live |
 | 🔴 High | **Rate limit bypass on first read** | `tools.py:460-540` | Rate limiting only applies when cache exists; first read always goes live, bypassing hardware minimum intervals |
@@ -347,7 +347,7 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
 ## Recommendations
 
 ### Immediate Actions (Critical)
-1. **Fix error detection in get_editing_cell_output**: Check `outputs` array for `type: "error"` and set `has_error=True` accordingly
+1. ~~**Fix error detection in get_editing_cell_output**: Check `outputs` array for `type: "error"` and set `has_error=True` accordingly~~ ✅ **FIXED** (2025-12-23)
 
 ### Short-term Improvements (High)
 2. **Stop polling after completion**: In `_wait_for_execution`, don't call `get_cell_outputs` during grace period
@@ -367,10 +367,12 @@ Systematic audit of MCP tools in the jupyter_qcodes server. After verification a
 
 ## Audit Notes
 
-- **Last Updated**: 2025-12-22
+- **Last Updated**: 2025-12-23
 - **Verification Status**: Reviewed and corrected after code verification
 - **Corrections Made**:
   - Removed false claim about `dynamic_update_tool` lacking rollback (it does roll back)
   - Downgraded "silent stale fallback" - actually includes stale/source/error fields
   - Downgraded `visited.discard()` - intentional design trade-off, not a bug
   - Fixed inflated issue counts in executive summary
+- **Fixes Applied**:
+  - 2025-12-23: Fixed critical "Error signals ignored in output" bug in `notebook_tools.py:397-442` - now properly detects `output_type="error"` and `type="error"` in frontend outputs and sets `has_error=True` with error details

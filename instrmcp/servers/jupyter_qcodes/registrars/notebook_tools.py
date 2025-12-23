@@ -394,18 +394,51 @@ class NotebookToolRegistrar:
                                     if frontend_output and frontend_output.get(
                                         "has_output"
                                     ):
+                                        # Check outputs array for error-type entries
+                                        outputs = frontend_output.get("outputs", [])
+                                        has_error_output = any(
+                                            out.get("type") == "error"
+                                            or out.get("output_type") == "error"
+                                            for out in outputs
+                                        )
+
+                                        # Extract error details if present
+                                        error_info = None
+                                        if has_error_output:
+                                            for out in outputs:
+                                                if (
+                                                    out.get("type") == "error"
+                                                    or out.get("output_type") == "error"
+                                                ):
+                                                    error_info = {
+                                                        "type": out.get(
+                                                            "ename", "UnknownError"
+                                                        ),
+                                                        "message": out.get(
+                                                            "evalue", ""
+                                                        ),
+                                                        "traceback": "\n".join(
+                                                            out.get("traceback", [])
+                                                        ),
+                                                    }
+                                                    break
+
                                         # Return the complete output structure
                                         cell_info = {
                                             "cell_number": i,
                                             "execution_count": i,
                                             "input": In[i],
-                                            "status": "completed",
-                                            "outputs": frontend_output.get(
-                                                "outputs", []
+                                            "status": (
+                                                "error"
+                                                if has_error_output
+                                                else "completed"
                                             ),
+                                            "outputs": outputs,
                                             "has_output": True,
-                                            "has_error": False,
+                                            "has_error": has_error_output,
                                         }
+                                        if error_info:
+                                            cell_info["error"] = error_info
                                         return format_response(cell_info)
                                 except Exception as e:
                                     logger.warning(
