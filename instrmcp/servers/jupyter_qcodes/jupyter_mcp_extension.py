@@ -82,10 +82,24 @@ def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
 
 
 # Single source of truth for available options
-VALID_OPTIONS: Dict[str, str] = {
-    "measureit": "Enable MeasureIt sweep tools",
-    "database": "Enable database tools",
-    "auto_correct_json": "Auto-correct malformed JSON",
+# Each option has: description, requires_mode (None = no mode requirement)
+VALID_OPTIONS: Dict[str, Dict[str, Any]] = {
+    "measureit": {
+        "description": "Enable MeasureIt sweep tools",
+        "requires_mode": None,
+    },
+    "database": {
+        "description": "Enable database tools",
+        "requires_mode": None,
+    },
+    "dynamictool": {
+        "description": "Enable dynamic tool creation (requires dangerous mode)",
+        "requires_mode": "dangerous",
+    },
+    "auto_correct_json": {
+        "description": "Auto-correct malformed JSON in dynamic tools",
+        "requires_mode": None,
+    },
 }
 
 
@@ -177,7 +191,12 @@ def _get_current_config() -> dict:
         "mode": mode_info["mode"],
         "enabled_options": sorted(_enabled_options),
         "available_options": [
-            {"name": k, "description": v} for k, v in VALID_OPTIONS.items()
+            {
+                "name": k,
+                "description": v["description"],
+                "requires_mode": v.get("requires_mode"),
+            }
+            for k, v in VALID_OPTIONS.items()
         ],
         "dangerous": _dangerous_mode,
         "server_running": server_running,
@@ -238,10 +257,23 @@ def _do_set_mode(mode: str, announce: bool = False) -> str:
 
 def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
     """Enable/disable an option, mirror to running server, and broadcast."""
-    if option not in VALID_OPTIONS:
+    option_info = VALID_OPTIONS.get(option)
+    if not option_info:
         raise ValueError(
             f"Invalid option '{option}'. Valid options: {', '.join(sorted(VALID_OPTIONS))}"
         )
+
+    # Block enable if mode requirement not met
+    requires_mode = option_info.get("requires_mode")
+    if enabled and requires_mode:
+        current_mode = (
+            "dangerous" if _dangerous_mode else ("safe" if _desired_mode else "unsafe")
+        )
+        if current_mode != requires_mode:
+            raise ValueError(
+                f"Option '{option}' requires {requires_mode} mode. "
+                f"Current mode: {current_mode}. Switch to {requires_mode} mode first."
+            )
 
     changed = False
     if enabled and option not in _enabled_options:
@@ -711,8 +743,13 @@ class MCPMagics(Magics):
                 f"   Enabled options: {', '.join(sorted(_enabled_options)) if _enabled_options else 'None'}"
             )
             print("   Available options:")
-            for name, desc in VALID_OPTIONS.items():
-                print(f"   - {name}: {desc}")
+            for name, info in VALID_OPTIONS.items():
+                req = (
+                    f" (requires {info['requires_mode']} mode)"
+                    if info.get("requires_mode")
+                    else ""
+                )
+                print(f"   - {name}: {info['description']}{req}")
             print()
             print("   Usage:")
             print("   %mcp_option add measureit database    # Add multiple options")

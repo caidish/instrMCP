@@ -3,16 +3,20 @@
 **Date**: 2025-12-22
 **Auditor**: Claude Code
 **Scope**: All MCP tools in `instrmcp/servers/jupyter_qcodes/`
+**Status**: Reviewed and corrected based on code verification
 
 ---
 
 ## Executive Summary
 
-Systematic audit of 40+ MCP tools revealed **20 potential issues** categorized by severity:
-- **Critical**: 5 issues (security, data integrity)
-- **High**: 5 issues (functional correctness)
-- **Medium**: 5 issues (robustness)
-- **Low**: 5 issues (code quality)
+Systematic audit of MCP tools in the jupyter_qcodes server. After verification against actual code:
+
+- **Critical**: 1 confirmed issue (error signal handling)
+- **High**: 3 confirmed issues (polling, staleness, rate limiting)
+- **Medium**: 4 issues (security considerations, assumptions)
+- **Low**: Several code quality observations
+
+**Note**: Initial audit contained errors that were corrected after code review. See "Corrections from Initial Audit" section.
 
 ---
 
@@ -317,39 +321,56 @@ Systematic audit of 40+ MCP tools revealed **20 potential issues** categorized b
 
 ---
 
-## Critical Issues Summary
+## Critical Issues Summary (Verified)
 
 | Priority | Issue | Location | Impact |
 |----------|-------|----------|--------|
-| 🔴 Critical | LLM JSON correction could inject code | `dynamic_registrar.py:401-470` | Security |
-| 🔴 Critical | No sandboxing for dynamic tools | `dynamic_registrar.py:228-285` | Security |
-| 🔴 Critical | Fragile 6-signal execution detection | `tools.py:_wait_for_execution` | Data integrity |
-| 🔴 Critical | Identity comparison for completion | `tools.py:953` | Functional |
-| 🔴 Critical | Race: snapshot after initial_count | `tools.py:1051-1053` | Data integrity |
-| 🔴 High | Silent stale cache fallback | `tools.py:524-533` | Data integrity |
-| 🔴 High | Visited set logic bug | `tools.py:273` | Performance |
-| 🔴 High | IPython In[] assumptions | Multiple files | Functional |
-| 🔴 High | Fire-and-forget bridge commands | `active_cell_bridge.py` | Reliability |
-| 🔴 High | Unregister-before-test pattern | `dynamic_registrar.py:844-850` | Data integrity |
+| 🔴 Critical | **Error signals ignored in output** | `notebook_tools.py:360-440` | Frontend `type: "error"` outputs treated as success (`has_error=False`) |
+| 🔴 High | **Grace period spams frontend** | `tools.py:900-1020` | Polls `get_cell_outputs` every 100ms even after completion detected; fixed short grace period misses late outputs |
+| 🔴 High | **Stale snapshot not marked** | `active_cell_bridge.py:60-140` | Returns old snapshot when no active comms, without staleness indicator → callers mistake stale for live |
+| 🔴 High | **Rate limit bypass on first read** | `tools.py:460-540` | Rate limiting only applies when cache exists; first read always goes live, bypassing hardware minimum intervals |
+| ⚠️ Medium | LLM JSON correction could inject code | `dynamic_registrar.py` | Security (requires malicious LLM) |
+| ⚠️ Medium | No sandboxing for dynamic tools | `dynamic_registrar.py` | Security (user-controlled) |
+| ⚠️ Medium | IPython In[] assumptions | Multiple files | Functional |
+| ⚠️ Medium | Fire-and-forget bridge commands | `active_cell_bridge.py` | Reliability |
+
+### Corrections from Initial Audit
+
+| Original Claim | Correction |
+|----------------|------------|
+| `dynamic_update_tool` has no rollback | ❌ **Wrong**: Code at lines 834-868 DOES roll back by re-registering old spec if new registration fails |
+| "Silent stale fallback" in `get_parameter_values` | ❌ **Overstated**: Error paths set `stale: True`, `source: "cache"`, and include error message - not silent |
+| `visited.discard()` is a cycle bug | ❌ **Overstated**: Intentional design to prevent deep cycles while allowing revisit via other paths. Trade-off, not bug. May repeat work but not infinite loop |
 
 ---
 
 ## Recommendations
 
-### Immediate Actions
-1. **Fix execution detection**: Simplify to use single reliable signal (execution_result change) with proper timeout
-2. **Fix bridge snapshot timing**: Capture snapshot BEFORE initial_count in execute_editing_cell
-3. **Add sandboxing**: Dynamic tools should execute in restricted namespace
-4. **Remove LLM JSON correction**: Or add strict validation of corrected output
+### Immediate Actions (Critical)
+1. **Fix error detection in get_editing_cell_output**: Check `outputs` array for `type: "error"` and set `has_error=True` accordingly
 
-### Short-term Improvements
-5. **Fix visited set logic**: Don't discard from visited set after processing
-6. **Add explicit staleness indicators**: When returning cached/old data, clearly mark it
-7. **Add frontend confirmation**: Bridge commands should wait for ACK
-8. **Add timeouts to wait functions**: `wait_for_sweep()` needs max timeout
+### Short-term Improvements (High)
+2. **Stop polling after completion**: In `_wait_for_execution`, don't call `get_cell_outputs` during grace period
+3. **Mark stale snapshots**: In `get_active_cell`, add `"stale": True` flag when returning old snapshot due to no active comms
+4. **Apply rate limit on first read**: Check rate limit BEFORE checking cache, not only when cache exists
 
-### Long-term Refactoring
-9. **Simplify execution detection**: Current 6-signal approach is fragile
-10. **Unify output sources**: Decide on single source of truth (frontend vs IPython)
-11. **Add cache TTL and size limits**: Prevent unbounded growth
-12. **Improve error propagation**: Don't hide errors in concise mode
+### Consider (Medium)
+5. **Add sandboxing for dynamic tools**: Restrict namespace access for dynamically registered tools (user-controlled risk)
+6. **Simplify execution detection**: Current multi-signal approach is complex - consider single reliable signal
+7. **Unify output sources**: Decide on single source of truth (frontend outputs vs IPython Out[])
+
+### Long-term (Low)
+8. **Add cache TTL and size limits**: Prevent unbounded cache growth
+9. **Add frontend confirmation**: Bridge commands should wait for ACK before returning success
+
+---
+
+## Audit Notes
+
+- **Last Updated**: 2025-12-22
+- **Verification Status**: Reviewed and corrected after code verification
+- **Corrections Made**:
+  - Removed false claim about `dynamic_update_tool` lacking rollback (it does roll back)
+  - Downgraded "silent stale fallback" - actually includes stale/source/error fields
+  - Downgraded `visited.discard()` - intentional design trade-off, not a bug
+  - Fixed inflated issue counts in executive summary

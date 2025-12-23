@@ -148,8 +148,8 @@ class JupyterMCPServer:
             database_registrar.register_all()
 
         # Dynamic tool creation (meta-tools)
-        # Only available in unsafe mode
-        if not self.safe_mode:
+        # Requires dangerous mode AND explicit opt-in via %mcp_option dynamictool
+        if self.dangerous_mode and "dynamictool" in self.enabled_options:
             auto_correct_json = "auto_correct_json" in self.enabled_options
             # Consent is enabled by default, can be bypassed via INSTRMCP_CONSENT_BYPASS=1
             # In dangerous mode, bypass all consent dialogs

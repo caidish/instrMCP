@@ -6,6 +6,7 @@ export type MCPMode = 'safe' | 'unsafe' | 'dangerous';
 export interface MCPOptionInfo {
   name: string;
   description?: string;
+  requires_mode?: MCPMode;  // null/undefined = no mode requirement
 }
 
 export interface MCPState {

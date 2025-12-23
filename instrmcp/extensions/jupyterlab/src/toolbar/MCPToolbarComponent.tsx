@@ -36,6 +36,7 @@ const MCPToolbarComponent: React.FC<Props> = ({
         options={state.availableOptions}
         enabledOptions={state.enabledOptions}
         disabled={state.serverRunning}
+        currentMode={state.mode}
         onToggle={onToggleOption}
       />
       <button

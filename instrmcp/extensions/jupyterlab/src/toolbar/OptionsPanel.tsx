@@ -1,11 +1,12 @@
 import React from 'react';
 import { GearIcon } from './icons';
-import { MCPOptionInfo } from './types';
+import { MCPMode, MCPOptionInfo } from './types';
 
 interface Props {
   options: MCPOptionInfo[];
   enabledOptions: string[];
   disabled?: boolean;
+  currentMode: MCPMode;
   onToggle: (option: string, enabled: boolean) => void;
 }
 
@@ -13,6 +14,7 @@ const OptionsPanel: React.FC<Props> = ({
   options,
   enabledOptions,
   disabled = false,
+  currentMode,
   onToggle
 }) => {
   const [open, setOpen] = React.useState(false);
@@ -22,6 +24,24 @@ const OptionsPanel: React.FC<Props> = ({
       setOpen(false);
     }
   }, [disabled]);
+
+  // Check if an option should be disabled based on mode requirements
+  const isOptionDisabled = (option: MCPOptionInfo): boolean => {
+    if (disabled) return true;
+    if (option.requires_mode && option.requires_mode !== currentMode) {
+      return true;
+    }
+    return false;
+  };
+
+  // Build tooltip with mode requirement info
+  const getOptionTitle = (option: MCPOptionInfo): string => {
+    let title = option.description || option.name;
+    if (option.requires_mode && option.requires_mode !== currentMode) {
+      title += ` (requires ${option.requires_mode} mode)`;
+    }
+    return title;
+  };
 
   return (
     <div className="mcp-options">
@@ -42,13 +62,13 @@ const OptionsPanel: React.FC<Props> = ({
           {options.map(option => (
             <label
               key={option.name}
-              className="mcp-option-item"
-              title={option.description || option.name}
+              className={`mcp-option-item${isOptionDisabled(option) ? ' disabled' : ''}`}
+              title={getOptionTitle(option)}
             >
               <input
                 type="checkbox"
                 checked={enabledOptions.includes(option.name)}
-                disabled={disabled}
+                disabled={isOptionDisabled(option)}
                 onChange={evt => onToggle(option.name, evt.target.checked)}
               />
               <span>{option.name}</span>

@@ -70,7 +70,9 @@ When adding/removing MCP tools, update ALL of these:
 - **Unsafe Mode**: Allows code execution (`--unsafe` flag or `%mcp_unsafe` magic)
 - **Dangerous Mode**: Unsafe mode with all consent dialogs auto-approved (`%mcp_dangerous` magic)
 
-Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`, `dynamic_register_tool`, `dynamic_update_tool`. In dangerous mode, all consents are automatically approved.
+Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
+
+**Dynamic Tools** (opt-in, requires dangerous mode): Enable with `%mcp_option dynamictool` while in dangerous mode. Tools: `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`. These tools allow runtime creation and execution of arbitrary code.
 
 ### JupyterLab Extension
 Located in `instrmcp/extensions/jupyterlab/`. After modifying TypeScript:
@@ -90,7 +92,7 @@ All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_get_e
 **Unsafe Notebook:** `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`
 **MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_wait_for_all_sweeps`
 **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
-**Dynamic Tools:** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
+**Dynamic Tools (opt-in via `dynamictool`, requires dangerous mode):** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
 
 See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 
@@ -107,6 +109,7 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 %mcp_dangerous                  # Switch to dangerous mode (auto-approve all consents)
 %mcp_option measureit           # Enable MeasureIt
 %mcp_option database            # Enable database tools
+%mcp_option dynamictool         # Enable dynamic tools (requires dangerous mode)
 %mcp_option -measureit          # Disable MeasureIt
 ```
 
