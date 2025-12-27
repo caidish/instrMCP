@@ -26,7 +26,7 @@ flake8 instrmcp/ tests/ --max-line-length=127     # Style warnings (non-blocking
 mypy instrmcp/ --ignore-missing-imports           # Type check (non-blocking)
 ```
 
-**Testing:**
+**Testing:** (Only perform it when explicitly asked)
 ```bash
 pytest                                              # All tests
 pytest -v                                           # Verbose
@@ -120,5 +120,4 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
-- [ ] Run `pytest` to verify tests pass
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)

@@ -8,13 +8,15 @@
 
 ## Critical Bugs (High Priority)
 
-### 1. `notebook_delete_cell` - Deletes Multiple Cells Instead of Selected One
+[Fixed]
+### 1. `notebook_delete_cell` - Deletes Multiple Cells Instead of Selected One 
 - **Location**: Part 3.5, Step 7
 - **Severity**: CRITICAL
 - **Issue**: Delete cell will delete recent 2-5 cells instead of the selected one
 - **Expected**: Should delete only the currently selected/active cell
 - **Note**: `notebook_delete_cells` works fine (by design it only deletes those with `cell_numbers`/executed cells). The current editing cell delete is broken.
 
+[Fixed]
 ### 2. `notebook_apply_patch` - Applies Multiple Times
 - **Location**: Part 3.7, Step 5-6
 - **Severity**: CRITICAL

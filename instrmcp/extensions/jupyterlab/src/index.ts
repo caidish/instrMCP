@@ -1421,7 +1421,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
             };
 
             // Open comm and wait for it to be ready
-            await comm.open({}).done;
+            // FIX: Send kernel_id to backend for proper comm-to-kernel association
+            // This prevents operations from being broadcast to all notebooks
+            await comm.open({ kernel_id: kernel.id }).done;
 
             // Mark comm as successfully opened
             openedComms.set(kernel, true);

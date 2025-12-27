@@ -18,15 +18,102 @@ logger = logging.getLogger(__name__)
 _STATE_LOCK = threading.Lock()
 _LAST_SNAPSHOT: Optional[Dict[str, Any]] = None
 _LAST_TS = 0.0
-_ACTIVE_COMMS = set()
+# FIX: Changed from set() to Dict to track comm-to-kernel association
+# This prevents broadcasting to ALL comms - only sends to the current kernel's comm
+_KERNEL_COMM_MAP: Dict[str, Any] = {}  # kernel_id -> comm (one-to-one mapping)
 _CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}  # {exec_count: output_data}
 
 
+def _get_kernel_id() -> Optional[str]:
+    """
+    Get the kernel ID for the current IPython session.
+
+    IMPORTANT: This must return the same ID that JupyterLab's frontend uses
+    (kernel.id), which is the UUID from the connection file name.
+
+    The connection file is typically named: kernel-<UUID>.json
+    JupyterLab uses this UUID as kernel.id.
+
+    Returns:
+        Kernel ID string or None if not in IPython context
+    """
+    import re
+
+    ip = get_ipython()
+    if ip and hasattr(ip, "kernel") and ip.kernel:
+        # Method 1: Extract UUID from connection file (matches JupyterLab's kernel.id)
+        try:
+            from ipykernel import get_connection_file
+
+            connection_file = get_connection_file()
+            # Connection file format: /path/to/kernel-<UUID>.json
+            match = re.search(r"kernel-([a-f0-9-]+)\.json", connection_file)
+            if match:
+                return match.group(1)
+        except Exception as e:
+            logger.debug(f"Could not extract kernel ID from connection file: {e}")
+
+        # Method 2: Try kernel's ident (some versions expose this)
+        ident = getattr(ip.kernel, "ident", None)
+        if ident:
+            return str(ident)
+
+        # Method 3: Fallback to session.session (may not match frontend)
+        session = getattr(ip.kernel, "session", None)
+        if session:
+            session_id = getattr(session, "session", None)
+            if session_id:
+                logger.warning(
+                    f"Using session.session as kernel_id ({session_id}). "
+                    "This may not match frontend's kernel.id."
+                )
+                return str(session_id)
+
+        # Last resort: use object id (will definitely not match frontend)
+        logger.warning("Using object id as kernel_id - frontend matching will fail")
+        return f"kernel_{id(ip.kernel)}"
+    return None
+
+
 def _on_comm_open(comm, open_msg):
-    """Handle new comm connection from frontend."""
+    """
+    Handle new comm connection from frontend.
+
+    FIX: Now registers comm with kernel ID instead of adding to global set.
+    This ensures operations only target the correct kernel's frontend.
+    """
     logger.debug(f"🔌 NEW COMM OPENED: {comm.comm_id}")
-    _ACTIVE_COMMS.add(comm)
-    logger.debug(f"📊 Active comms count: {len(_ACTIVE_COMMS)}")
+
+    # Get kernel_id from open message (sent by frontend) or detect at runtime
+    data = open_msg.get("content", {}).get("data", {})
+    kernel_id = data.get("kernel_id") or _get_kernel_id()
+
+    if not kernel_id:
+        logger.warning(
+            "⚠️ Cannot register comm: no kernel_id available. "
+            "Operations may fail until kernel is identified."
+        )
+        # Still set up handlers but without kernel association
+        kernel_id = f"unknown_{comm.comm_id}"
+
+    with _STATE_LOCK:
+        # Close existing comm for this kernel (clean replacement)
+        old_comm = _KERNEL_COMM_MAP.get(kernel_id)
+        if old_comm and old_comm != comm:
+            logger.debug(f"♻️ Replacing existing comm for kernel {kernel_id}")
+            try:
+                old_comm.close()
+            except Exception as e:
+                logger.debug(f"Failed to close old comm: {e}")
+        _KERNEL_COMM_MAP[kernel_id] = comm
+
+    logger.debug(
+        f"📊 Registered comm for kernel: {kernel_id} "
+        f"(total kernels: {len(_KERNEL_COMM_MAP)})"
+    )
+
+    # Store kernel_id on the comm for use in close handler
+    comm._mcp_kernel_id = kernel_id
 
     def _on_msg(msg):
         """Handle incoming messages from frontend."""
@@ -104,9 +191,18 @@ def _on_comm_open(comm, open_msg):
             logger.warning(f"❓ UNKNOWN MESSAGE TYPE: {msg_type}, data: {data}")
 
     def _on_close(msg):
-        """Handle comm close."""
-        logger.debug(f"Comm closed: {comm.comm_id}")
-        _ACTIVE_COMMS.discard(comm)
+        """Handle comm close - remove from kernel mapping."""
+        kernel_id = getattr(comm, "_mcp_kernel_id", None)
+        logger.debug(f"Comm closed: {comm.comm_id} (kernel: {kernel_id})")
+
+        with _STATE_LOCK:
+            # Only remove if this comm is still the registered one for this kernel
+            if kernel_id and _KERNEL_COMM_MAP.get(kernel_id) == comm:
+                del _KERNEL_COMM_MAP[kernel_id]
+                logger.debug(
+                    f"🗑️ Removed comm for kernel {kernel_id} "
+                    f"(remaining kernels: {len(_KERNEL_COMM_MAP)})"
+                )
 
     comm.on_msg(_on_msg)
     comm.on_close(_on_close)
@@ -127,13 +223,99 @@ def register_comm_target():
 
 
 def request_frontend_snapshot():
-    """Request fresh snapshot from all connected frontends."""
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send({"type": "request_current"})
-            logger.debug(f"Sent request_current to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(f"Failed to send request to comm {comm.comm_id}: {e}")
+    """Request fresh snapshot from current kernel's frontend."""
+    kernel_id = _get_kernel_id()
+    if not kernel_id:
+        logger.debug("Cannot request snapshot: no kernel_id")
+        return
+
+    with _STATE_LOCK:
+        comm = _KERNEL_COMM_MAP.get(kernel_id)
+
+    if not comm:
+        logger.debug(f"Cannot request snapshot: no comm for kernel {kernel_id}")
+        return
+
+    try:
+        comm.send({"type": "request_current"})
+        logger.debug(f"Sent request_current to comm {comm.comm_id}")
+    except Exception as e:
+        logger.debug(f"Failed to send request to comm {comm.comm_id}: {e}")
+
+
+def _send_to_kernel(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Send a message to the current kernel's comm only.
+
+    This is the core fix for bugs #1 and #2 - instead of broadcasting to ALL
+    comms (which caused operations to repeat N times), we now send to only
+    the comm associated with the current kernel.
+
+    Args:
+        payload: Message payload (type, request_id, and operation-specific data)
+
+    Returns:
+        Result dict with success status, request_id, kernel_id, or error
+    """
+    import uuid
+
+    kernel_id = _get_kernel_id()
+    if not kernel_id:
+        return {
+            "success": False,
+            "error": "Cannot identify current kernel - are you in a Jupyter notebook?",
+        }
+
+    with _STATE_LOCK:
+        comm = _KERNEL_COMM_MAP.get(kernel_id)
+
+    if not comm:
+        return {
+            "success": False,
+            "error": f"No active frontend connection for kernel {kernel_id}",
+            "kernel_id": kernel_id,
+            "hint": "Ensure the JupyterLab extension is loaded and connected",
+        }
+
+    # Add request_id if not present
+    if "request_id" not in payload:
+        payload["request_id"] = str(uuid.uuid4())
+
+    try:
+        comm.send(payload)
+        return {
+            "success": True,
+            "message": f"{payload.get('type', 'unknown')} request sent",
+            "request_id": payload["request_id"],
+            "kernel_id": kernel_id,
+        }
+    except Exception as e:
+        logger.error(f"Failed to send {payload.get('type')}: {e}")
+        # Clean up dead comm
+        with _STATE_LOCK:
+            if _KERNEL_COMM_MAP.get(kernel_id) == comm:
+                del _KERNEL_COMM_MAP[kernel_id]
+                logger.debug(f"Removed dead comm for kernel {kernel_id}")
+        return {
+            "success": False,
+            "error": f"Send failed: {e}",
+            "kernel_id": kernel_id,
+        }
+
+
+def _get_current_comm() -> Optional[Any]:
+    """
+    Get the comm for the current kernel (for read operations).
+
+    Returns:
+        Comm object or None if not available
+    """
+    kernel_id = _get_kernel_id()
+    if not kernel_id:
+        return None
+
+    with _STATE_LOCK:
+        return _KERNEL_COMM_MAP.get(kernel_id)
 
 
 def _wrap_snapshot_with_metadata(
@@ -205,9 +387,10 @@ def get_active_cell(
                     _LAST_SNAPSHOT, stale=False, source="live", age_ms=age_ms
                 )
 
-    # Need fresh data - request from frontends and wait
-    if not _ACTIVE_COMMS:
-        logger.debug("No active comms available for fresh data request")
+    # Need fresh data - request from current kernel's frontend
+    comm = _get_current_comm()
+    if not comm:
+        logger.debug("No active comm available for fresh data request")
         with _STATE_LOCK:
             if _LAST_SNAPSHOT is None:
                 return None
@@ -255,7 +438,9 @@ def get_bridge_status() -> Dict[str, Any]:
     with _STATE_LOCK:
         return {
             "comm_target_registered": True,  # If this function is called, target is registered
-            "active_comms": len(_ACTIVE_COMMS),
+            "active_kernels": len(_KERNEL_COMM_MAP),
+            "kernel_ids": list(_KERNEL_COMM_MAP.keys()),
+            "current_kernel_id": _get_kernel_id(),
             "has_snapshot": _LAST_SNAPSHOT is not None,
             "last_snapshot_age_s": time.time() - _LAST_TS if _LAST_TS else None,
             "snapshot_summary": (
@@ -280,6 +465,8 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Update the content of the currently active cell in JupyterLab frontend.
 
+    FIX: Now sends to only the current kernel's comm instead of all comms.
+
     Args:
         content: New content to set in the active cell
         timeout_s: How long to wait for response from frontend (default 2.0s)
@@ -287,49 +474,19 @@ def update_active_cell(content: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     Returns:
         Dictionary with update status and response details
     """
-    import uuid
+    result = _send_to_kernel({"type": "update_cell", "content": content})
 
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
+    if result["success"]:
+        result["content_length"] = len(content)
 
-    request_id = str(uuid.uuid4())
-
-    # Send update request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send(
-                {"type": "update_cell", "content": content, "request_id": request_id}
-            )
-            successful_sends += 1
-            logger.debug(f"Sent update_cell request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(f"Failed to send update request to comm {comm.comm_id}: {e}")
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send update request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
-        }
-
-    return {
-        "success": True,
-        "message": f"Update request sent to {successful_sends} frontend(s)",
-        "content_length": len(content),
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-    }
+    return result
 
 
 def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
     """
     Execute the currently active cell in JupyterLab frontend.
+
+    FIX: Now sends to only the current kernel's comm instead of all comms.
 
     Args:
         timeout_s: How long to wait for response from frontend (default 5.0s)
@@ -337,44 +494,12 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
     Returns:
         Dictionary with execution status and response details
     """
-    import uuid
+    result = _send_to_kernel({"type": "execute_cell"})
 
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
+    if result["success"]:
+        result["warning"] = "UNSAFE: Code execution was requested in active cell"
 
-    request_id = str(uuid.uuid4())
-
-    # Send execution request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send({"type": "execute_cell", "request_id": request_id})
-            successful_sends += 1
-            logger.debug(f"Sent execute_cell request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(
-                f"Failed to send execution request to comm {comm.comm_id}: {e}"
-            )
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send execution request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
-        }
-
-    return {
-        "success": True,
-        "message": f"Execution request sent to {successful_sends} frontend(s)",
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-        "warning": "UNSAFE: Code execution was requested in active cell",
-    }
+    return result
 
 
 def add_new_cell(
@@ -386,6 +511,8 @@ def add_new_cell(
     """
     Add a new cell relative to the currently active cell in JupyterLab frontend.
 
+    FIX: Now sends to only the current kernel's comm instead of all comms.
+
     Args:
         cell_type: Type of cell to create ("code", "markdown", "raw")
         position: Position relative to active cell ("above", "below")
@@ -395,20 +522,9 @@ def add_new_cell(
     Returns:
         Dictionary with creation status and response details
     """
-    import uuid
-
     logger.debug(
         f"🚀 ADD_NEW_CELL called: type={cell_type}, position={position}, content_len={len(content)}"
     )
-    logger.debug(f"📊 Active comms available: {len(_ACTIVE_COMMS)}")
-
-    if not _ACTIVE_COMMS:
-        logger.error("❌ NO ACTIVE COMMS - cannot send add_cell message")
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
 
     # Validate parameters
     valid_types = {"code", "markdown", "raw"}
@@ -426,62 +542,31 @@ def add_new_cell(
             "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}",
         }
 
-    request_id = str(uuid.uuid4())
-
-    # Send add cell request to all active comms
-    successful_sends = 0
-    logger.debug(f"📤 SENDING add_cell message to {len(_ACTIVE_COMMS)} comm(s)")
-
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            # Check if comm is still valid
-            if hasattr(comm, "comm_id") and hasattr(comm, "send"):
-                message = {
-                    "type": "add_cell",
-                    "cell_type": cell_type,
-                    "position": position,
-                    "content": content,
-                    "request_id": request_id,
-                }
-                logger.debug(f"📤 Sending to comm {comm.comm_id}: {message}")
-                comm.send(message)
-                successful_sends += 1
-                logger.debug(
-                    f"✅ Successfully sent add_cell request to comm {comm.comm_id}"
-                )
-            else:
-                logger.warning("⚠️ Comm appears invalid, removing from active list")
-                _ACTIVE_COMMS.discard(comm)
-        except Exception as e:
-            logger.error(
-                f"❌ Failed to send add cell request to comm {comm.comm_id}: {e}"
-            )
-            # Remove failed comm from active list
-            _ACTIVE_COMMS.discard(comm)
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send add cell request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
+    result = _send_to_kernel(
+        {
+            "type": "add_cell",
+            "cell_type": cell_type,
+            "position": position,
+            "content": content,
         }
+    )
 
-    return {
-        "success": True,
-        "message": f"Add cell request sent to {successful_sends} frontend(s)",
-        "cell_type": cell_type,
-        "position": position,
-        "content_length": len(content),
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-        "warning": "UNSAFE: New cell was added to notebook",
-    }
+    if result["success"]:
+        result["cell_type"] = cell_type
+        result["position"] = position
+        result["content_length"] = len(content)
+        result["warning"] = "UNSAFE: New cell was added to notebook"
+
+    return result
 
 
 def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Delete the currently active cell in JupyterLab frontend.
+
+    FIX: Now sends to only the current kernel's comm instead of all comms.
+    This is the primary fix for Bug #1 - previously this function would send
+    delete requests to ALL connected frontends, causing 2-5 cells to be deleted.
 
     Args:
         timeout_s: How long to wait for response from frontend (default 2.0s)
@@ -489,49 +574,22 @@ def delete_editing_cell(timeout_s: float = 2.0) -> Dict[str, Any]:
     Returns:
         Dictionary with deletion status and response details
     """
-    import uuid
+    result = _send_to_kernel({"type": "delete_cell"})
 
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
+    if result["success"]:
+        result["warning"] = "UNSAFE: Cell was deleted from notebook"
 
-    request_id = str(uuid.uuid4())
-
-    # Send delete cell request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send({"type": "delete_cell", "request_id": request_id})
-            successful_sends += 1
-            logger.debug(f"Sent delete_cell request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(
-                f"Failed to send delete cell request to comm {comm.comm_id}: {e}"
-            )
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send delete cell request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
-        }
-
-    return {
-        "success": True,
-        "message": f"Delete cell request sent to {successful_sends} frontend(s)",
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cell was deleted from notebook",
-    }
+    return result
 
 
 def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Apply a simple text replacement patch to the currently active cell.
+
+    FIX: Now sends to only the current kernel's comm instead of all comms.
+    This is the primary fix for Bug #2 - previously this function would send
+    patch requests to ALL connected frontends, causing the patch to apply
+    multiple times (e.g., "y = 2" -> "y = 200" became "y = 2000000").
 
     This function replaces the first occurrence of old_text with new_text
     in the active cell content.
@@ -544,54 +602,23 @@ def apply_patch(old_text: str, new_text: str, timeout_s: float = 2.0) -> Dict[st
     Returns:
         Dictionary with patch status and response details
     """
-    import uuid
-
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
-
     if not old_text:
         return {"success": False, "error": "old_text parameter cannot be empty"}
 
-    request_id = str(uuid.uuid4())
-
-    # Send patch request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send(
-                {
-                    "type": "apply_patch",
-                    "old_text": old_text,
-                    "new_text": new_text,
-                    "request_id": request_id,
-                }
-            )
-            successful_sends += 1
-            logger.debug(f"Sent apply_patch request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(f"Failed to send patch request to comm {comm.comm_id}: {e}")
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send patch request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
+    result = _send_to_kernel(
+        {
+            "type": "apply_patch",
+            "old_text": old_text,
+            "new_text": new_text,
         }
+    )
 
-    return {
-        "success": True,
-        "message": f"Patch request sent to {successful_sends} frontend(s)",
-        "old_text_length": len(old_text),
-        "new_text_length": len(new_text),
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cell content was modified via patch",
-    }
+    if result["success"]:
+        result["old_text_length"] = len(old_text)
+        result["new_text_length"] = len(new_text)
+        result["warning"] = "UNSAFE: Cell content was modified via patch"
+
+    return result
 
 
 def delete_cells_by_number(
@@ -599,6 +626,8 @@ def delete_cells_by_number(
 ) -> Dict[str, Any]:
     """
     Delete multiple cells by their execution count numbers.
+
+    FIX: Now sends to only the current kernel's comm instead of all comms.
 
     This function sends a request to the JupyterLab frontend to delete cells
     identified by their execution counts.
@@ -610,55 +639,24 @@ def delete_cells_by_number(
     Returns:
         Dictionary with deletion status and detailed results for each cell
     """
-    import uuid
-
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
-
     if not isinstance(cell_numbers, list) or len(cell_numbers) == 0:
         return {"success": False, "error": "cell_numbers must be a non-empty list"}
 
-    request_id = str(uuid.uuid4())
-
-    # Send delete cells by number request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send(
-                {
-                    "type": "delete_cells_by_number",
-                    "cell_numbers": cell_numbers,
-                    "request_id": request_id,
-                }
-            )
-            successful_sends += 1
-            logger.debug(f"Sent delete_cells_by_number request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(
-                f"Failed to send delete_cells_by_number request to comm {comm.comm_id}: {e}"
-            )
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send delete request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
+    result = _send_to_kernel(
+        {
+            "type": "delete_cells_by_number",
+            "cell_numbers": cell_numbers,
         }
+    )
 
-    return {
-        "success": True,
-        "message": f"Delete request sent to {successful_sends} frontend(s)",
-        "cell_numbers": cell_numbers,
-        "total_requested": len(cell_numbers),
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-        "warning": "UNSAFE: Cells deletion requested - check notebook for results",
-    }
+    if result["success"]:
+        result["cell_numbers"] = cell_numbers
+        result["total_requested"] = len(cell_numbers)
+        result["warning"] = (
+            "UNSAFE: Cells deletion requested - check notebook for results"
+        )
+
+    return result
 
 
 def get_cached_cell_output(cell_number: int) -> Optional[Dict[str, Any]]:
@@ -679,6 +677,8 @@ def get_cell_outputs(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[st
     """
     Get outputs for specific cells from the JupyterLab frontend.
 
+    FIX: Now sends to only the current kernel's comm instead of all comms.
+
     Retrieves cell outputs (stdout, stderr, execute_result, errors) from
     the notebook model in the JupyterLab frontend.
 
@@ -689,58 +689,27 @@ def get_cell_outputs(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[st
     Returns:
         Dictionary with outputs for each requested cell number
     """
-    import uuid
-
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
-
     if not isinstance(cell_numbers, list) or len(cell_numbers) == 0:
         return {"success": False, "error": "cell_numbers must be a non-empty list"}
 
-    request_id = str(uuid.uuid4())
-
-    # Send get outputs request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send(
-                {
-                    "type": "get_cell_outputs",
-                    "cell_numbers": cell_numbers,
-                    "request_id": request_id,
-                }
-            )
-            successful_sends += 1
-            logger.debug(f"Sent get_cell_outputs request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(
-                f"Failed to send get_cell_outputs request to comm {comm.comm_id}: {e}"
-            )
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send get outputs request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
+    result = _send_to_kernel(
+        {
+            "type": "get_cell_outputs",
+            "cell_numbers": cell_numbers,
         }
+    )
 
-    return {
-        "success": True,
-        "message": f"Get outputs request sent to {successful_sends} frontend(s)",
-        "cell_numbers": cell_numbers,
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-    }
+    if result["success"]:
+        result["cell_numbers"] = cell_numbers
+
+    return result
 
 
 def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Move cursor to a different cell in the notebook.
+
+    FIX: Now sends to only the current kernel's comm instead of all comms.
 
     Changes which cell is currently active (selected) in JupyterLab.
 
@@ -755,15 +724,6 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     Returns:
         Dictionary with operation status, old index, and new index
     """
-    import uuid
-
-    if not _ACTIVE_COMMS:
-        return {
-            "success": False,
-            "error": "No active comm connections to frontend",
-            "active_comms": 0,
-        }
-
     # Validate target
     valid_targets = ["above", "below", "bottom"]
     if target not in valid_targets:
@@ -775,34 +735,14 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
                 "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
             }
 
-    request_id = str(uuid.uuid4())
-
-    # Send move cursor request to all active comms
-    successful_sends = 0
-    for comm in list(_ACTIVE_COMMS):
-        try:
-            comm.send(
-                {"type": "move_cursor", "target": str(target), "request_id": request_id}
-            )
-            successful_sends += 1
-            logger.debug(f"Sent move_cursor request to comm {comm.comm_id}")
-        except Exception as e:
-            logger.debug(
-                f"Failed to send move_cursor request to comm {comm.comm_id}: {e}"
-            )
-
-    if successful_sends == 0:
-        return {
-            "success": False,
-            "error": "Failed to send move cursor request to any frontend",
-            "active_comms": len(_ACTIVE_COMMS),
+    result = _send_to_kernel(
+        {
+            "type": "move_cursor",
+            "target": str(target),
         }
+    )
 
-    return {
-        "success": True,
-        "message": f"Move cursor request sent: {target}",
-        "target": target,
-        "request_id": request_id,
-        "active_comms": len(_ACTIVE_COMMS),
-        "successful_sends": successful_sends,
-    }
+    if result["success"]:
+        result["target"] = target
+
+    return result
