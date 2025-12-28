@@ -48,9 +48,13 @@ class UnsafeToolRegistrar:
     def _to_concise_execute_cell(self, result: dict) -> dict:
         """Convert full execute cell result to concise format.
 
-        Concise: signal_success, status, execution_count, summary output, error info if error.
+        Concise: signal_success, status, execution_count, outputs, error info if error.
         Also renames 'success' to 'signal_success' to clarify it indicates the signal was sent,
         not that the cell code executed without error.
+
+        Bug fixes applied:
+        - Bug #4: Always include has_output and outputs (not just output_summary)
+        - Bug #5: Handle all three error patterns (direct fields, nested dict, string)
         """
         concise = {
             "signal_success": result.get("success", False),
@@ -58,20 +62,43 @@ class UnsafeToolRegistrar:
             "execution_count": result.get("execution_count"),
         }
 
-        # Include error info if present
-        if result.get("has_error"):
-            error_info = result.get("error", {})
-            concise["has_error"] = True
-            if isinstance(error_info, dict):
-                concise["error_type"] = error_info.get("type")
-                concise["error_message"] = error_info.get("message")
-            else:
-                concise["error_message"] = str(error_info)
+        # Bug #5 Fix: Include error info if present - handle all three patterns
+        # Also handle edge case where has_error is not set but error exists (e.g., bridge failure)
+        has_error = result.get("has_error")
+        has_error_info = (
+            result.get("error_type")
+            or result.get("error")
+            or (result.get("success") is False and result.get("status") == "error")
+        )
 
-        # Include summary output (first item or expression value)
+        if has_error or has_error_info:
+            concise["has_error"] = True
+
+            # Pattern 1 & 2: Direct fields from _process_frontend_output / _wait_for_execution
+            if result.get("error_type"):
+                concise["error_type"] = result.get("error_type")
+                concise["error_message"] = result.get("error_message")
+                if result.get("traceback"):
+                    concise["traceback"] = result.get("traceback")
+            # Pattern 3: Nested dict (future-proofing) or simple string from exception handler
+            elif result.get("error"):
+                error_info = result.get("error")
+                if isinstance(error_info, dict):
+                    concise["error_type"] = error_info.get("type")
+                    concise["error_message"] = error_info.get("message")
+                else:
+                    concise["error_message"] = str(error_info)
+
+        # Bug #4 Fix: Always include has_output and outputs, not just summary
+        concise["has_output"] = result.get("has_output", False)
+        if "outputs" in result:
+            concise["outputs"] = result.get("outputs", [])
+        if "output" in result:
+            concise["output"] = result.get("output")
+
+        # Also include summary for convenience (truncated to 200 chars)
         outputs = result.get("outputs", [])
         if outputs:
-            # Get first output text
             first_output = outputs[0] if isinstance(outputs, list) else outputs
             if isinstance(first_output, dict):
                 text = first_output.get("text", "")
@@ -245,11 +272,14 @@ class UnsafeToolRegistrar:
                 - status: Execution status ("completed", "error", or "timeout")
                 - execution_count: The IPython execution count for this cell
                 - input: The code that was executed (detailed mode only)
-                - outputs: List of cell outputs (detailed mode only, concise gets output_summary)
-                - output: Expression return value if any (detailed mode only)
+                - outputs: List of cell outputs (both modes)
+                - output: Expression return value if any (both modes)
+                - output_summary: Truncated first output for quick preview (concise mode)
                 - has_output: Whether the cell produced output
                 - has_error: Whether an error occurred
-                - error: Error information if execution failed
+                - error_type: Error type name if execution failed
+                - error_message: Error message if execution failed
+                - traceback: Full traceback if execution failed (when available)
                 - sweep_detected: True if .start() was detected in the code
                 - suggestion: Hint to use wait tools if sweep was detected
 

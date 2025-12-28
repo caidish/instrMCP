@@ -31,6 +31,7 @@
 - **Issue**: Adds the cell but does not set the content properly. New cell is empty instead of having the specified content
 - **Expected**: New cell should contain the specified `content` parameter value
 
+[Fixed]
 ### 4. `notebook_execute_cell` - Missing Output in Concise Mode
 - **Location**: Part 3.3, Step 5
 - **Severity**: CRITICAL
@@ -38,6 +39,7 @@
 - **Expected**: Output should always be included regardless of `detailed` setting
 - **Note**: Seems like it did not use the `active_cell_bridge` properly
 
+[Fixed]
 ### 5. `notebook_execute_cell` - Missing Error Info in Concise Mode
 - **Location**: Part 3.3, Step 7
 - **Severity**: CRITICAL
