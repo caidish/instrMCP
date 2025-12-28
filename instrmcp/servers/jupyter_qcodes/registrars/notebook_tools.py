@@ -76,15 +76,46 @@ class NotebookToolRegistrar:
     def _to_concise_editing_cell_output(self, info: dict) -> dict:
         """Convert full editing cell output to concise format.
 
-        Concise: status, message, outputs, has_output, has_error.
+        Concise: status, message, has_output, has_error, output_summary (truncated),
+        plus error_type/error_message if has_error is true.
+        Removes verbose outputs array and provides brief summary instead.
         """
-        return {
+        # Extract a brief summary of output (first 100 chars)
+        output_summary = None
+        outputs = info.get("outputs") or info.get("output")
+        if outputs:
+            if isinstance(outputs, str):
+                output_summary = (
+                    outputs[:100] + "..." if len(outputs) > 100 else outputs
+                )
+            elif isinstance(outputs, list) and len(outputs) > 0:
+                # Get first text output from outputs array
+                for out in outputs:
+                    if isinstance(out, dict):
+                        text = out.get("text") or out.get("data", {}).get(
+                            "text/plain", ""
+                        )
+                        if text:
+                            if isinstance(text, list):
+                                text = "".join(text)
+                            output_summary = (
+                                text[:100] + "..." if len(text) > 100 else text
+                            )
+                            break
+
+        result = {
             "status": info.get("status"),
             "message": info.get("message"),
-            "outputs": info.get("outputs") or info.get("output"),
             "has_output": info.get("has_output", False),
             "has_error": info.get("has_error", False),
+            "output_summary": output_summary,
         }
+
+        if info.get("has_error") and info.get("error"):
+            result["error_type"] = info["error"].get("type")
+            result["error_message"] = info["error"].get("message")
+
+        return result
 
     def _to_concise_notebook_cells(self, result: dict) -> dict:
         """Convert full notebook cells to concise format.

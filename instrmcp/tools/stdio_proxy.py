@@ -419,8 +419,8 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def get_editing_cell_output() -> list[TextContent]:
-        result = await proxy.call("notebook_get_editing_cell_output")
+    async def get_editing_cell_output(detailed: bool = False) -> list[TextContent]:
+        result = await proxy.call("notebook_get_editing_cell_output", detailed=detailed)
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
