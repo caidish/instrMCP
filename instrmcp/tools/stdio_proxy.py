@@ -327,10 +327,13 @@ def create_stdio_proxy_server(
         },
     )
     async def instrument_info(
-        name: str, with_values: bool = False
+        name: str, with_values: bool = False, detailed: bool = False
     ) -> list[TextContent]:
         result = await proxy.call(
-            "qcodes_instrument_info", name=name, with_values=with_values
+            "qcodes_instrument_info",
+            name=name,
+            with_values=with_values,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -343,8 +346,12 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def get_parameter_values(queries: str) -> list[TextContent]:
-        result = await proxy.call("qcodes_get_parameter_values", queries=queries)
+    async def get_parameter_values(
+        queries: str, detailed: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "qcodes_get_parameter_values", queries=queries, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     # Jupyter notebook variable tools
@@ -370,8 +377,10 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def get_variable_info(name: str) -> list[TextContent]:
-        result = await proxy.call("notebook_get_variable_info", name=name)
+    async def get_variable_info(name: str, detailed: bool = False) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_get_variable_info", name=name, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -387,12 +396,16 @@ def create_stdio_proxy_server(
         fresh_ms: int = 1000,
         line_start: Optional[int] = None,
         line_end: Optional[int] = None,
+        max_lines: int = 200,
+        detailed: bool = False,
     ) -> list[TextContent]:
         result = await proxy.call(
             "notebook_get_editing_cell",
             fresh_ms=fresh_ms,
             line_start=line_start,
             line_end=line_end,
+            max_lines=max_lines,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -406,8 +419,12 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def update_editing_cell(content: str) -> list[TextContent]:
-        result = await proxy.call("notebook_update_editing_cell", content=content)
+    async def update_editing_cell(
+        content: str, detailed: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_update_editing_cell", content=content, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -433,12 +450,13 @@ def create_stdio_proxy_server(
         },
     )
     async def get_notebook_cells(
-        num_cells: int = 2, include_output: bool = True
+        num_cells: int = 2, include_output: bool = True, detailed: bool = False
     ) -> list[TextContent]:
         result = await proxy.call(
             "notebook_get_notebook_cells",
             num_cells=num_cells,
             include_output=include_output,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -522,8 +540,12 @@ def create_stdio_proxy_server(
             "openWorldHint": True,
         },
     )
-    async def execute_editing_cell(timeout: float = 30.0) -> list[TextContent]:
-        result = await proxy.call("notebook_execute_cell", timeout=timeout)
+    async def execute_editing_cell(
+        timeout: float = 30.0, detailed: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_execute_cell", timeout=timeout, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -537,10 +559,17 @@ def create_stdio_proxy_server(
         },
     )
     async def add_new_cell(
-        cell_type: str = "code", position: str = "below", content: str = ""
+        cell_type: str = "code",
+        position: str = "below",
+        content: str = "",
+        detailed: bool = False,
     ) -> list[TextContent]:
         result = await proxy.call(
-            "notebook_add_cell", cell_type=cell_type, position=position, content=content
+            "notebook_add_cell",
+            cell_type=cell_type,
+            position=position,
+            content=content,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -554,8 +583,8 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def delete_editing_cell() -> list[TextContent]:
-        result = await proxy.call("notebook_delete_cell")
+    async def delete_editing_cell(detailed: bool = False) -> list[TextContent]:
+        result = await proxy.call("notebook_delete_cell", detailed=detailed)
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -568,8 +597,12 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def delete_cells_by_number(cell_numbers: str) -> list[TextContent]:
-        result = await proxy.call("notebook_delete_cells", cell_numbers=cell_numbers)
+    async def delete_cells_by_number(
+        cell_numbers: str, detailed: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_delete_cells", cell_numbers=cell_numbers, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -582,9 +615,14 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def apply_patch(old_text: str, new_text: str) -> list[TextContent]:
+    async def apply_patch(
+        old_text: str, new_text: str, detailed: bool = False
+    ) -> list[TextContent]:
         result = await proxy.call(
-            "notebook_apply_patch", old_text=old_text, new_text=new_text
+            "notebook_apply_patch",
+            old_text=old_text,
+            new_text=new_text,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -598,8 +636,10 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def move_cursor(target: str) -> list[TextContent]:
-        result = await proxy.call("notebook_move_cursor", target=target)
+    async def move_cursor(target: str, detailed: bool = False) -> list[TextContent]:
+        result = await proxy.call(
+            "notebook_move_cursor", target=target, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     # MeasureIt integration tools (optional - only if measureit option enabled)
@@ -659,9 +699,12 @@ def create_stdio_proxy_server(
     )
     async def list_experiments(
         database_path: Optional[str] = None,
+        detailed: bool = False,
     ) -> list[TextContent]:
         result = await proxy.call(
-            "database_list_experiments", database_path=database_path
+            "database_list_experiments",
+            database_path=database_path,
+            detailed=detailed,
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -675,10 +718,17 @@ def create_stdio_proxy_server(
         },
     )
     async def get_dataset_info(
-        id: int, database_path: Optional[str] = None
+        id: int,
+        database_path: Optional[str] = None,
+        detailed: bool = False,
+        code_suggestion: bool = False,
     ) -> list[TextContent]:
         result = await proxy.call(
-            "database_get_dataset_info", id=id, database_path=database_path
+            "database_get_dataset_info",
+            id=id,
+            database_path=database_path,
+            detailed=detailed,
+            code_suggestion=code_suggestion,
         )
         return [TextContent(type="text", text=str(result))]
 
