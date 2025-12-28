@@ -32,7 +32,10 @@ _enabled_options: set = set()  # Set of enabled option names
 # Note: We create a fresh comm for each broadcast to avoid stale socket issues
 
 # Toolbar control comms tracking (for safe sends)
+import threading
+
 _toolbar_comms: set = set()  # Active toolbar control comms
+_toolbar_comms_lock = threading.Lock()  # Lock for thread-safe access to _toolbar_comms
 
 
 def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
@@ -60,13 +63,15 @@ def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
     # Check if comm is closed or disposed
     if closed or disposed:
         logger.debug(f"_safe_comm_send({caller}): SKIP - closed/disposed")
-        _toolbar_comms.discard(comm)
+        with _toolbar_comms_lock:
+            _toolbar_comms.discard(comm)
         return False
 
     # Check if kernel is still present (not torn down)
     if kernel is None:
         logger.debug(f"_safe_comm_send({caller}): SKIP - kernel is None")
-        _toolbar_comms.discard(comm)
+        with _toolbar_comms_lock:
+            _toolbar_comms.discard(comm)
         return False
 
     try:
@@ -77,7 +82,8 @@ def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
     except Exception as e:
         logger.debug(f"_safe_comm_send({caller}): FAILED - {e}")
         # Remove from tracked comms on any failure
-        _toolbar_comms.discard(comm)
+        with _toolbar_comms_lock:
+            _toolbar_comms.discard(comm)
         return False
 
 
@@ -476,11 +482,11 @@ def _handle_toolbar_control(comm, open_msg):
     """Comm handler for toolbar control messages."""
     comm_id = id(comm)
     logger.debug(f"_handle_toolbar_control: NEW comm opened, id={comm_id}")
-    logger.debug(f"_toolbar_comms before add: {len(_toolbar_comms)} comms")
-
-    # Track this comm for safe sending
-    _toolbar_comms.add(comm)
-    logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
+    with _toolbar_comms_lock:
+        logger.debug(f"_toolbar_comms before add: {len(_toolbar_comms)} comms")
+        # Track this comm for safe sending
+        _toolbar_comms.add(comm)
+        logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
 
     def _send_sync_result(comm_ref, success: bool, error: str = None):
         """Send result after synchronous operation completes."""
@@ -488,14 +494,16 @@ def _handle_toolbar_control(comm, open_msg):
         logger.debug(f"_send_sync_result: comm={comm_id}, success={success}")
 
         # Check if comm is still tracked (not closed/removed)
-        if comm_ref not in _toolbar_comms:
-            logger.debug("_send_sync_result: SKIP - comm not in _toolbar_comms")
-            return
+        with _toolbar_comms_lock:
+            if comm_ref not in _toolbar_comms:
+                logger.debug("_send_sync_result: SKIP - comm not in _toolbar_comms")
+                return
 
         # Check if kernel is still present (not torn down)
         if getattr(comm_ref, "kernel", None) is None:
             logger.debug("_send_sync_result: SKIP - kernel is None")
-            _toolbar_comms.discard(comm_ref)
+            with _toolbar_comms_lock:
+                _toolbar_comms.discard(comm_ref)
             return
 
         payload = {
@@ -643,7 +651,8 @@ def _handle_toolbar_control(comm, open_msg):
 
     def on_close(msg):
         logger.debug(f"on_close: comm {id(comm)} closed by frontend")
-        _toolbar_comms.discard(comm)
+        with _toolbar_comms_lock:
+            _toolbar_comms.discard(comm)
 
     comm.on_msg(on_msg)
     comm.on_close(on_close)
@@ -1000,10 +1009,35 @@ def get_server_status() -> dict:
     }
 
 
+def _do_broadcast_sends(payload: dict, status: str):
+    """Actually perform the comm sends.
+
+    This is separated from broadcast_server_status to allow scheduling
+    on the IO loop (when running) or direct calling (when not running),
+    avoiding deadlocks when called from the main kernel thread.
+
+    Thread-safe: uses _toolbar_comms_lock when accessing _toolbar_comms.
+    """
+    with _toolbar_comms_lock:
+        comms_to_send = list(_toolbar_comms)
+    logger.debug(f"_do_broadcast_sends: sending to {len(comms_to_send)} comms")
+
+    for comm in comms_to_send:
+        _safe_comm_send(comm, payload, caller=f"broadcast_{status}")
+
+
 def broadcast_server_status(status: str, details: Optional[dict] = None):
     """Broadcast server status to all connected toolbar frontends.
 
     Sends through existing toolbar control comms instead of creating new Comms.
+
+    This function handles different execution contexts to avoid deadlocks:
+    - If IO loop is running: schedules sends via call_soon_threadsafe
+    - If IO loop exists but not running: calls sends directly (sync context)
+    - If no IO loop available: skips broadcast with a warning
+
+    This approach is safer than using a daemon thread, as Jupyter comms are
+    not thread-safe.
     """
     logger.debug(f"broadcast_server_status: status={status}")
 
@@ -1020,9 +1054,46 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
         "details": payload_details,
     }
 
-    # Send through all tracked toolbar comms
-    comms_to_send = list(_toolbar_comms)
-    logger.debug(f"broadcast_server_status: sending to {len(comms_to_send)} comms")
+    # Try to schedule on IO loop to avoid blocking the main kernel thread
+    # This prevents deadlocks when called from magic commands like %mcp_close
+    loop = None
 
-    for comm in comms_to_send:
-        _safe_comm_send(comm, payload, caller=f"broadcast_{status}")
+    # First, try to get a running loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop in this context, try to get the event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = None
+
+    # Schedule on the loop if available and not closed
+    if loop is not None and not loop.is_closed():
+        if loop.is_running():
+            try:
+                # Use thread-safe method since we might be called from any thread
+                loop.call_soon_threadsafe(_do_broadcast_sends, payload, status)
+                logger.debug(f"broadcast_server_status: scheduled thread-safe on loop")
+                return
+            except RuntimeError as e:
+                # Loop was closed between our check and the call
+                logger.warning(
+                    f"broadcast_server_status: loop closed during scheduling: {e}"
+                )
+        else:
+            # Loop exists but not running - call directly since call_soon would never execute
+            # This is safe because we're in the same thread context (no async contention)
+            logger.debug(f"broadcast_server_status: loop not running, calling directly")
+            _do_broadcast_sends(payload, status)
+            return
+
+    # No usable loop available - log and skip
+    # We intentionally skip rather than use a daemon thread because:
+    # 1. Jupyter comms are not thread-safe
+    # 2. A missed broadcast is recoverable (frontend can poll status)
+    # 3. Using a thread could cause hangs or dropped messages
+    logger.warning(
+        f"broadcast_server_status: no running event loop available, "
+        f"skipping broadcast for status={status}"
+    )

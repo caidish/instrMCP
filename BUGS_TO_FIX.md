@@ -49,7 +49,7 @@
 ---
 
 ## Server & Lifecycle Bugs
-
+[Fixed]
 ### 6. `%mcp_close` - Hangs with Active Connections
 - **Location**: Part 1.4, Step 1
 - **Severity**: HIGH
