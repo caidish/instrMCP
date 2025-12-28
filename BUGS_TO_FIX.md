@@ -60,12 +60,14 @@
 
 ## Tool Response/Behavior Bugs
 
+[Fixed]
 ### 7. `notebook_server_status` - Missing `enabled_options`
 - **Location**: Part 2.1, Step 2
 - **Severity**: MEDIUM
 - **Issue**: Does not return `enabled_options` field
 - **Expected**: Should return: mode, server running status, `enabled_options` list, `registered_tools` list
 
+[Fixed]
 ### 8. `notebook_list_variables` - Validation Error with "null"
 - **Location**: Part 2.3, Step 2
 - **Severity**: MEDIUM

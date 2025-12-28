@@ -20,7 +20,13 @@ class NotebookToolRegistrar:
     """Registers Jupyter notebook tools with the MCP server."""
 
     def __init__(
-        self, mcp_server, tools, ipython, safe_mode=True, dangerous_mode=False
+        self,
+        mcp_server,
+        tools,
+        ipython,
+        safe_mode=True,
+        dangerous_mode=False,
+        enabled_options=None,
     ):
         """
         Initialize the notebook tool registrar.
@@ -31,12 +37,14 @@ class NotebookToolRegistrar:
             ipython: IPython instance for direct notebook access
             safe_mode: Whether server is in safe mode (read-only)
             dangerous_mode: Whether server is in dangerous mode (auto-approve consents)
+            enabled_options: Set of enabled optional features (measureit, database, etc.)
         """
         self.mcp = mcp_server
         self.tools = tools
         self.ipython = ipython
         self.safe_mode = safe_mode
         self.dangerous_mode = dangerous_mode
+        self.enabled_options = enabled_options or set()
 
     # ===== Concise mode helpers =====
 
@@ -809,6 +817,7 @@ class NotebookToolRegistrar:
                 status = {
                     "status": "running",
                     "mode": mode,
+                    "enabled_options": sorted(list(self.enabled_options)),
                     "dynamic_tools_count": len(registered_tools),
                     "tools": registered_tools[:20],  # Limit to first 20 for readability
                 }

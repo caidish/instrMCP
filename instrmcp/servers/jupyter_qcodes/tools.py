@@ -618,6 +618,10 @@ class QCodesReadOnlyTools:
         self, type_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """List variables in the Jupyter namespace."""
+        # Normalize "null" string to None (some MCP clients serialize null as "null")
+        if type_filter and type_filter.strip().lower() == "null":
+            type_filter = None
+
         variables = []
 
         for name, obj in self.namespace.items():

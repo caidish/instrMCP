@@ -118,6 +118,7 @@ class JupyterMCPServer:
             self.ipython,
             safe_mode=self.safe_mode,
             dangerous_mode=self.dangerous_mode,
+            enabled_options=self.enabled_options,
         )
         notebook_registrar.register_all()
 
