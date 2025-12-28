@@ -111,12 +111,14 @@
 - **Issue**: When `detailed` is false, error messages are not passed (e.g., invalid `position`: "sideways")
 - **Expected**: Error messages should always be included regardless of `detailed` setting
 
+[Not a bug]
 ### 13. `notebook_apply_patch` - Non-matching Text Error Not Tested
 - **Location**: Part 3.7, Step 7
 - **Severity**: LOW
 - **Issue**: Test with non-matching `old_text` marked as not passing
 - **Expected**: Should return error: "text not found"
 
+[Not a bug]
 ### 14. `notebook_get_editing_cell` - Line Range Not Working
 - **Location**: Part 2.5, Step 7
 - **Severity**: LOW

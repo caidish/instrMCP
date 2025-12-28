@@ -23,6 +23,10 @@ _LAST_TS = 0.0
 _KERNEL_COMM_MAP: Dict[str, Any] = {}  # kernel_id -> comm (one-to-one mapping)
 _CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}  # {exec_count: output_data}
 
+# Response waiting mechanism for operations that need frontend confirmation
+# Maps request_id -> [threading.Event, response_dict or None]
+_PENDING_REQUESTS: Dict[str, List] = {}
+
 
 def _get_kernel_id() -> Optional[str]:
     """
@@ -184,7 +188,16 @@ def _on_comm_open(comm, open_msg):
                 logger.debug(
                     f"✅ RECEIVED {msg_type} for request {request_id}: success={success}, message={message}"
                 )
-            # Note: For now we just log the response, but we could store it for the waiting functions
+
+            # Resolve pending request if someone is waiting for the response
+            if request_id:
+                with _STATE_LOCK:
+                    if request_id in _PENDING_REQUESTS:
+                        event, _ = _PENDING_REQUESTS[request_id]
+                        # Store the full response data
+                        _PENDING_REQUESTS[request_id] = [event, data]
+                        event.set()  # Wake up the waiting thread
+                        logger.debug(f"✅ Resolved pending request {request_id}")
 
         else:
             # Unknown message type - log for debugging
@@ -300,6 +313,90 @@ def _send_to_kernel(payload: Dict[str, Any]) -> Dict[str, Any]:
             "success": False,
             "error": f"Send failed: {e}",
             "kernel_id": kernel_id,
+        }
+
+
+def _send_and_wait(payload: Dict[str, Any], timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Send a message to the frontend and wait for the response.
+
+    This function allows operations to wait for and return the actual frontend
+    response, including error messages for failures like "cell not found".
+
+    Args:
+        payload: Message payload (type, and operation-specific data)
+        timeout_s: How long to wait for response from frontend
+
+    Returns:
+        The actual response from frontend, or error dict on timeout/failure
+    """
+    import uuid
+
+    # Generate request_id if not present
+    request_id = payload.get("request_id") or str(uuid.uuid4())
+    payload["request_id"] = request_id
+
+    # Create event for waiting
+    event = threading.Event()
+    with _STATE_LOCK:
+        _PENDING_REQUESTS[request_id] = [event, None]
+
+    try:
+        # Send the message using existing function (which will use our request_id)
+        send_result = _send_to_kernel(payload)
+
+        if not send_result["success"]:
+            # Send failed, clean up and return the error
+            with _STATE_LOCK:
+                _PENDING_REQUESTS.pop(request_id, None)
+            return send_result
+
+        # Wait for response with timeout
+        if event.wait(timeout=timeout_s):
+            # Got response
+            with _STATE_LOCK:
+                _, response = _PENDING_REQUESTS.pop(request_id, [None, None])
+
+            if response:
+                # Return the full response from frontend
+                return {
+                    "success": response.get("success", False),
+                    "message": response.get("message", ""),
+                    "request_id": request_id,
+                    "kernel_id": send_result.get("kernel_id"),
+                    # Include any additional fields from frontend response
+                    **{
+                        k: v
+                        for k, v in response.items()
+                        if k not in ["type", "request_id", "success", "message"]
+                    },
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Response received but data was empty",
+                    "request_id": request_id,
+                }
+        else:
+            # Timeout
+            with _STATE_LOCK:
+                _PENDING_REQUESTS.pop(request_id, None)
+            return {
+                "success": False,
+                "error": f"Timeout waiting for frontend response after {timeout_s}s",
+                "request_id": request_id,
+                "kernel_id": send_result.get("kernel_id"),
+            }
+
+    except Exception as e:
+        # Clean up on any error
+        with _STATE_LOCK:
+            _PENDING_REQUESTS.pop(request_id, None)
+        logger.error(f"Error in _send_and_wait: {e}")
+        return {
+            "success": False,
+            "error": f"Error waiting for response: {e}",
+            "request_id": request_id,
         }
 
 
@@ -709,9 +806,8 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     Move cursor to a different cell in the notebook.
 
-    FIX: Now sends to only the current kernel's comm instead of all comms.
-
-    Changes which cell is currently active (selected) in JupyterLab.
+    Waits for frontend response to return actual success/failure status,
+    including errors when the target cell does not exist.
 
     Args:
         target: Where to move the cursor:
@@ -722,7 +818,8 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
     Returns:
-        Dictionary with operation status, old index, and new index
+        Dictionary with operation status, old index, and new index.
+        Returns success=False with error message if target cell not found.
     """
     # Validate target
     valid_targets = ["above", "below", "bottom"]
@@ -735,11 +832,13 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
                 "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
             }
 
-    result = _send_to_kernel(
+    # Use _send_and_wait to get actual frontend response
+    result = _send_and_wait(
         {
             "type": "move_cursor",
             "target": str(target),
-        }
+        },
+        timeout_s=timeout_s,
     )
 
     if result["success"]:

@@ -1397,7 +1397,8 @@ class QCodesReadOnlyTools:
                     }
 
             # Send move cursor request to frontend
-            result = active_cell_bridge.move_cursor(target)
+            # Use asyncio.to_thread to avoid blocking the event loop during wait
+            result = await asyncio.to_thread(active_cell_bridge.move_cursor, target)
 
             # Add metadata
             result.update(
