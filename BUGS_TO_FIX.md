@@ -74,12 +74,13 @@
 - **Issue**: Returns validation error if `type_filter` is "null". Works when it is empty
 - **Expected**: Should handle "null" gracefully (treat as no filter)
 
+[Not needed to fix]
 ### 9. `notebook_get_editing_cell_output` - `detailed` Parameter Ignored
 - **Location**: Part 2.6, Step 3
 - **Severity**: MEDIUM
 - **Issue**: `detailed` does not work as expected. Returns all information regardless of detailed true/false
-- **Expected**: Concise response when `detailed` is false
 
+[Fixed]
 ### 10. `notebook_get_editing_cell_output` - Stale Error State
 - **Location**: Part 2.6, Step 8
 - **Severity**: MEDIUM
@@ -96,6 +97,7 @@
   ```
 - **Expected**: Should reflect the actual state of the most recently executed cell
 - **Note**: Running a successful output cell again clears this
+- **Fix**: Implemented "Frontend-First" approach - trust frontend data over stale `sys.last_*` state
 
 ### 11. `notebook_move_cursor` - Success on Non-existent Target
 - **Location**: Part 2.8, Step 10
