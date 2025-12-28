@@ -221,15 +221,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Get the newly created cell
-        const newCell = notebooks.activeCell;
+        let newCell = notebooks.activeCell;
         if (newCell) {
           // Set cell type if needed
           if (newCell.model.type !== cellType) {
             await NotebookActions.changeCellType(panel.content, cellType as any);
+            // Re-fetch activeCell: changeCellType removes old cell and creates new one
+            newCell = notebooks.activeCell;
           }
 
           // Set content if provided
-          if (content) {
+          if (content && newCell) {
             newCell.model.sharedModel.setSource(content);
           }
         }
