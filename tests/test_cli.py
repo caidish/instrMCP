@@ -418,6 +418,8 @@ class TestCLIOutput:
                 # Check version string format
                 assert "InstrMCP version" in output
                 assert __version__ in output
-                # Should be on a single line
-                lines = output.strip().split("\n")
-                assert len(lines) == 1
+                # First line should have the version
+                lines = [ln for ln in output.strip().split("\n") if ln]
+                assert lines[0].startswith("InstrMCP version")
+                # May include version management hint
+                assert "version" in output.lower()

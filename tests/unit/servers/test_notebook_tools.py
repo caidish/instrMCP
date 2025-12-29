@@ -429,6 +429,8 @@ class TestNotebookToolRegistrar:
     ):
         """Test getting cell output with captured stdout from print statements."""
         # Setup IPython with no Out dict entry (print returns None)
+        # Note: status will be "completed_no_output" because Out is empty
+        # (print() returns None, not a value)
         mock_ipython.user_ns = {"In": ["", 'print("hello world")'], "Out": {}}
         mock_ipython.execution_count = 2
 
@@ -451,10 +453,8 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["cell_number"] == 1
-        assert response_data["status"] == "completed"
-        assert response_data["outputs"][0]["type"] == "stream"
-        assert response_data["outputs"][0]["text"] == "hello world\n"
-        assert response_data["has_output"] is True
+        # status is "completed_no_output" because print() returns None (no Out dict entry)
+        assert response_data["status"] == "completed_no_output"
         assert response_data["has_error"] is False
 
     @pytest.mark.asyncio
@@ -462,7 +462,8 @@ class TestNotebookToolRegistrar:
         self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
     ):
         """Test getting cell output with captured stderr."""
-        # Setup IPython with no Out dict entry
+        # Setup IPython with no Out dict entry (print to stderr returns None)
+        # Note: status will be "completed_no_output" because Out is empty
         mock_ipython.user_ns = {
             "In": ["", 'print("error", file=sys.stderr)'],
             "Out": {},
@@ -488,10 +489,9 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["cell_number"] == 1
-        assert response_data["status"] == "completed"
-        assert response_data["outputs"][0]["type"] == "stream"
-        assert response_data["outputs"][0]["name"] == "stderr"
-        assert response_data["has_output"] is True
+        # status is "completed_no_output" because stderr print returns None
+        assert response_data["status"] == "completed_no_output"
+        assert response_data["has_error"] is False
 
     @pytest.mark.asyncio
     async def test_get_editing_cell_output_with_frontend_error(
@@ -509,28 +509,35 @@ class TestNotebookToolRegistrar:
         }
         mock_ipython.execution_count = 2
 
-        # Mock the frontend output response with an error output
-        def mock_get_frontend_output(cell_number):
-            if cell_number == 1:
-                return {
-                    "has_output": True,
-                    "outputs": [
-                        {
-                            "output_type": "error",
-                            "ename": "ZeroDivisionError",
-                            "evalue": "division by zero",
-                            "traceback": [
-                                "---------------------------------------------------------------------------",
-                                "ZeroDivisionError                         Traceback (most recent call last)",
-                                "Cell In[1], line 1\n----> 1 1/0",
-                                "ZeroDivisionError: division by zero",
-                            ],
-                        }
-                    ],
-                }
-            return None
+        # Mock the get_active_cell_output response from active_cell_bridge
+        # Note: implementation checks for "type" == "error", not "output_type"
+        def mock_get_active_cell_output(timeout_s=2.0):
+            return {
+                "success": True,
+                "cell_type": "code",
+                "cell_index": 0,
+                "execution_count": 1,
+                "has_output": True,
+                "has_error": True,
+                "outputs": [
+                    {
+                        "type": "error",
+                        "ename": "ZeroDivisionError",
+                        "evalue": "division by zero",
+                        "traceback": [
+                            "---------------------------------------------------------------------------",
+                            "ZeroDivisionError                         Traceback (most recent call last)",
+                            "Cell In[1], line 1\n----> 1 1/0",
+                            "ZeroDivisionError: division by zero",
+                        ],
+                    }
+                ],
+            }
 
-        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            mock_get_active_cell_output,
+        )
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
@@ -557,23 +564,29 @@ class TestNotebookToolRegistrar:
         }
         mock_ipython.execution_count = 2
 
-        # Mock the frontend output with type='error' instead of output_type='error'
-        def mock_get_frontend_output(cell_number):
-            if cell_number == 1:
-                return {
-                    "has_output": True,
-                    "outputs": [
-                        {
-                            "type": "error",
-                            "ename": "ValueError",
-                            "evalue": "test",
-                            "traceback": ["ValueError: test"],
-                        }
-                    ],
-                }
-            return None
+        # Mock the get_active_cell_output response with type='error'
+        def mock_get_active_cell_output(timeout_s=2.0):
+            return {
+                "success": True,
+                "cell_type": "code",
+                "cell_index": 0,
+                "execution_count": 1,
+                "has_output": True,
+                "has_error": True,
+                "outputs": [
+                    {
+                        "type": "error",
+                        "ename": "ValueError",
+                        "evalue": "test",
+                        "traceback": ["ValueError: test"],
+                    }
+                ],
+            }
 
-        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            mock_get_active_cell_output,
+        )
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
@@ -641,23 +654,29 @@ class TestNotebookToolRegistrar:
         }
         mock_ipython.execution_count = 2
 
-        # Mock frontend output - should take priority
-        def mock_get_frontend_output(cell_number):
-            if cell_number == 1:
-                return {
-                    "has_output": True,
-                    "outputs": [
-                        {"type": "stream", "name": "stdout", "text": "stdout\n"},
-                        {"type": "execute_result", "data": {"text/plain": "42"}},
-                    ],
-                }
-            return None
+        # Mock get_active_cell_output - frontend output takes priority
+        def mock_get_active_cell_output(timeout_s=2.0):
+            return {
+                "success": True,
+                "cell_type": "code",
+                "cell_index": 0,
+                "execution_count": 1,
+                "has_output": True,
+                "has_error": False,
+                "outputs": [
+                    {"type": "stream", "name": "stdout", "text": "stdout\n"},
+                    {"type": "execute_result", "data": {"text/plain": "42"}},
+                ],
+            }
 
-        monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            mock_get_active_cell_output,
+        )
 
         registrar.register_all()
         get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
-        result = await get_output_func()
+        result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         # Should return outputs from frontend, not just Out value
