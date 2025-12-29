@@ -140,6 +140,7 @@ def main():
         from . import __version__
 
         print(f"InstrMCP version {__version__}")
+        print("\nFor version management, use: python tools/version.py --help")
     else:
         parser.print_help()
         sys.exit(1)

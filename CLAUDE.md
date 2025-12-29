@@ -44,6 +44,17 @@ instrmcp qcodes --port 3001               # QCodes station server
 instrmcp config                           # Show configuration
 ```
 
+**Version Management:**
+```bash
+python tools/version.py              # Show all version locations
+python tools/version.py --check      # CI check (exit 1 if mismatch)
+python tools/version.py --sync       # Sync all to canonical version
+python tools/version.py --bump patch # Bump patch (2.1.0 → 2.1.1)
+python tools/version.py --bump minor # Bump minor (2.1.0 → 2.2.0)
+python tools/version.py --bump major # Bump major (2.1.0 → 3.0.0)
+python tools/version.py --set 2.2.0  # Set specific version
+```
+
 ## Architecture Overview
 
 ### Communication Flow
@@ -57,6 +68,7 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 - `instrmcp/tools/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
 - `instrmcp/extensions/` - Jupyter extensions, MeasureIt templates, database resources
 - `instrmcp/cli.py` - Command-line interface
+- `tools/version.py` - Unified version management script
 
 ### Key Files for Tool Changes
 When adding/removing MCP tools, update ALL of these:
@@ -121,3 +133,20 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
+
+## Version Management
+
+The project uses a unified version management script at `tools/version.py`. The canonical source of truth is `instrmcp/__init__.py`.
+
+**Version locations managed (8 files):**
+
+- `pyproject.toml` - Package metadata
+- `instrmcp/__init__.py` - Main package (canonical source)
+- `instrmcp/servers/__init__.py` - Servers subpackage
+- `instrmcp/servers/qcodes/__init__.py` - QCodes server
+- `instrmcp/servers/jupyter_qcodes/__init__.py` - Jupyter QCodes server
+- `instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/__init__.py` - JupyterLab Python extension
+- `instrmcp/extensions/jupyterlab/package.json` - JupyterLab Node.js extension
+- `docs/source/conf.py` - Sphinx documentation
+
+**Before releasing:** Always run `python tools/version.py --check` to verify all versions are in sync.
