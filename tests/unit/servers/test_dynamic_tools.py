@@ -453,7 +453,7 @@ class TestAuditLogger:
         # Clean up logger handlers before removing directory
         import logging
 
-        audit_logger = logging.getLogger("instrMCP.audit")
+        audit_logger = logging.getLogger("instrmcp.audit")
         # Close all handlers to release file handles
         for handler in audit_logger.handlers[:]:
             handler.close()
@@ -470,7 +470,7 @@ class TestAuditLogger:
         # Clear any existing handlers to avoid reusing loggers across tests
         import logging
 
-        audit_logger = logging.getLogger("instrMCP.audit")
+        audit_logger = logging.getLogger("instrmcp.audit")
         # Close and remove any existing handlers
         for handler in audit_logger.handlers[:]:
             handler.close()

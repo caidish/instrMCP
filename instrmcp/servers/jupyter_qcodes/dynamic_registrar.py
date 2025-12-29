@@ -68,6 +68,87 @@ class DynamicToolRegistrar:
         # Load existing tools from registry on startup
         self._load_existing_tools()
 
+    # ===== Concise mode helpers =====
+
+    def _to_concise_register_tool(self, result: dict) -> dict:
+        """Convert full register tool result to concise format.
+
+        Concise: status, tool_name, version, message; drop corrected_fields unless error.
+        """
+        concise = {
+            "status": result.get("status"),
+            "tool_name": result.get("tool_name"),
+            "version": result.get("version"),
+            "message": result.get("message"),
+        }
+        # Keep error info if error
+        if result.get("status") == "error":
+            return result
+        return concise
+
+    def _to_concise_update_tool(self, result: dict) -> dict:
+        """Convert full update tool result to concise format.
+
+        Concise: status, tool_name.
+        """
+        if result.get("status") == "error":
+            return result
+        return {
+            "status": result.get("status"),
+            "tool_name": result.get("tool_name"),
+        }
+
+    def _to_concise_revoke_tool(self, result: dict) -> dict:
+        """Convert full revoke tool result to concise format.
+
+        Concise: status.
+        """
+        if result.get("status") == "error":
+            return result
+        return {"status": result.get("status")}
+
+    def _to_concise_list_tools(self, result: dict) -> dict:
+        """Convert full list tools result to concise format.
+
+        Concise: count, list of tool names with basic fields (name, version).
+        """
+        if result.get("status") == "error":
+            return result
+        tools = result.get("tools", [])
+        concise_tools = []
+        for tool in tools:
+            if isinstance(tool, dict):
+                concise_tools.append(
+                    {"name": tool.get("name"), "version": tool.get("version")}
+                )
+            else:
+                concise_tools.append({"name": str(tool)})
+        return {"count": result.get("count"), "tools": concise_tools}
+
+    def _to_concise_inspect_tool(self, result: dict) -> dict:
+        """Convert full inspect tool result to concise format.
+
+        Concise: status, tool_name.
+        """
+        if result.get("status") == "error":
+            return result
+        tool_info = result.get("tool", {})
+        return {
+            "status": result.get("status"),
+            "tool_name": tool_info.get("name"),
+        }
+
+    def _to_concise_registry_stats(self, result: dict) -> dict:
+        """Convert full registry stats result to concise format.
+
+        Concise: status only (stats are already summary-level).
+        """
+        if result.get("status") == "error":
+            return result
+        return {"status": result.get("status")}
+
+    # ===== End concise mode helpers =====
+
     def _load_existing_tools(self):
         """Load and register all tools from the registry on server start."""
         try:
@@ -391,7 +472,16 @@ Corrected JSON:"""
     def register_all(self):
         """Register all dynamic tool meta-tools with the MCP server."""
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_register_tool",
+            annotations={
+                "title": "Register Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_register_tool(
             name: str,
             source_code: str,
@@ -404,6 +494,7 @@ Corrected JSON:"""
             returns: Optional[str] = None,  # JSON object string
             examples: Optional[str] = None,  # JSON array string
             tags: Optional[str] = None,  # JSON array string
+            detailed: bool = False,
         ) -> str:
             """Register a new dynamic tool.
 
@@ -421,6 +512,7 @@ Corrected JSON:"""
                 returns: JSON object with return type specification (default: {"type": "object", "description": "Result"})
                 examples: Optional JSON array of usage examples
                 tags: Optional JSON array of searchable tags
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with registration result
@@ -577,6 +669,10 @@ Corrected JSON:"""
                         "message"
                     ] += f" (with {len(corrected_fields)} JSON field(s) auto-corrected)"
 
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_register_tool(response)
+
                 return json.dumps(response)
 
             except (json.JSONDecodeError, ValueError) as e:
@@ -599,7 +695,16 @@ Corrected JSON:"""
                 log_tool_error("register", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_update_tool",
+            annotations={
+                "title": "Update Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_update_tool(
             name: str,
             version: str,
@@ -610,6 +715,7 @@ Corrected JSON:"""
             source_code: Optional[str] = None,
             examples: Optional[str] = None,  # JSON array string
             tags: Optional[str] = None,  # JSON array string
+            detailed: bool = False,
         ) -> str:
             """Update an existing dynamic tool.
 
@@ -626,6 +732,7 @@ Corrected JSON:"""
                 source_code: Updated source code (optional)
                 examples: Updated examples JSON array (optional)
                 tags: Updated tags JSON array (optional)
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with update result
@@ -753,15 +860,19 @@ Corrected JSON:"""
                     author=existing_spec.author,
                 )
 
-                return json.dumps(
-                    {
-                        "status": "success",
-                        "message": f"Tool '{name}' updated successfully",
-                        "tool_name": name,
-                        "old_version": old_version,
-                        "new_version": version,
-                    }
-                )
+                response = {
+                    "status": "success",
+                    "message": f"Tool '{name}' updated successfully",
+                    "tool_name": name,
+                    "old_version": old_version,
+                    "new_version": version,
+                }
+
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_update_tool(response)
+
+                return json.dumps(response)
 
             except (json.JSONDecodeError, ValueError) as e:
                 error_msg = f"Invalid JSON in parameters: {e}"
@@ -783,8 +894,21 @@ Corrected JSON:"""
                 log_tool_error("update", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
-        async def dynamic_revoke_tool(name: str, reason: Optional[str] = None) -> str:
+        @self.mcp.tool(
+            name="dynamic_revoke_tool",
+            annotations={
+                "title": "Revoke Dynamic Tool",
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
+        async def dynamic_revoke_tool(
+            name: str,
+            reason: Optional[str] = None,
+            detailed: bool = False,
+        ) -> str:
             """Revoke (delete) a dynamic tool.
 
             Permanently removes a tool from the registry. This action cannot be undone.
@@ -792,6 +916,7 @@ Corrected JSON:"""
             Args:
                 name: Tool name to revoke
                 reason: Optional reason for revocation
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with revocation result
@@ -818,14 +943,18 @@ Corrected JSON:"""
                 # Log revocation
                 log_tool_revocation(tool_name=name, version=version, reason=reason)
 
-                return json.dumps(
-                    {
-                        "status": "success",
-                        "message": f"Tool '{name}' revoked successfully",
-                        "tool_name": name,
-                        "version": version,
-                    }
-                )
+                response = {
+                    "status": "success",
+                    "message": f"Tool '{name}' revoked successfully",
+                    "tool_name": name,
+                    "version": version,
+                }
+
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_revoke_tool(response)
+
+                return json.dumps(response)
 
             except RegistryError as e:
                 error_msg = f"Revocation failed: {e}"
@@ -837,11 +966,20 @@ Corrected JSON:"""
                 log_tool_error("revoke", name, error_msg)
                 return json.dumps({"status": "error", "message": error_msg})
 
-        @self.mcp.tool()
+        @self.mcp.tool(
+            name="dynamic_list_tools",
+            annotations={
+                "title": "List Dynamic Tools",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
         async def dynamic_list_tools(
             tag: Optional[str] = None,
             capability: Optional[str] = None,
             author: Optional[str] = None,
+            detailed: bool = False,
         ) -> str:
             """List all registered dynamic tools with optional filtering.
 
@@ -849,6 +987,7 @@ Corrected JSON:"""
                 tag: Filter by tag (optional)
                 capability: Filter by capability (e.g., "cap:qcodes.read") (optional)
                 author: Filter by author (optional)
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with list of tools
@@ -858,22 +997,33 @@ Corrected JSON:"""
                     tag=tag, capability=capability, author=author
                 )
 
-                return json.dumps(
-                    {
-                        "status": "success",
-                        "count": len(tools),
-                        "tools": tools,
-                    },
-                    indent=2,
-                )
+                response = {
+                    "status": "success",
+                    "count": len(tools),
+                    "tools": tools,
+                }
+
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_list_tools(response)
+
+                return json.dumps(response, indent=2)
 
             except Exception as e:
                 return json.dumps(
                     {"status": "error", "message": f"Failed to list tools: {e}"}
                 )
 
-        @self.mcp.tool()
-        async def dynamic_inspect_tool(name: str) -> str:
+        @self.mcp.tool(
+            name="dynamic_inspect_tool",
+            annotations={
+                "title": "Inspect Dynamic Tool",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
+        async def dynamic_inspect_tool(name: str, detailed: bool = False) -> str:
             """Inspect a dynamic tool's complete specification.
 
             Returns the full tool specification including source code, parameters,
@@ -881,6 +1031,7 @@ Corrected JSON:"""
 
             Args:
                 name: Tool name to inspect
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with complete tool specification
@@ -895,28 +1046,49 @@ Corrected JSON:"""
                         }
                     )
 
-                return json.dumps(
-                    {"status": "success", "tool": spec.to_dict()}, indent=2
-                )
+                response = {"status": "success", "tool": spec.to_dict()}
+
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_inspect_tool(response)
+
+                return json.dumps(response, indent=2)
 
             except Exception as e:
                 return json.dumps(
                     {"status": "error", "message": f"Failed to inspect tool: {e}"}
                 )
 
-        @self.mcp.tool()
-        async def dynamic_registry_stats() -> str:
+        @self.mcp.tool(
+            name="dynamic_registry_stats",
+            annotations={
+                "title": "Registry Statistics",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
+        async def dynamic_registry_stats(detailed: bool = False) -> str:
             """Get statistics about the dynamic tool registry.
 
             Returns information about the total number of tools, tools by author,
             tools by capability, and registry location.
+
+            Args:
+                detailed: If False (default), return concise summary; if True, return full info
 
             Returns:
                 JSON string with registry statistics
             """
             try:
                 stats = self.registry.get_stats()
-                return json.dumps({"status": "success", "stats": stats}, indent=2)
+                response = {"status": "success", "stats": stats}
+
+                # Apply concise mode filtering
+                if not detailed:
+                    response = self._to_concise_registry_stats(response)
+
+                return json.dumps(response, indent=2)
 
             except Exception as e:
                 return json.dumps(

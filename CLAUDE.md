@@ -26,7 +26,7 @@ flake8 instrmcp/ tests/ --max-line-length=127     # Style warnings (non-blocking
 mypy instrmcp/ --ignore-missing-imports           # Type check (non-blocking)
 ```
 
-**Testing:**
+**Testing:** (Only perform it when explicitly asked)
 ```bash
 pytest                                              # All tests
 pytest -v                                           # Verbose
@@ -44,6 +44,17 @@ instrmcp qcodes --port 3001               # QCodes station server
 instrmcp config                           # Show configuration
 ```
 
+**Version Management:**
+```bash
+python tools/version.py              # Show all version locations
+python tools/version.py --check      # CI check (exit 1 if mismatch)
+python tools/version.py --sync       # Sync all to canonical version
+python tools/version.py --bump patch # Bump patch (2.1.0 → 2.1.1)
+python tools/version.py --bump minor # Bump minor (2.1.0 → 2.2.0)
+python tools/version.py --bump major # Bump major (2.1.0 → 3.0.0)
+python tools/version.py --set 2.2.0  # Set specific version
+```
+
 ## Architecture Overview
 
 ### Communication Flow
@@ -57,6 +68,7 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 - `instrmcp/tools/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
 - `instrmcp/extensions/` - Jupyter extensions, MeasureIt templates, database resources
 - `instrmcp/cli.py` - Command-line interface
+- `tools/version.py` - Unified version management script
 
 ### Key Files for Tool Changes
 When adding/removing MCP tools, update ALL of these:
@@ -70,7 +82,9 @@ When adding/removing MCP tools, update ALL of these:
 - **Unsafe Mode**: Allows code execution (`--unsafe` flag or `%mcp_unsafe` magic)
 - **Dangerous Mode**: Unsafe mode with all consent dialogs auto-approved (`%mcp_dangerous` magic)
 
-Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`, `dynamic_register_tool`, `dynamic_update_tool`. In dangerous mode, all consents are automatically approved.
+Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
+
+**Dynamic Tools** (opt-in, requires dangerous mode): Enable with `%mcp_option dynamictool` while in dangerous mode. Tools: `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`. These tools allow runtime creation and execution of arbitrary code.
 
 ### JupyterLab Extension
 Located in `instrmcp/extensions/jupyterlab/`. After modifying TypeScript:
@@ -90,7 +104,7 @@ All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_get_e
 **Unsafe Notebook:** `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`
 **MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_wait_for_all_sweeps`
 **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
-**Dynamic Tools:** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
+**Dynamic Tools (opt-in via `dynamictool`, requires dangerous mode):** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
 
 See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 
@@ -107,6 +121,7 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 %mcp_dangerous                  # Switch to dangerous mode (auto-approve all consents)
 %mcp_option measureit           # Enable MeasureIt
 %mcp_option database            # Enable database tools
+%mcp_option dynamictool         # Enable dynamic tools (requires dangerous mode)
 %mcp_option -measureit          # Disable MeasureIt
 ```
 
@@ -117,5 +132,21 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
-- [ ] Run `pytest` to verify tests pass
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
+
+## Version Management
+
+The project uses a unified version management script at `tools/version.py`. The canonical source of truth is `instrmcp/__init__.py`.
+
+**Version locations managed (8 files):**
+
+- `pyproject.toml` - Package metadata
+- `instrmcp/__init__.py` - Main package (canonical source)
+- `instrmcp/servers/__init__.py` - Servers subpackage
+- `instrmcp/servers/qcodes/__init__.py` - QCodes server
+- `instrmcp/servers/jupyter_qcodes/__init__.py` - Jupyter QCodes server
+- `instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/__init__.py` - JupyterLab Python extension
+- `instrmcp/extensions/jupyterlab/package.json` - JupyterLab Node.js extension
+- `docs/source/conf.py` - Sphinx documentation
+
+**Before releasing:** Always run `python tools/version.py --check` to verify all versions are in sync.

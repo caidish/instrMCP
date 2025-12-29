@@ -147,3 +147,4 @@ Thumbs.db
 config/station.yaml
 TestNotebook.ipynb
 /demo
+*.ipynb

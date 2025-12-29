@@ -24,7 +24,7 @@ class TestMeasureItToolRegistrar:
         mcp._tools = {}
 
         # Mock the @mcp.tool decorator
-        def tool_decorator(name=None):
+        def tool_decorator(name=None, annotations=None):
             def wrapper(func):
                 tool_name = name or func.__name__
                 mcp._tools[tool_name] = func
@@ -81,7 +81,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -115,7 +116,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["active"] is True
@@ -135,7 +137,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         wait_tool = mock_mcp_server._tools["measureit_wait_for_all_sweeps"]
-        result = await wait_tool()
+        # Use detailed=True to get full response with sweeps list
+        result = await wait_tool(detailed=True)
 
         assert isinstance(result, list)
         assert isinstance(result[0], TextContent)
@@ -193,7 +196,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["active"] is True
@@ -240,7 +244,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"]["complex_sweep"]
@@ -275,7 +280,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"]["my_queue"]
@@ -321,7 +327,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["active"] is False
@@ -412,7 +419,8 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         get_status_func = mock_mcp_server._tools["measureit_get_status"]
-        result = await get_status_func()
+        # Use detailed=True to get full response with sweeps dict
+        result = await get_status_func(detailed=True)
 
         response_data = json.loads(result[0].text)
         sweep = response_data["sweeps"]["simul_sweep"]

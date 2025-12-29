@@ -6,6 +6,7 @@ and Jupyter notebook functionality without arbitrary code execution.
 """
 
 import asyncio
+import re
 import time
 import logging
 from typing import Dict, List, Any, Optional, Union
@@ -472,7 +473,7 @@ class QCodesReadOnlyTools:
         key = self._make_cache_key(instrument_name, parameter_name)
         now = time.time()
 
-        # Check cache first
+        # Check cache first (fast path for non-fresh reads)
         cached = await self.cache.get(key)
 
         if not fresh and cached:
@@ -485,17 +486,24 @@ class QCodesReadOnlyTools:
                 "stale": False,
             }
 
-        # Check rate limiting
-        if cached and not await self.rate_limiter.can_access(instrument_name):
-            value, timestamp = cached
-            return {
-                "value": value,
-                "timestamp": timestamp,
-                "age_seconds": now - timestamp,
-                "source": "cache",
-                "stale": True,
-                "message": f"Rate limited (min interval: {self.min_interval_s}s)",
-            }
+        # Check rate limiting BEFORE any live read (applies to all live reads)
+        can_access = await self.rate_limiter.can_access(instrument_name)
+
+        if not can_access:
+            # Rate limited - return cached value if available
+            if cached:
+                value, timestamp = cached
+                return {
+                    "value": value,
+                    "timestamp": timestamp,
+                    "age_seconds": now - timestamp,
+                    "source": "cache",
+                    "stale": True,
+                    "rate_limited": True,
+                    "message": f"Rate limited (min interval: {self.min_interval_s}s)",
+                }
+            # No cache - must wait for rate limit before reading
+            # (fall through to live read which will wait_if_needed)
 
         # Read fresh value from hardware
         try:
@@ -610,6 +618,10 @@ class QCodesReadOnlyTools:
         self, type_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """List variables in the Jupyter namespace."""
+        # Normalize "null" string to None (some MCP clients serialize null as "null")
+        if type_filter and type_filter.strip().lower() == "null":
+            type_filter = None
+
         variables = []
 
         for name, obj in self.namespace.items():
@@ -645,13 +657,20 @@ class QCodesReadOnlyTools:
 
         obj = self.namespace[name]
 
+        # Get repr and truncate if needed
+        obj_repr = repr(obj)
+        repr_truncated = len(obj_repr) > 500
+        if repr_truncated:
+            obj_repr = obj_repr[:500] + "... [truncated]"
+
         info = {
             "name": name,
             "type": type(obj).__name__,
             "module": getattr(type(obj), "__module__", "builtins"),
             "size": len(obj) if hasattr(obj, "__len__") else None,
             "attributes": [attr for attr in dir(obj) if not attr.startswith("_")],
-            "repr": repr(obj)[:500] + "..." if len(repr(obj)) > 500 else repr(obj),
+            "repr": obj_repr,
+            "repr_truncated": repr_truncated,
         }
 
         # Add QCoDeS-specific info if it's an instrument
@@ -675,6 +694,7 @@ class QCodesReadOnlyTools:
         fresh_ms: Optional[int] = None,
         line_start: Optional[int] = None,
         line_end: Optional[int] = None,
+        max_lines: int = 200,
     ) -> Dict[str, Any]:
         """Get the currently editing cell content from JupyterLab frontend.
 
@@ -683,8 +703,16 @@ class QCodesReadOnlyTools:
         Args:
             fresh_ms: Optional maximum age in milliseconds. If provided and the
                      cached snapshot is older, will request fresh data from frontend.
-            line_start: Optional starting line number (1-indexed). Defaults to 1.
-            line_end: Optional ending line number (1-indexed, inclusive). Defaults to 100.
+            line_start: Optional starting line number (1-indexed).
+            line_end: Optional ending line number (1-indexed, inclusive).
+            max_lines: Maximum number of lines to return (default: 200).
+
+        Line selection logic:
+            - If both line_start and line_end are provided: return those lines exactly
+            - Else if total_lines <= max_lines: return all lines
+            - Else if line_start is provided: return max_lines starting from line_start
+            - Else if line_end is provided: return max_lines ending at line_end
+            - Else: return first max_lines lines
 
         Returns:
             Dictionary with editing cell information or error status
@@ -711,9 +739,27 @@ class QCodesReadOnlyTools:
             all_lines = full_text.splitlines()
             total_lines = len(all_lines)
 
-            # Apply line range (default: lines 1-100)
-            start = (line_start or 1) - 1  # Convert to 0-indexed
-            end = line_end or 100  # Keep 1-indexed for slice end
+            # Determine line range based on provided parameters
+            if line_start is not None and line_end is not None:
+                # Both provided: use exact range
+                start = line_start - 1  # Convert to 0-indexed
+                end = line_end  # Keep 1-indexed for slice end
+            elif total_lines <= max_lines:
+                # Small enough: return all lines
+                start = 0
+                end = total_lines
+            elif line_start is not None:
+                # Start provided: return max_lines from line_start
+                start = line_start - 1
+                end = start + max_lines
+            elif line_end is not None:
+                # End provided: return max_lines ending at line_end
+                end = line_end
+                start = max(0, end - max_lines)
+            else:
+                # Nothing provided: return first max_lines
+                start = 0
+                end = max_lines
 
             # Clamp to valid range - don't error if range is outside content
             start = max(0, min(start, total_lines))
@@ -809,32 +855,346 @@ class QCodesReadOnlyTools:
                 "source": "error",
             }
 
-    async def execute_editing_cell(self) -> Dict[str, Any]:
-        """Execute the currently editing cell in the JupyterLab frontend.
+    async def _get_cell_output(
+        self, cell_number: int, timeout_s: float = 0.5, bypass_cache: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Request and retrieve cell output from JupyterLab frontend.
+
+        Args:
+            cell_number: Execution count of the cell
+            timeout_s: Timeout for waiting for response
+            bypass_cache: If True, skip cache and always request fresh from frontend.
+                         Use this for final fetch to ensure late outputs are captured.
+
+        Returns:
+            Dictionary with output data or None if not available
+        """
+        # First check cache (unless bypassing)
+        if not bypass_cache:
+            cached = active_cell_bridge.get_cached_cell_output(cell_number)
+            if cached:
+                return cached
+
+        # Request from frontend
+        result = active_cell_bridge.get_cell_outputs([cell_number], timeout_s=timeout_s)
+        if not result.get("success"):
+            return None
+
+        # Wait a bit for response to arrive and be cached (non-blocking)
+        await asyncio.sleep(0.1)
+
+        # Check cache again
+        return active_cell_bridge.get_cached_cell_output(cell_number)
+
+    def _process_frontend_output(
+        self,
+        frontend_output: Optional[Dict[str, Any]],
+        target_count: int,
+        cell_input: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Process frontend output and return result dict if error or output found.
+
+        Args:
+            frontend_output: Output from frontend (may be None)
+            target_count: Cell execution count
+            cell_input: Cell source code
+
+        Returns:
+            Result dict if error or output found, None otherwise
+        """
+        if not frontend_output:
+            return None
+
+        outputs = frontend_output.get("outputs", [])
+
+        # Check if outputs contain an error
+        for output in outputs:
+            if output.get("type") == "error":
+                return {
+                    "status": "error",
+                    "has_error": True,
+                    "has_output": True,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "error_type": output.get("ename", "Unknown"),
+                    "error_message": output.get("evalue", ""),
+                    "traceback": "\n".join(output.get("traceback", [])),
+                    "outputs": outputs,
+                }
+
+        # Check if outputs contain data
+        if frontend_output.get("has_output"):
+            return {
+                "status": "completed",
+                "has_error": False,
+                "has_output": True,
+                "cell_number": target_count,
+                "input": cell_input,
+                "outputs": outputs,
+            }
+
+        return None
+
+    async def _wait_for_execution(
+        self, initial_count: int, timeout: float = 30.0
+    ) -> Dict[str, Any]:
+        """Wait for cell execution to complete.
+
+        Two-phase approach:
+        1. Wait for execution_count to increase (execution started)
+        2. Wait for last_execution_result to change (execution completed)
+
+        The primary completion signal is `last_execution_result` identity change,
+        which is set at the END of IPython's run_cell. This handles all cells
+        including long-running silent ones (e.g., `time.sleep(10); x = 1`).
+
+        After completion is detected, a short grace period allows frontend
+        outputs to propagate before returning.
+
+        Args:
+            initial_count: The execution_count before triggering execution
+            timeout: Maximum seconds to wait (default: 30)
+
+        Returns:
+            Dictionary with execution status and output
+        """
+        import sys
+        import traceback as tb_module
+
+        start_time = time.time()
+        poll_interval = 0.1  # 100ms
+        OUTPUT_GRACE = 0.5  # seconds to wait for frontend outputs after completion
+
+        # Capture initial state for identity comparison
+        initial_last_traceback = getattr(sys, "last_traceback", None)
+        initial_last_result = getattr(self.ipython, "last_execution_result", None)
+
+        target_count = None
+        completion_detected_time = None  # When last_execution_result changed
+        post_completion_fetch_done = False  # Track if we've done final frontend fetch
+
+        while (time.time() - start_time) < timeout:
+            current_count = getattr(self.ipython, "execution_count", 0)
+
+            # Phase 1: Wait for execution to START
+            if target_count is None:
+                if current_count > initial_count:
+                    target_count = current_count
+                    # Execution started - continue to phase 2
+                else:
+                    await asyncio.sleep(poll_interval)
+                    continue
+
+            # Phase 2: Wait for execution to COMPLETE
+            In = self.ipython.user_ns.get("In", [])
+            Out = self.ipython.user_ns.get("Out", {})
+            cell_input = In[target_count] if target_count < len(In) else ""
+
+            # Check 1: Error detected (compare traceback object identity, not type)
+            current_last_traceback = getattr(sys, "last_traceback", None)
+            if (
+                current_last_traceback is not None
+                and current_last_traceback is not initial_last_traceback
+            ):
+                # New error occurred - return immediately
+                error_type = getattr(sys, "last_type", None)
+                return {
+                    "status": "error",
+                    "has_error": True,
+                    "has_output": False,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "error_type": error_type.__name__ if error_type else "Unknown",
+                    "error_message": str(getattr(sys, "last_value", "")),
+                    "traceback": "".join(tb_module.format_tb(current_last_traceback)),
+                }
+
+            # Check 2: last_execution_result changed (primary completion signal)
+            current_last_result = getattr(self.ipython, "last_execution_result", None)
+            execution_completed = (
+                current_last_result is not None
+                and current_last_result is not initial_last_result
+            )
+
+            if execution_completed and completion_detected_time is None:
+                completion_detected_time = time.time()
+
+            # Check 3: Frontend outputs
+            # Strategy: Before completion, poll frontend. After completion, only check
+            # cache during grace period to avoid spamming frontend. After grace elapses,
+            # do ONE final frontend fetch to catch late outputs.
+            if completion_detected_time is None:
+                # Before completion: poll frontend as usual
+                frontend_output = await self._get_cell_output(target_count)
+            else:
+                # After completion: only check cache (no new frontend requests)
+                frontend_output = active_cell_bridge.get_cached_cell_output(
+                    target_count
+                )
+
+            # Process frontend output (check for errors or data)
+            result = self._process_frontend_output(
+                frontend_output, target_count, cell_input
+            )
+            if result:
+                return result
+
+            # Check 4: Out cache populated (expression result)
+            if target_count in Out:
+                return {
+                    "status": "completed",
+                    "has_error": False,
+                    "has_output": True,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "output": str(Out[target_count]),
+                }
+
+            # Check 5: Execution count advanced beyond target (another cell ran)
+            # Do final fetch before returning to catch any late outputs
+            if current_count > target_count:
+                if not post_completion_fetch_done:
+                    post_completion_fetch_done = True
+                    final_output = await self._get_cell_output(
+                        target_count, bypass_cache=True
+                    )
+                    result = self._process_frontend_output(
+                        final_output, target_count, cell_input
+                    )
+                    if result:
+                        return result
+                return {
+                    "status": "completed",
+                    "has_error": False,
+                    "has_output": False,
+                    "cell_number": target_count,
+                    "input": cell_input,
+                    "message": "Cell executed successfully with no output",
+                }
+
+            # Check 6: Completion detected + grace period elapsed (silent cell)
+            # After grace period, do ONE final frontend fetch to catch late outputs
+            if completion_detected_time is not None:
+                grace_elapsed = time.time() - completion_detected_time
+                if grace_elapsed >= OUTPUT_GRACE:
+                    # Final frontend fetch after grace period (only once)
+                    if not post_completion_fetch_done:
+                        post_completion_fetch_done = True
+                        final_output = await self._get_cell_output(
+                            target_count, bypass_cache=True
+                        )
+                        result = self._process_frontend_output(
+                            final_output, target_count, cell_input
+                        )
+                        if result:
+                            return result
+
+                    # No output after final fetch - return completed with no output
+                    return {
+                        "status": "completed",
+                        "has_error": False,
+                        "has_output": False,
+                        "cell_number": target_count,
+                        "input": cell_input,
+                        "message": "Cell executed (no output)",
+                    }
+
+            await asyncio.sleep(poll_interval)
+
+        # Timeout
+        return {
+            "status": "timeout",
+            "has_error": False,
+            "has_output": False,
+            "cell_number": target_count or 0,
+            "message": f"Timeout after {timeout}s waiting for execution to complete",
+        }
+
+    async def execute_editing_cell(self, timeout: float = 30.0) -> Dict[str, Any]:
+        """Execute the currently editing cell and wait for output.
 
         UNSAFE: This tool executes code in the active notebook cell. The code will run
         in the frontend with output appearing in the notebook.
 
+        Args:
+            timeout: Maximum seconds to wait for execution to complete (default: 30)
+
         Returns:
-            Dictionary with execution status and response details
+            Dictionary with execution status AND output/error details
         """
         try:
-            # Import the bridge module
-            from . import active_cell_bridge
+            # 1. Capture current execution count and cell text from bridge
+            initial_count = getattr(self.ipython, "execution_count", 0)
+            # Get cell text from bridge snapshot BEFORE execution (most reliable)
+            bridge_snapshot = active_cell_bridge.get_active_cell()
+            cell_text_from_bridge = (
+                bridge_snapshot.get("text", "") if bridge_snapshot else ""
+            )
 
-            # Send execution request to frontend
-            result = active_cell_bridge.execute_active_cell()
+            # 2. Send execution request to frontend
+            exec_result = active_cell_bridge.execute_active_cell()
 
-            # Add metadata
-            result.update(
-                {
+            if not exec_result.get("success"):
+                exec_result.update(
+                    {
+                        "source": "execute_editing_cell",
+                        "warning": "UNSAFE: Attempted to execute code but request failed",
+                    }
+                )
+                return exec_result
+
+            # 3. Wait for execution to complete (polls execution_count)
+            output_result = await self._wait_for_execution(initial_count, timeout)
+
+            # 4. Handle timeout
+            if output_result.get("status") == "timeout":
+                return {
+                    "success": True,
+                    "executed": True,
+                    "execution_count": 0,
+                    **output_result,
                     "source": "execute_editing_cell",
                     "bridge_status": active_cell_bridge.get_bridge_status(),
                     "warning": "UNSAFE: Code was executed in the active cell",
                 }
-            )
 
-            return result
+            # 5. Combine results
+            combined_result = {
+                "success": True,
+                "executed": True,
+                "execution_count": output_result.get("cell_number", 0),
+                **output_result,
+                "source": "execute_editing_cell",
+                "bridge_status": active_cell_bridge.get_bridge_status(),
+                "warning": "UNSAFE: Code was executed in the active cell",
+            }
+
+            # 6. Detect if a MeasureIt sweep was started and extract sweep names
+            # Use bridge text (captured before execution) as fallback if IPython In[] is empty
+            cell_input = output_result.get("input", "") or cell_text_from_bridge
+            sweep_pattern = r"(\w+)\.start\s*\("
+            sweep_matches = re.findall(sweep_pattern, cell_input)
+
+            if sweep_matches:
+                combined_result["sweep_detected"] = True
+                combined_result["sweep_names"] = sweep_matches
+                if len(sweep_matches) == 1:
+                    combined_result["suggestion"] = (
+                        f"A sweep appears to have been started. "
+                        f"Use measureit_wait_for_sweep with sweep name "
+                        f"'{sweep_matches[0]}' to wait for completion."
+                    )
+                else:
+                    names = ", ".join(f"'{n}'" for n in sweep_matches)
+                    combined_result["suggestion"] = (
+                        f"Multiple sweeps appear to have been started ({names}). "
+                        f"Use measureit_wait_for_sweep with sweep names or "
+                        f"measureit_wait_for_all_sweeps() to wait for completion."
+                    )
+
+            return combined_result
 
         except Exception as e:
             logger.error(f"Error in execute_editing_cell: {e}")
@@ -1014,6 +1374,7 @@ class QCodesReadOnlyTools:
             target: Where to move the cursor:
                    - "above": Move to cell above current
                    - "below": Move to cell below current
+                   - "bottom": Move to the last cell in the notebook (by file order)
                    - "<number>": Move to cell with that execution count (e.g., "5" for [5])
 
         Returns:
@@ -1024,19 +1385,20 @@ class QCodesReadOnlyTools:
             from . import active_cell_bridge
 
             # Validate target
-            valid_targets = ["above", "below"]
+            valid_targets = ["above", "below", "bottom"]
             if target not in valid_targets:
                 try:
                     int(target)  # Check if it's a number
                 except ValueError:
                     return {
                         "success": False,
-                        "error": f"Invalid target '{target}'. Must be 'above', 'below', or a cell number",
+                        "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
                         "source": "validation_error",
                     }
 
             # Send move cursor request to frontend
-            result = active_cell_bridge.move_cursor(target)
+            # Use asyncio.to_thread to avoid blocking the event loop during wait
+            result = await asyncio.to_thread(active_cell_bridge.move_cursor, target)
 
             # Add metadata
             result.update(

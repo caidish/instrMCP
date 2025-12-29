@@ -24,7 +24,7 @@ class TestDatabaseToolRegistrar:
         mcp._tools = {}
 
         # Mock the @mcp.tool decorator
-        def tool_decorator(name=None):
+        def tool_decorator(name=None, annotations=None):
             def wrapper(func):
                 tool_name = name or func.__name__
                 mcp._tools[tool_name] = func
@@ -92,7 +92,7 @@ class TestDatabaseToolRegistrar:
 
         registrar.register_all()
         list_exp_func = mock_mcp_server._tools["database_list_experiments"]
-        result = await list_exp_func(database_path=None)
+        result = await list_exp_func(database_path=None, detailed=True)
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -158,7 +158,7 @@ class TestDatabaseToolRegistrar:
 
         registrar.register_all()
         get_dataset_func = mock_mcp_server._tools["database_get_dataset_info"]
-        result = await get_dataset_func(id=1, database_path=None)
+        result = await get_dataset_func(id=1, database_path=None, detailed=True)
 
         assert result[0].text == mock_dataset
         mock_db_integration.get_dataset_info.assert_called_once_with(
@@ -322,7 +322,7 @@ class TestDatabaseToolRegistrar:
 
         registrar.register_all()
         get_dataset_func = mock_mcp_server._tools["database_get_dataset_info"]
-        result = await get_dataset_func(id=42, database_path=None)
+        result = await get_dataset_func(id=42, database_path=None, detailed=True)
 
         dataset = json.loads(result[0].text)
         assert dataset["run_id"] == 42

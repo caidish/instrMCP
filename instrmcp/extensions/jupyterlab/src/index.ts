@@ -15,8 +15,12 @@ import { NotebookActions } from '@jupyterlab/notebook';
 
 import { Dialog, showDialog } from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
+import { Signal } from '@lumino/signaling';
 
 import { Change, diffLines } from 'diff';
+import { MCPToolbarExtension, MCPStatusUpdate } from './toolbar';
+
+const statusUpdateSignal = new Signal<object, MCPStatusUpdate>({});
 
 /**
  * MCP Active Cell Bridge Extension
@@ -47,6 +51,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track MCP server readiness per kernel
     const mcpServerReady = new WeakMap<Kernel.IKernelConnection, boolean>();
+
+    // Track IPython extension load per kernel
+    const extensionLoaded = new WeakMap<Kernel.IKernelConnection, boolean>();
+    const extensionLoading = new WeakMap<Kernel.IKernelConnection, Promise<void>>();
 
     // Queue for pending operations while waiting for server
     const pendingOperations = new WeakMap<Kernel.IKernelConnection, (() => void)[]>();
@@ -213,15 +221,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Get the newly created cell
-        const newCell = notebooks.activeCell;
+        let newCell = notebooks.activeCell;
         if (newCell) {
           // Set cell type if needed
           if (newCell.model.type !== cellType) {
             await NotebookActions.changeCellType(panel.content, cellType as any);
+            // Re-fetch activeCell: changeCellType removes old cell and creates new one
+            newCell = notebooks.activeCell;
           }
 
           // Set content if provided
-          if (content) {
+          if (content && newCell) {
             newCell.model.sharedModel.setSource(content);
           }
         }
@@ -447,6 +457,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           targetIndex = currentIndex - 1;
         } else if (target === 'below') {
           targetIndex = currentIndex + 1;
+        } else if (target === 'bottom') {
+          // Move to the last cell in the notebook (by file order, not execution count)
+          targetIndex = cells.length - 1;
         } else {
           // target is a cell execution count number
           const targetCellNum = parseInt(target);
@@ -455,7 +468,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               type: 'move_cursor_response',
               request_id: requestId,
               success: false,
-              message: `Invalid target '${target}'. Must be 'above', 'below', or a cell number`
+              message: `Invalid target '${target}'. Must be 'above', 'below', 'bottom', or a cell number`
             });
             return;
           }
@@ -609,17 +622,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 // Expression result
                 // Access data from _rawData or data property
                 const resultData = output._rawData || output.data || {};
+                // Sanitize to remove large image data
                 outputData.push({
                   type: 'execute_result',
                   execution_count: output.executionCount,
-                  data: resultData
+                  data: sanitizeOutputData(resultData)
                 });
               } else if (outputType === 'display_data') {
                 // Rich display
                 const displayData = output._rawData || output.data || {};
+                // Sanitize to remove large image data
                 outputData.push({
                   type: 'display_data',
-                  data: displayData
+                  data: sanitizeOutputData(displayData)
                 });
               } else if (outputType === 'error') {
                 // Error/traceback - access from _raw
@@ -661,6 +676,138 @@ const plugin: JupyterFrontEndPlugin<void> = {
           request_id: requestId,
           success: false,
           message: `Failed to get cell outputs: ${error}`
+        });
+      }
+    };
+
+    // Handle get active cell output request from kernel
+    // This directly gets the output of the currently active cell, avoiding stale state issues
+    const handleGetActiveCellOutput = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+
+      try {
+        const panel = notebooks.currentWidget;
+        const activeCell = notebooks.activeCell;
+
+        if (!panel || !activeCell) {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available'
+          });
+          return;
+        }
+
+        // Get basic cell info
+        const cellModel = activeCell.model;
+        const cellType = cellModel.type;
+        const cellIndex = panel.content.widgets.indexOf(activeCell);
+        const executionCount = (cellModel as any).executionCount;
+
+        // Handle edge case where active cell is not in widgets (transient state)
+        if (cellIndex === -1) {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: false,
+            message: 'Active cell not found in notebook widgets (transient state)'
+          });
+          return;
+        }
+
+        // For non-code cells, there are no outputs
+        if (cellType !== 'code') {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: true,
+            cell_type: cellType,
+            cell_index: cellIndex,
+            execution_count: null,
+            has_output: false,
+            has_error: false,
+            outputs: [],
+            message: 'Non-code cells do not have outputs'
+          });
+          return;
+        }
+
+        // Get outputs from the cell model
+        const cellOutputs = (cellModel as any).outputs;
+        const outputData: any[] = [];
+        let hasError = false;
+
+        if (cellOutputs && cellOutputs.length > 0) {
+          for (let i = 0; i < cellOutputs.length; i++) {
+            const output = cellOutputs.get(i);
+            const outputType = output.type;
+
+            if (outputType === 'stream') {
+              const rawData = output._raw || {};
+              const streamName = rawData.name || 'stdout';
+              let textValue = rawData.text;
+              if (!textValue && output._text) {
+                textValue = output._text._text || output._text;
+              }
+              if (Array.isArray(textValue)) {
+                textValue = textValue.join('');
+              }
+              outputData.push({
+                type: 'stream',
+                name: streamName,
+                text: textValue || ''
+              });
+            } else if (outputType === 'execute_result') {
+              const resultData = output._rawData || output.data || {};
+              outputData.push({
+                type: 'execute_result',
+                execution_count: output.executionCount,
+                data: sanitizeOutputData(resultData)
+              });
+            } else if (outputType === 'display_data') {
+              const displayData = output._rawData || output.data || {};
+              outputData.push({
+                type: 'display_data',
+                data: sanitizeOutputData(displayData)
+              });
+            } else if (outputType === 'error') {
+              hasError = true;
+              const rawError = output._raw || {};
+              outputData.push({
+                type: 'error',
+                ename: rawError.ename || output.ename || '',
+                evalue: rawError.evalue || output.evalue || '',
+                traceback: rawError.traceback || output.traceback || []
+              });
+            }
+          }
+        }
+
+        // Send success response with active cell output
+        comm.send({
+          type: 'get_active_cell_output_response',
+          request_id: requestId,
+          success: true,
+          cell_type: cellType,
+          cell_index: cellIndex,
+          execution_count: executionCount,
+          has_output: outputData.length > 0,
+          has_error: hasError,
+          outputs: outputData,
+          message: 'Active cell output retrieved successfully'
+        });
+
+        console.log(`MCP Active Cell Bridge: Retrieved active cell output (exec_count=${executionCount}, ${outputData.length} outputs)`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to get active cell output:', error);
+
+        comm.send({
+          type: 'get_active_cell_output_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to get active cell output: ${error}`
         });
       }
     };
@@ -864,6 +1011,49 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return div.innerHTML;
     };
 
+    // Image MIME types that should be sanitized (replaced with placeholder)
+    const IMAGE_MIME_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/svg+xml',
+      'image/webp',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    // Sanitize output data by replacing large images with placeholders
+    const sanitizeOutputData = (data: Record<string, any>): Record<string, any> => {
+      const sanitized: Record<string, any> = {};
+
+      for (const [mimeType, content] of Object.entries(data)) {
+        if (IMAGE_MIME_TYPES.includes(mimeType)) {
+          // Replace image with placeholder
+          let sizeInfo = 'unknown size';
+          if (typeof content === 'string') {
+            // Base64 encoded - estimate actual size (base64 is ~4/3 of original)
+            const estimatedBytes = Math.floor(content.length * 0.75);
+            if (estimatedBytes >= 1024 * 1024) {
+              sizeInfo = `${(estimatedBytes / (1024 * 1024)).toFixed(2)} MB`;
+            } else if (estimatedBytes >= 1024) {
+              sizeInfo = `${(estimatedBytes / 1024).toFixed(1)} KB`;
+            } else {
+              sizeInfo = `${estimatedBytes} bytes`;
+            }
+          }
+
+          // Extract format from MIME type
+          const format = mimeType.split('/')[1]?.toUpperCase() || 'IMAGE';
+          sanitized[mimeType] = `[${format} image, ${sizeInfo} - content omitted to save tokens]`;
+        } else {
+          // Keep non-image content as-is
+          sanitized[mimeType] = content;
+        }
+      }
+
+      return sanitized;
+    };
+
     // Handle patch consent request from kernel
     const handlePatchConsentRequest = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const operation = data.operation || 'apply_patch';
@@ -1014,6 +1204,39 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    const ensureExtensionLoaded = async (kernel?: Kernel.IKernelConnection | null) => {
+      if (!kernel || kernel.status === 'dead') {
+        return;
+      }
+
+      if (extensionLoaded.get(kernel)) {
+        return;
+      }
+
+      const inFlight = extensionLoading.get(kernel);
+      if (inFlight) {
+        return inFlight;
+      }
+
+      const promise = (async () => {
+        try {
+          const future = kernel.requestExecute({
+            code: '%load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension',
+            silent: true
+          });
+          await future.done;
+          extensionLoaded.set(kernel, true);
+        } catch (error) {
+          console.warn('MCP Toolbar: Failed to auto-load MCP IPython extension', error);
+        } finally {
+          extensionLoading.delete(kernel);
+        }
+      })();
+
+      extensionLoading.set(kernel, promise);
+      return promise;
+    };
+
     // Handle consent request from kernel
     const handleConsentRequest = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const operation = data.operation || 'unknown';
@@ -1156,6 +1379,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       kernel.registerCommTarget('mcp:server_status', (comm: any, msg: any) => {
         const data = msg?.content?.data || {};
         const status = data.status;
+        const details = data.details || {};
 
         console.log(`MCP Server Status: Received status update - ${status}`);
 
@@ -1194,6 +1418,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
           // Initial state - server not started yet
           mcpServerReady.set(kernel, false);
           console.log('MCP Active Cell Bridge: Waiting for server to start');
+        }
+
+        if (
+          status === 'server_ready' ||
+          status === 'server_stopped' ||
+          status === 'config_changed' ||
+          status === 'server_not_started'
+        ) {
+          statusUpdateSignal.emit({ kernel, status, details });
         }
       });
 
@@ -1306,6 +1539,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleMoveCursor(kernel, comm, data);
               } else if (msgType === 'get_cell_outputs') {
                 handleGetCellOutputs(kernel, comm, data);
+              } else if (msgType === 'get_active_cell_output') {
+                handleGetActiveCellOutput(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
               } else {
@@ -1322,7 +1557,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
             };
 
             // Open comm and wait for it to be ready
-            await comm.open({}).done;
+            // FIX: Send kernel_id to backend for proper comm-to-kernel association
+            // This prevents operations from being broadcast to all notebooks
+            await comm.open({ kernel_id: kernel.id }).done;
 
             // Mark comm as successfully opened
             openedComms.set(kernel, true);
@@ -1498,11 +1735,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
         if (kernel) {
+          ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
           // Don't try to ensure comm yet - wait for server ready signal
         }
         console.log('MCP Active Cell Bridge: Kernel ready, waiting for server status');
+      });
+
+      panel.sessionContext.kernelChanged.connect((_: any, args: any) => {
+        const kernel = args.newValue ?? null;
+        if (kernel) {
+          ensureExtensionLoaded(kernel);
+          registerServerStatusCommTarget(kernel);
+          registerConsentCommTarget(kernel);
+        }
       });
     });
 
@@ -1510,11 +1757,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
       if (kernel) {
+        ensureExtensionLoaded(kernel);
         registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
         // Don't try to ensure comm yet - wait for server ready signal
       }
     });
+
+    const toolbarExtension = new MCPToolbarExtension({
+      getServerReady: (kernel?: Kernel.IKernelConnection | null) =>
+        (kernel ? mcpServerReady.get(kernel) : undefined) ?? false,
+      getComm: (kernel?: Kernel.IKernelConnection | null) =>
+        kernel ? comms.get(kernel) : null,
+      statusUpdateSignal
+    });
+    app.docRegistry.addWidgetExtension('Notebook', toolbarExtension);
 
     console.log('MCP Active Cell Bridge: Event listeners registered');
   }

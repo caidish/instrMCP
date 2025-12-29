@@ -128,7 +128,7 @@ class TestAutoCorrectEnabled:
 
     @pytest.mark.asyncio
     async def test_sampling_called_when_enabled(
-        self, registrar_enabled, mock_context, caplog
+        self, registrar_enabled, mock_context, caplog, enable_instrmcp_log_capture
     ):
         """Test that ctx.sample() is called when auto_correct_json is True."""
         import logging
@@ -217,23 +217,28 @@ class TestAutoCorrectEnabled:
 
     @pytest.mark.asyncio
     async def test_handles_sampling_exception(
-        self, registrar_enabled, mock_context, caplog
+        self, registrar_enabled, mock_context, caplog, enable_instrmcp_log_capture
     ):
         """Test that exceptions during sampling are handled gracefully."""
+        import logging
+
         mock_context.sample.side_effect = Exception("Sampling failed")
 
-        result = await registrar_enabled._attempt_json_correction(
-            mock_context, "returns", "[bad]", "error"
-        )
+        with caplog.at_level(logging.WARNING):
+            result = await registrar_enabled._attempt_json_correction(
+                mock_context, "returns", "[bad]", "error"
+            )
 
-        # Should return None
-        assert result is None
+            # Should return None
+            assert result is None
 
-        # Should log warning
-        assert "JSON correction failed" in caplog.text
+            # Should log warning
+            assert "JSON correction failed" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_handles_timeout_error(self, registrar_enabled, mock_context, caplog):
+    async def test_handles_timeout_error(
+        self, registrar_enabled, mock_context, caplog, enable_instrmcp_log_capture
+    ):
         """Test that timeout errors are handled with specific message."""
         import logging
 
@@ -364,7 +369,7 @@ class TestAuditLogging:
 
     @pytest.mark.asyncio
     async def test_successful_correction_logged(
-        self, registrar_enabled, mock_context, caplog
+        self, registrar_enabled, mock_context, caplog, enable_instrmcp_log_capture
     ):
         """Test that successful corrections are logged."""
         import logging
@@ -386,18 +391,21 @@ class TestAuditLogging:
 
     @pytest.mark.asyncio
     async def test_failed_correction_logged(
-        self, registrar_enabled, mock_context, caplog
+        self, registrar_enabled, mock_context, caplog, enable_instrmcp_log_capture
     ):
         """Test that failed corrections are logged."""
-        mock_context.sample.side_effect = Exception("LLM error")
+        import logging
 
-        await registrar_enabled._attempt_json_correction(
-            mock_context, "test_field", "[bad]", "error"
-        )
+        with caplog.at_level(logging.WARNING):
+            mock_context.sample.side_effect = Exception("LLM error")
 
-        # Check logs
-        assert "JSON correction failed" in caplog.text
-        assert "test_field" in caplog.text
+            await registrar_enabled._attempt_json_correction(
+                mock_context, "test_field", "[bad]", "error"
+            )
+
+            # Check logs
+            assert "JSON correction failed" in caplog.text
+            assert "test_field" in caplog.text
 
 
 class TestEdgeCases:

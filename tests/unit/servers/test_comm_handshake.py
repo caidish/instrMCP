@@ -102,8 +102,9 @@ def cleanup_active_cell_globals():
     with active_cell_bridge._STATE_LOCK:
         active_cell_bridge._LAST_SNAPSHOT = None
         active_cell_bridge._LAST_TS = 0.0
-        active_cell_bridge._ACTIVE_COMMS.clear()
+        active_cell_bridge._KERNEL_COMM_MAP.clear()
         active_cell_bridge._CELL_OUTPUTS_CACHE.clear()
+        active_cell_bridge._PENDING_REQUESTS.clear()
 
 
 @pytest.fixture
@@ -117,97 +118,69 @@ def cleanup_status_comm():
 
 
 class TestBroadcastServerStatusPython313:
-    """Test broadcast_server_status Python 3.13 compatibility."""
+    """Test broadcast_server_status with existing toolbar comms."""
 
-    def test_broadcast_with_no_event_loop(
+    def test_broadcast_with_existing_toolbar_comm(
         self, fake_ipython, cleanup_status_comm, caplog
     ):
-        """Test broadcast_server_status when no asyncio event loop exists (Python 3.13)."""
+        """Test broadcast_server_status sends through existing toolbar comms."""
         from instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension import (
             broadcast_server_status,
+            _toolbar_comms,
         )
 
-        # Mock get_ipython to return our fake instance
-        with patch(
-            "IPython.core.getipython.get_ipython",
-            return_value=fake_ipython,
-        ):
-            # Mock asyncio.get_running_loop to raise RuntimeError (Python 3.13 behavior)
-            with patch(
-                "instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension.asyncio.get_running_loop",
-                side_effect=RuntimeError("no running event loop"),
-            ):
-                # Mock Comm to capture sends
-                sent_messages = []
+        # Create a mock comm to receive broadcasts
+        sent_messages = []
 
-                class MockComm:
-                    def __init__(self, target_name):
-                        self.target_name = target_name
-                        self._closed = False
+        class MockToolbarComm:
+            def __init__(self):
+                self._closed = False
+                self.is_disposed = False
+                self.kernel = MagicMock()
+                self.kernel.is_alive.return_value = True
 
-                    def send(self, data):
-                        sent_messages.append(data)
+            def send(self, data):
+                sent_messages.append(data)
 
-                with patch(
-                    "ipykernel.comm.Comm",
-                    MockComm,
-                ):
-                    # Call broadcast_server_status
-                    broadcast_server_status("server_ready", {"port": 3000})
+        mock_comm = MockToolbarComm()
 
-                    # Verify message was sent despite RuntimeError
-                    assert len(sent_messages) == 1
-                    msg = sent_messages[0]
-                    assert msg["status"] == "server_ready"
-                    assert msg["details"] == {"port": 3000}
-                    assert "timestamp" in msg
-                    # Timestamp should be from time.time(), not loop.time()
-                    assert isinstance(msg["timestamp"], float)
+        # Add the mock comm to the tracked set
+        _toolbar_comms.add(mock_comm)
+        try:
+            # Call broadcast_server_status
+            broadcast_server_status("server_ready", {"port": 3000})
 
-    def test_broadcast_with_running_loop(
+            # Verify message was sent through the tracked comm
+            assert len(sent_messages) == 1
+            msg = sent_messages[0]
+            assert msg["type"] == "status_broadcast"
+            assert msg["status"] == "server_ready"
+            assert "details" in msg
+            assert msg["details"].get("port") == 3000
+            assert "timestamp" in msg
+            assert isinstance(msg["timestamp"], float)
+        finally:
+            _toolbar_comms.discard(mock_comm)
+
+    def test_broadcast_with_no_toolbar_comms(
         self, fake_ipython, cleanup_status_comm, caplog
     ):
-        """Test broadcast_server_status when event loop is running."""
+        """Test broadcast_server_status when no toolbar comms are connected."""
         from instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension import (
             broadcast_server_status,
+            _toolbar_comms,
         )
 
-        # Mock get_ipython to return our fake instance
-        with patch(
-            "IPython.core.getipython.get_ipython",
-            return_value=fake_ipython,
-        ):
-            # Mock asyncio.get_running_loop to return a loop
-            mock_loop = MagicMock()
-            mock_loop.time.return_value = 12345.678
+        # Ensure no comms are tracked
+        original_comms = _toolbar_comms.copy()
+        _toolbar_comms.clear()
 
-            with patch(
-                "instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension.asyncio.get_running_loop",
-                return_value=mock_loop,
-            ):
-                # Mock Comm to capture sends
-                sent_messages = []
-
-                class MockComm:
-                    def __init__(self, target_name):
-                        self.target_name = target_name
-                        self._closed = False
-
-                    def send(self, data):
-                        sent_messages.append(data)
-
-                with patch(
-                    "ipykernel.comm.Comm",
-                    MockComm,
-                ):
-                    # Call broadcast_server_status
-                    broadcast_server_status("server_stopped")
-
-                    # Verify message was sent with loop timestamp
-                    assert len(sent_messages) == 1
-                    msg = sent_messages[0]
-                    assert msg["status"] == "server_stopped"
-                    assert msg["timestamp"] == 12345.678  # From loop.time()
+        try:
+            # Call broadcast_server_status - should not raise
+            broadcast_server_status("server_stopped")
+            # Just verify it doesn't crash when no comms are available
+        finally:
+            _toolbar_comms.update(original_comms)
 
     def test_broadcast_without_ipython(self, cleanup_status_comm):
         """Test broadcast_server_status gracefully handles missing IPython."""
@@ -259,51 +232,61 @@ class TestActiveCellBridge:
             # Verify target was registered
             assert "mcp:active_cell" in fake_ipython.kernel.comm_manager._targets
 
-    def test_comm_open_adds_to_active_comms(
+    def test_comm_open_adds_to_kernel_comm_map(
         self, fake_ipython, cleanup_active_cell_globals
     ):
-        """Test opening a comm adds it to _ACTIVE_COMMS."""
+        """Test opening a comm registers it in _KERNEL_COMM_MAP."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
-            _ACTIVE_COMMS,
+            _KERNEL_COMM_MAP,
         )
 
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-123",
         ):
             register_comm_target()
 
-            # Simulate frontend opening a comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            # Simulate frontend opening a comm with kernel_id in data
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-123"}
+            )
 
-            # Verify comm was added to active comms
-            assert comm in _ACTIVE_COMMS
-            assert len(_ACTIVE_COMMS) == 1
+            # Verify comm was added to kernel comm map
+            assert "test-kernel-123" in _KERNEL_COMM_MAP
+            assert _KERNEL_COMM_MAP["test-kernel-123"] == comm
 
-    def test_comm_close_removes_from_active_comms(
+    def test_comm_close_removes_from_kernel_comm_map(
         self, fake_ipython, cleanup_active_cell_globals
     ):
-        """Test closing a comm removes it from _ACTIVE_COMMS."""
+        """Test closing a comm removes it from _KERNEL_COMM_MAP."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
-            _ACTIVE_COMMS,
+            _KERNEL_COMM_MAP,
         )
 
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-456",
         ):
             register_comm_target()
 
             # Open and then close a comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
-            assert comm in _ACTIVE_COMMS
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-456"}
+            )
+            assert "test-kernel-456" in _KERNEL_COMM_MAP
 
             comm.close()
 
             # Verify comm was removed
-            assert comm not in _ACTIVE_COMMS
+            assert "test-kernel-456" not in _KERNEL_COMM_MAP
 
     def test_snapshot_message_updates_last_snapshot(
         self, fake_ipython, cleanup_active_cell_globals
@@ -311,17 +294,21 @@ class TestActiveCellBridge:
         """Test receiving a snapshot message updates _LAST_SNAPSHOT."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
-            _LAST_SNAPSHOT,
         )
 
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-snapshot",
         ):
             register_comm_target()
 
             # Open a comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-snapshot"}
+            )
 
             # Simulate frontend sending a snapshot
             snapshot_msg = {
@@ -355,10 +342,10 @@ class TestActiveCellBridge:
                 assert bridge._LAST_SNAPSHOT["cell_index"] == 5
                 assert bridge._LAST_SNAPSHOT["text"] == "print('hello world')"
 
-    def test_request_frontend_snapshot_sends_to_all_comms(
+    def test_request_frontend_snapshot_sends_to_current_kernel_comm(
         self, fake_ipython, cleanup_active_cell_globals
     ):
-        """Test request_frontend_snapshot sends request to all active comms."""
+        """Test request_frontend_snapshot sends request to current kernel's comm only."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
             request_frontend_snapshot,
@@ -367,22 +354,23 @@ class TestActiveCellBridge:
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-request",
         ):
             register_comm_target()
 
-            # Open multiple comms
-            comm1 = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
-            comm2 = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            # Open a comm for this kernel
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-request"}
+            )
 
             # Request snapshot
             request_frontend_snapshot()
 
-            # Verify both comms received the request
-            assert len(comm1._sent_messages) == 1
-            assert comm1._sent_messages[0] == {"type": "request_current"}
-
-            assert len(comm2._sent_messages) == 1
-            assert comm2._sent_messages[0] == {"type": "request_current"}
+            # Verify comm received the request
+            assert len(comm._sent_messages) == 1
+            assert comm._sent_messages[0] == {"type": "request_current"}
 
     def test_cell_outputs_cache_updates(
         self, fake_ipython, cleanup_active_cell_globals
@@ -396,11 +384,16 @@ class TestActiveCellBridge:
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-outputs",
         ):
             register_comm_target()
 
             # Open a comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-outputs"}
+            )
 
             # Simulate frontend sending cell outputs
             outputs_msg = {
@@ -433,11 +426,13 @@ class TestActiveCellBridge:
                 assert bridge._CELL_OUTPUTS_CACHE[1]["output_type"] == "execute_result"
                 assert bridge._CELL_OUTPUTS_CACHE[2]["output_type"] == "stream"
 
-    def test_multiple_comms_lifecycle(self, fake_ipython, cleanup_active_cell_globals):
-        """Test managing multiple comms through their lifecycle."""
+    def test_multiple_kernels_lifecycle(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """Test managing comms from multiple kernels through their lifecycle."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
-            _ACTIVE_COMMS,
+            _KERNEL_COMM_MAP,
         )
 
         with patch(
@@ -446,24 +441,30 @@ class TestActiveCellBridge:
         ):
             register_comm_target()
 
-            # Open 3 comms
-            comm1 = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
-            comm2 = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
-            comm3 = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            # Open comms for 3 different kernels
+            comm1 = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "kernel-1"}
+            )
+            comm2 = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "kernel-2"}
+            )
+            comm3 = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "kernel-3"}
+            )
 
-            assert len(_ACTIVE_COMMS) == 3
+            assert len(_KERNEL_COMM_MAP) == 3
 
-            # Close middle comm
+            # Close middle kernel's comm
             comm2.close()
-            assert len(_ACTIVE_COMMS) == 2
-            assert comm1 in _ACTIVE_COMMS
-            assert comm2 not in _ACTIVE_COMMS
-            assert comm3 in _ACTIVE_COMMS
+            assert len(_KERNEL_COMM_MAP) == 2
+            assert "kernel-1" in _KERNEL_COMM_MAP
+            assert "kernel-2" not in _KERNEL_COMM_MAP
+            assert "kernel-3" in _KERNEL_COMM_MAP
 
             # Close remaining comms
             comm1.close()
             comm3.close()
-            assert len(_ACTIVE_COMMS) == 0
+            assert len(_KERNEL_COMM_MAP) == 0
 
     def test_pong_message_handling(self, fake_ipython, cleanup_active_cell_globals):
         """Test handling pong message from frontend."""
@@ -474,10 +475,15 @@ class TestActiveCellBridge:
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-pong",
         ):
             register_comm_target()
 
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-pong"}
+            )
 
             # Send pong message (should just log)
             pong_msg = {"content": {"data": {"type": "pong"}}}
@@ -486,7 +492,11 @@ class TestActiveCellBridge:
             comm.simulate_message(pong_msg)
 
     def test_unknown_message_type(
-        self, fake_ipython, cleanup_active_cell_globals, caplog
+        self,
+        fake_ipython,
+        cleanup_active_cell_globals,
+        caplog,
+        enable_instrmcp_log_capture,
     ):
         """Test handling unknown message type logs a warning."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
@@ -497,10 +507,15 @@ class TestActiveCellBridge:
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-unknown",
         ):
             register_comm_target()
 
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-unknown"}
+            )
 
             # Send unknown message type
             unknown_msg = {
@@ -527,20 +542,24 @@ class TestCommHandshakeIntegration:
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
             request_frontend_snapshot,
-            _LAST_SNAPSHOT,
-            _ACTIVE_COMMS,
+            _KERNEL_COMM_MAP,
         )
 
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-workflow",
         ):
             # Step 1: Register comm target
             register_comm_target()
 
             # Step 2: Frontend opens comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
-            assert len(_ACTIVE_COMMS) == 1
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-workflow"}
+            )
+            assert "test-kernel-workflow" in _KERNEL_COMM_MAP
 
             # Step 3: Backend requests snapshot
             request_frontend_snapshot()
@@ -572,19 +591,22 @@ class TestCommHandshakeIntegration:
 
             # Step 5: Close comm
             comm.close()
-            assert len(_ACTIVE_COMMS) == 0
+            assert "test-kernel-workflow" not in _KERNEL_COMM_MAP
 
     def test_no_comm_detected_scenario(self, fake_ipython, cleanup_active_cell_globals):
         """Test scenario that caused 'no comm detected' error in GitHub Issue #9."""
         from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
             register_comm_target,
             get_active_cell,
-            _ACTIVE_COMMS,
+            _KERNEL_COMM_MAP,
         )
 
         with patch(
             "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
             return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-no-comm",
         ):
             # Register target
             register_comm_target()
@@ -594,7 +616,9 @@ class TestCommHandshakeIntegration:
             assert result is None  # Should handle gracefully
 
             # Now connect a comm
-            comm = fake_ipython.kernel.comm_manager.open_comm("mcp:active_cell")
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-no-comm"}
+            )
 
             # Send snapshot
             snapshot_msg = {
@@ -616,3 +640,157 @@ class TestCommHandshakeIntegration:
             result = get_active_cell()
             assert result is not None
             assert result["text"] == "print('test')"
+
+    def test_fresh_snapshot_metadata(self, fake_ipython, cleanup_active_cell_globals):
+        """Test that fresh snapshot returns stale=False, source='live' with valid age_ms."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-fresh",
+        ):
+            register_comm_target()
+
+            # Open comm and send snapshot
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-fresh"}
+            )
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "x = 42",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Get active cell (should be fresh)
+            result = get_active_cell()
+
+            # Verify fresh snapshot metadata
+            assert result is not None
+            assert result["stale"] is False
+            assert result["source"] == "live"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] >= 0
+            assert result["age_ms"] < 1000  # Should be very fresh
+            assert "stale_reason" not in result  # No stale reason for fresh data
+
+    def test_no_active_comms_fallback_metadata(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """Test that no active comms fallback returns stale=True, source='cache', stale_reason='no_active_comms'."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-fallback",
+        ):
+            register_comm_target()
+
+            # Open comm, send snapshot, then close comm
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-fallback"}
+            )
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "y = 100",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Close the comm so no active comms remain
+            comm.close()
+
+            # Wait a bit to ensure staleness
+            time.sleep(0.1)
+
+            # Request fresh data with fresh_ms requirement
+            result = get_active_cell(fresh_ms=50)
+
+            # Verify stale metadata due to no active comms
+            assert result is not None
+            assert result["stale"] is True
+            assert result["source"] == "cache"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] > 50  # Should be older than fresh_ms threshold
+            assert result["stale_reason"] == "no_active_comms"
+
+    def test_timeout_fallback_metadata(self, fake_ipython, cleanup_active_cell_globals):
+        """Test that timeout fallback returns stale=True, source='cache', stale_reason='timeout'."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+            get_active_cell,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-timeout",
+        ):
+            register_comm_target()
+
+            # Open comm and send initial snapshot
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell", data={"kernel_id": "test-kernel-timeout"}
+            )
+            snapshot_msg = {
+                "content": {
+                    "data": {
+                        "type": "snapshot",
+                        "path": "/test.ipynb",
+                        "id": "cell-1",
+                        "index": 0,
+                        "text": "z = 200",
+                        "cell_type": "code",
+                        "ts_ms": int(time.time() * 1000),
+                    }
+                }
+            }
+            comm.simulate_message(snapshot_msg)
+
+            # Wait to make snapshot stale
+            time.sleep(0.2)
+
+            # Request fresh data with a very short timeout (frontend won't respond in time)
+            # The comm is active but won't send a new snapshot, causing timeout
+            result = get_active_cell(fresh_ms=50, timeout_s=0.1)
+
+            # Verify stale metadata due to timeout
+            assert result is not None
+            assert result["stale"] is True
+            assert result["source"] == "cache"
+            assert "age_ms" in result
+            assert isinstance(result["age_ms"], float)
+            assert result["age_ms"] > 50  # Should be older than fresh_ms threshold
+            assert result["stale_reason"] == "timeout"
