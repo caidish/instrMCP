@@ -680,6 +680,138 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Handle get active cell output request from kernel
+    // This directly gets the output of the currently active cell, avoiding stale state issues
+    const handleGetActiveCellOutput = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+
+      try {
+        const panel = notebooks.currentWidget;
+        const activeCell = notebooks.activeCell;
+
+        if (!panel || !activeCell) {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active cell available'
+          });
+          return;
+        }
+
+        // Get basic cell info
+        const cellModel = activeCell.model;
+        const cellType = cellModel.type;
+        const cellIndex = panel.content.widgets.indexOf(activeCell);
+        const executionCount = (cellModel as any).executionCount;
+
+        // Handle edge case where active cell is not in widgets (transient state)
+        if (cellIndex === -1) {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: false,
+            message: 'Active cell not found in notebook widgets (transient state)'
+          });
+          return;
+        }
+
+        // For non-code cells, there are no outputs
+        if (cellType !== 'code') {
+          comm.send({
+            type: 'get_active_cell_output_response',
+            request_id: requestId,
+            success: true,
+            cell_type: cellType,
+            cell_index: cellIndex,
+            execution_count: null,
+            has_output: false,
+            has_error: false,
+            outputs: [],
+            message: 'Non-code cells do not have outputs'
+          });
+          return;
+        }
+
+        // Get outputs from the cell model
+        const cellOutputs = (cellModel as any).outputs;
+        const outputData: any[] = [];
+        let hasError = false;
+
+        if (cellOutputs && cellOutputs.length > 0) {
+          for (let i = 0; i < cellOutputs.length; i++) {
+            const output = cellOutputs.get(i);
+            const outputType = output.type;
+
+            if (outputType === 'stream') {
+              const rawData = output._raw || {};
+              const streamName = rawData.name || 'stdout';
+              let textValue = rawData.text;
+              if (!textValue && output._text) {
+                textValue = output._text._text || output._text;
+              }
+              if (Array.isArray(textValue)) {
+                textValue = textValue.join('');
+              }
+              outputData.push({
+                type: 'stream',
+                name: streamName,
+                text: textValue || ''
+              });
+            } else if (outputType === 'execute_result') {
+              const resultData = output._rawData || output.data || {};
+              outputData.push({
+                type: 'execute_result',
+                execution_count: output.executionCount,
+                data: sanitizeOutputData(resultData)
+              });
+            } else if (outputType === 'display_data') {
+              const displayData = output._rawData || output.data || {};
+              outputData.push({
+                type: 'display_data',
+                data: sanitizeOutputData(displayData)
+              });
+            } else if (outputType === 'error') {
+              hasError = true;
+              const rawError = output._raw || {};
+              outputData.push({
+                type: 'error',
+                ename: rawError.ename || output.ename || '',
+                evalue: rawError.evalue || output.evalue || '',
+                traceback: rawError.traceback || output.traceback || []
+              });
+            }
+          }
+        }
+
+        // Send success response with active cell output
+        comm.send({
+          type: 'get_active_cell_output_response',
+          request_id: requestId,
+          success: true,
+          cell_type: cellType,
+          cell_index: cellIndex,
+          execution_count: executionCount,
+          has_output: outputData.length > 0,
+          has_error: hasError,
+          outputs: outputData,
+          message: 'Active cell output retrieved successfully'
+        });
+
+        console.log(`MCP Active Cell Bridge: Retrieved active cell output (exec_count=${executionCount}, ${outputData.length} outputs)`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to get active cell output:', error);
+
+        comm.send({
+          type: 'get_active_cell_output_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to get active cell output: ${error}`
+        });
+      }
+    };
+
     // Handle delete cells by number requests from kernel
     const handleDeleteCellsByNumber = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
@@ -1407,6 +1539,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleMoveCursor(kernel, comm, data);
               } else if (msgType === 'get_cell_outputs') {
                 handleGetCellOutputs(kernel, comm, data);
+              } else if (msgType === 'get_active_cell_output') {
+                handleGetActiveCellOutput(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
               } else {

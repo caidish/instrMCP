@@ -9,7 +9,11 @@ import time
 from typing import List, Optional
 
 from mcp.types import TextContent
-from ..active_cell_bridge import get_cell_outputs, get_cached_cell_output
+from ..active_cell_bridge import (
+    get_cell_outputs,
+    get_cached_cell_output,
+    get_active_cell_output,
+)
 from instrmcp.logging_config import get_logger
 from ..tool_logger import log_tool_call
 
@@ -210,7 +214,9 @@ class NotebookToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def list_variables(type_filter: str = None) -> List[TextContent]:
+        async def list_variables(
+            type_filter: Optional[str] = None,
+        ) -> List[TextContent]:
             """List variables in the Jupyter namespace.
 
             Args:
@@ -386,11 +392,11 @@ class NotebookToolRegistrar:
             },
         )
         async def get_editing_cell_output(detailed: bool = False) -> List[TextContent]:
-            """Get the output of the most recently executed cell, including errors.
+            """Get the output of the currently active cell in JupyterLab.
 
-            This tool retrieves the output from the last executed cell in the notebook.
-            If a cell is currently running, it will indicate that status instead.
-            If a cell raised an error, the error information will be included.
+            This tool retrieves the output from the cell that is currently selected
+            in JupyterLab, including any errors. If the cell hasn't been executed,
+            it will indicate that status.
 
             Args:
                 detailed: If False (default), return concise summary; if True, return full info
@@ -403,240 +409,95 @@ class NotebookToolRegistrar:
                 return [TextContent(type="text", text=json.dumps(info, indent=2))]
 
             try:
-                import sys
-                import traceback
+                # FIX for Bug #10: Use direct frontend query instead of IPython history
+                # This gets output from the currently selected cell in JupyterLab,
+                # avoiding stale state issues with sys.last_* and Out history.
+                frontend_result = get_active_cell_output(timeout_s=2.0)
 
-                # Use IPython's In/Out cache to get the last executed cell
-                if hasattr(self.ipython, "user_ns"):
-                    In = self.ipython.user_ns.get("In", [])
-                    Out = self.ipython.user_ns.get("Out", {})
-                    current_execution_count = getattr(
-                        self.ipython, "execution_count", 0
+                if frontend_result.get("success"):
+                    # Frontend returned the active cell's output directly
+                    outputs = frontend_result.get("outputs", [])
+                    has_output = frontend_result.get("has_output", False)
+                    has_error = frontend_result.get("has_error", False)
+                    execution_count = frontend_result.get("execution_count")
+                    cell_type = frontend_result.get("cell_type", "code")
+                    cell_index = frontend_result.get("cell_index")
+
+                    # Handle non-code cells
+                    if cell_type != "code":
+                        cell_info = {
+                            "status": "not_code_cell",
+                            "message": f"Active cell is a {cell_type} cell (no outputs)",
+                            "cell_type": cell_type,
+                            "cell_index": cell_index,
+                            "has_output": False,
+                            "has_error": False,
+                        }
+                        return format_response(cell_info)
+
+                    # Handle unexecuted code cells
+                    if execution_count is None:
+                        cell_info = {
+                            "status": "not_executed",
+                            "message": "Active cell has not been executed yet",
+                            "cell_index": cell_index,
+                            "has_output": False,
+                            "has_error": False,
+                        }
+                        return format_response(cell_info)
+
+                    # Extract error details if present
+                    error_info = None
+                    if has_error:
+                        for out in outputs:
+                            if out.get("type") == "error":
+                                error_info = {
+                                    "type": out.get("ename", "UnknownError"),
+                                    "message": out.get("evalue", ""),
+                                    "traceback": "\n".join(out.get("traceback", [])),
+                                }
+                                break
+
+                    # Build response
+                    if has_error:
+                        status = "error"
+                        message = "Cell raised an exception"
+                    elif has_output:
+                        status = "completed"
+                        message = None
+                    else:
+                        status = "completed_no_output"
+                        message = "Cell executed successfully but produced no output"
+
+                    cell_info = {
+                        "cell_number": execution_count,
+                        "execution_count": execution_count,
+                        "cell_index": cell_index,
+                        "status": status,
+                        # Include outputs if there's output OR if there's an error
+                        # (error details are in the outputs array)
+                        "outputs": outputs if (has_output or has_error) else None,
+                        "has_output": has_output,
+                        "has_error": has_error,
+                    }
+                    if message:
+                        cell_info["message"] = message
+                    if error_info:
+                        cell_info["error"] = error_info
+
+                    return format_response(cell_info)
+
+                else:
+                    # Frontend request failed - fall back to IPython history
+                    # Note: _send_and_wait uses 'message' for errors, not 'error'
+                    error_msg = frontend_result.get("error") or frontend_result.get(
+                        "message"
                     )
-
-                    if len(In) > 1:  # In[0] is empty
-                        latest_cell_num = len(In) - 1
-
-                        # Check if the latest cell is currently running
-                        if (
-                            latest_cell_num not in Out
-                            and latest_cell_num == current_execution_count
-                            and In[latest_cell_num]
-                        ):
-                            cell_info = {
-                                "cell_number": latest_cell_num,
-                                "execution_count": latest_cell_num,
-                                "input": In[latest_cell_num],
-                                "status": "running",
-                                "message": "Cell is currently executing - no output available yet",
-                                "has_output": False,
-                                "has_error": False,
-                                "output": None,
-                            }
-                            return format_response(cell_info)
-
-                        # Find the most recent completed cell (has both input and output)
-                        for i in range(len(In) - 1, 0, -1):  # Start from most recent
-                            if In[i]:  # Skip empty entries
-                                # Try to get output from JupyterLab frontend
-                                # FRONTEND-FIRST FIX: If frontend has VALID data for the cell
-                                # (even with has_output=False), trust it over sys.last_*
-                                # This prevents stale error state from previous cells
-                                frontend_output = None
-                                frontend_has_data = False
-                                try:
-                                    frontend_output = self._get_frontend_output(i)
-                                    # Check if frontend returned valid cell output data
-                                    # (not a failure response like {success: false})
-                                    frontend_has_data = self._is_valid_frontend_output(
-                                        frontend_output
-                                    )
-                                except Exception as e:
-                                    logger.warning(
-                                        f"Error getting frontend output for cell {i}: {e}"
-                                    )
-
-                                if frontend_output and frontend_output.get(
-                                    "has_output"
-                                ):
-                                    # Frontend has output data - use it
-                                    outputs = frontend_output.get("outputs", [])
-                                    has_error_output = any(
-                                        out.get("type") == "error"
-                                        or out.get("output_type") == "error"
-                                        for out in outputs
-                                    )
-
-                                    # Extract error details if present
-                                    error_info = None
-                                    if has_error_output:
-                                        for out in outputs:
-                                            if (
-                                                out.get("type") == "error"
-                                                or out.get("output_type") == "error"
-                                            ):
-                                                error_info = {
-                                                    "type": out.get(
-                                                        "ename", "UnknownError"
-                                                    ),
-                                                    "message": out.get("evalue", ""),
-                                                    "traceback": "\n".join(
-                                                        out.get("traceback", [])
-                                                    ),
-                                                }
-                                                break
-
-                                    # Return the complete output structure
-                                    cell_info = {
-                                        "cell_number": i,
-                                        "execution_count": i,
-                                        "input": In[i],
-                                        "status": (
-                                            "error" if has_error_output else "completed"
-                                        ),
-                                        "outputs": outputs,
-                                        "has_output": True,
-                                        "has_error": has_error_output,
-                                    }
-                                    if error_info:
-                                        cell_info["error"] = error_info
-                                    return format_response(cell_info)
-
-                                elif frontend_has_data and not frontend_output.get(
-                                    "has_output"
-                                ):
-                                    # FRONTEND-FIRST FIX: Frontend responded but has no output
-                                    # This means cell executed successfully with no output
-                                    # (e.g., x = 1). Trust frontend over stale sys.last_*
-                                    # Check if frontend indicates an error in outputs
-                                    outputs = frontend_output.get("outputs", [])
-                                    has_error_output = any(
-                                        out.get("type") == "error"
-                                        or out.get("output_type") == "error"
-                                        for out in outputs
-                                    )
-
-                                    if has_error_output:
-                                        # Extract error details from frontend
-                                        error_info = None
-                                        for out in outputs:
-                                            if (
-                                                out.get("type") == "error"
-                                                or out.get("output_type") == "error"
-                                            ):
-                                                error_info = {
-                                                    "type": out.get(
-                                                        "ename", "UnknownError"
-                                                    ),
-                                                    "message": out.get("evalue", ""),
-                                                    "traceback": "\n".join(
-                                                        out.get("traceback", [])
-                                                    ),
-                                                }
-                                                break
-                                        cell_info = {
-                                            "cell_number": i,
-                                            "execution_count": i,
-                                            "input": In[i],
-                                            "status": "error",
-                                            "message": "Cell raised an exception",
-                                            "output": None,
-                                            "has_output": False,
-                                            "has_error": True,
-                                            "error": error_info,
-                                        }
-                                    else:
-                                        # No error in frontend - cell completed successfully
-                                        cell_info = {
-                                            "cell_number": i,
-                                            "execution_count": i,
-                                            "input": In[i],
-                                            "status": "completed_no_output",
-                                            "message": "Cell executed successfully but produced no output",
-                                            "output": None,
-                                            "has_output": False,
-                                            "has_error": False,
-                                        }
-                                    return format_response(cell_info)
-
-                                # Check Out dictionary (for expression return values)
-                                if i in Out:
-                                    # Cell completed with output
-                                    cell_info = {
-                                        "cell_number": i,
-                                        "execution_count": i,
-                                        "input": In[i],
-                                        "status": "completed",
-                                        "output": str(Out[i]),
-                                        "has_output": True,
-                                        "has_error": False,
-                                    }
-                                    return format_response(cell_info)
-                                elif i < current_execution_count:
-                                    # Cell was executed but produced no output
-                                    # FRONTEND-FIRST FIX: Only use sys.last_* as absolute
-                                    # last fallback when frontend has NO data at all
-                                    has_error = False
-                                    error_info = None
-
-                                    # Only check sys.last_* if frontend had no data
-                                    if not frontend_has_data:
-                                        if (
-                                            hasattr(sys, "last_type")
-                                            and hasattr(sys, "last_value")
-                                            and hasattr(sys, "last_traceback")
-                                            and sys.last_type is not None
-                                        ):
-                                            # We can only know if this cell raised the last exception
-                                            # by checking if it's the most recent executed cell
-                                            if i == latest_cell_num:
-                                                has_error = True
-                                                error_info = {
-                                                    "type": sys.last_type.__name__,
-                                                    "message": str(sys.last_value),
-                                                    "traceback": "".join(
-                                                        traceback.format_exception(
-                                                            sys.last_type,
-                                                            sys.last_value,
-                                                            sys.last_traceback,
-                                                        )
-                                                    ),
-                                                }
-
-                                    if has_error:
-                                        cell_info = {
-                                            "cell_number": i,
-                                            "execution_count": i,
-                                            "input": In[i],
-                                            "status": "error",
-                                            "message": "Cell raised an exception",
-                                            "output": None,
-                                            "has_output": False,
-                                            "has_error": True,
-                                            "error": error_info,
-                                        }
-                                    else:
-                                        cell_info = {
-                                            "cell_number": i,
-                                            "execution_count": i,
-                                            "input": In[i],
-                                            "status": "completed_no_output",
-                                            "message": "Cell executed successfully but produced no output",
-                                            "output": None,
-                                            "has_output": False,
-                                            "has_error": False,
-                                        }
-                                    return format_response(cell_info)
-
-                # Fallback: no recent executed cells
-                result = {
-                    "status": "no_cells",
-                    "error": "No recently executed cells found",
-                    "message": "Execute a cell first to see its output",
-                    "has_output": False,
-                    "has_error": False,
-                }
-                return format_response(result)
+                    logger.debug(
+                        f"Frontend request failed: {error_msg}, "
+                        "falling back to IPython history"
+                    )
+                    return await self._get_output_from_ipython_history(format_response)
 
             except Exception as e:
                 logger.error(f"Error in get_editing_cell_output: {e}")
@@ -646,6 +507,113 @@ class NotebookToolRegistrar:
                         text=json.dumps({"status": "error", "error": str(e)}, indent=2),
                     )
                 ]
+
+    async def _get_output_from_ipython_history(self, format_response):
+        """Fallback: Get output from IPython In/Out history when frontend is unavailable."""
+        import sys
+        import traceback
+
+        if hasattr(self.ipython, "user_ns"):
+            In = self.ipython.user_ns.get("In", [])
+            Out = self.ipython.user_ns.get("Out", {})
+            current_execution_count = getattr(self.ipython, "execution_count", 0)
+
+            if len(In) > 1:  # In[0] is empty
+                latest_cell_num = len(In) - 1
+
+                # Check if the latest cell is currently running
+                if (
+                    latest_cell_num not in Out
+                    and latest_cell_num == current_execution_count
+                    and In[latest_cell_num]
+                ):
+                    cell_info = {
+                        "cell_number": latest_cell_num,
+                        "execution_count": latest_cell_num,
+                        "input": In[latest_cell_num],
+                        "status": "running",
+                        "message": "Cell is currently executing - no output available yet",
+                        "has_output": False,
+                        "has_error": False,
+                        "output": None,
+                    }
+                    return format_response(cell_info)
+
+                # Find the most recent completed cell
+                for i in range(len(In) - 1, 0, -1):
+                    if In[i]:  # Skip empty entries
+                        # Check Out dictionary
+                        if i in Out:
+                            cell_info = {
+                                "cell_number": i,
+                                "execution_count": i,
+                                "input": In[i],
+                                "status": "completed",
+                                "output": str(Out[i]),
+                                "has_output": True,
+                                "has_error": False,
+                            }
+                            return format_response(cell_info)
+                        elif i < current_execution_count:
+                            # Cell was executed but produced no output
+                            has_error = False
+                            error_info = None
+
+                            # Check sys.last_* for error info
+                            if (
+                                hasattr(sys, "last_type")
+                                and hasattr(sys, "last_value")
+                                and hasattr(sys, "last_traceback")
+                                and sys.last_type is not None
+                                and i == latest_cell_num
+                            ):
+                                has_error = True
+                                error_info = {
+                                    "type": sys.last_type.__name__,
+                                    "message": str(sys.last_value),
+                                    "traceback": "".join(
+                                        traceback.format_exception(
+                                            sys.last_type,
+                                            sys.last_value,
+                                            sys.last_traceback,
+                                        )
+                                    ),
+                                }
+
+                            if has_error:
+                                cell_info = {
+                                    "cell_number": i,
+                                    "execution_count": i,
+                                    "input": In[i],
+                                    "status": "error",
+                                    "message": "Cell raised an exception",
+                                    "output": None,
+                                    "has_output": False,
+                                    "has_error": True,
+                                    "error": error_info,
+                                }
+                            else:
+                                cell_info = {
+                                    "cell_number": i,
+                                    "execution_count": i,
+                                    "input": In[i],
+                                    "status": "completed_no_output",
+                                    "message": "Cell executed successfully but produced no output",
+                                    "output": None,
+                                    "has_output": False,
+                                    "has_error": False,
+                                }
+                            return format_response(cell_info)
+
+        # Fallback: no recent executed cells
+        result = {
+            "status": "no_cells",
+            "error": "No recently executed cells found",
+            "message": "Execute a cell first to see its output",
+            "has_output": False,
+            "has_error": False,
+        }
+        return format_response(result)
 
     def _register_get_notebook_cells(self):
         """Register the notebook/get_notebook_cells tool."""

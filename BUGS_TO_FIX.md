@@ -8,7 +8,7 @@
 
 ## Critical Bugs (High Priority)
 
-[Fixed]
+[Fixed, confirmed]
 ### 1. `notebook_delete_cell` - Deletes Multiple Cells Instead of Selected One 
 - **Location**: Part 3.5, Step 7
 - **Severity**: CRITICAL
@@ -16,7 +16,7 @@
 - **Expected**: Should delete only the currently selected/active cell
 - **Note**: `notebook_delete_cells` works fine (by design it only deletes those with `cell_numbers`/executed cells). The current editing cell delete is broken.
 
-[Fixed]
+[Fixed, confirmed]
 ### 2. `notebook_apply_patch` - Applies Multiple Times
 - **Location**: Part 3.7, Step 5-6
 - **Severity**: CRITICAL
@@ -24,14 +24,14 @@
 - **Example**: Setting `old_text`: "y = 2", `new_text`: "y = 200" results in `y = 2000000` instead of `y = 200`
 - **Expected**: Patch should apply exactly once
 
-[Fixed]
+[Fixed, confirmed]
 ### 3. `notebook_add_cell` - Content Not Set Properly
 - **Location**: Part 3.4, Step 8
 - **Severity**: CRITICAL
 - **Issue**: Adds the cell but does not set the content properly. New cell is empty instead of having the specified content
 - **Expected**: New cell should contain the specified `content` parameter value
 
-[Fixed]
+[Fixed, confirmed]
 ### 4. `notebook_execute_cell` - Missing Output in Concise Mode
 - **Location**: Part 3.3, Step 5
 - **Severity**: CRITICAL
@@ -39,7 +39,7 @@
 - **Expected**: Output should always be included regardless of `detailed` setting
 - **Note**: Seems like it did not use the `active_cell_bridge` properly
 
-[Fixed]
+[Fixed, confirmed]
 ### 5. `notebook_execute_cell` - Missing Error Info in Concise Mode
 - **Location**: Part 3.3, Step 7
 - **Severity**: CRITICAL
@@ -49,7 +49,7 @@
 ---
 
 ## Server & Lifecycle Bugs
-[Fixed]
+[Fixed, confirmed]
 ### 6. `%mcp_close` - Hangs with Active Connections
 - **Location**: Part 1.4, Step 1
 - **Severity**: HIGH
@@ -60,14 +60,14 @@
 
 ## Tool Response/Behavior Bugs
 
-[Fixed]
+[Fixed, confirmed]
 ### 7. `notebook_server_status` - Missing `enabled_options`
 - **Location**: Part 2.1, Step 2
 - **Severity**: MEDIUM
 - **Issue**: Does not return `enabled_options` field
 - **Expected**: Should return: mode, server running status, `enabled_options` list, `registered_tools` list
 
-[Fixed]
+[Fixed, after 2nd attempt.]
 ### 8. `notebook_list_variables` - Validation Error with "null"
 - **Location**: Part 2.3, Step 2
 - **Severity**: MEDIUM
@@ -80,7 +80,7 @@
 - **Severity**: MEDIUM
 - **Issue**: `detailed` does not work as expected. Returns all information regardless of detailed true/false
 
-[Fixed]
+[Fixed, after 2nd attempt.]
 ### 10. `notebook_get_editing_cell_output` - Stale Error State
 - **Location**: Part 2.6, Step 8
 - **Severity**: MEDIUM
@@ -97,19 +97,24 @@
   ```
 - **Expected**: Should reflect the actual state of the most recently executed cell
 - **Note**: Running a successful output cell again clears this
-- **Fix**: Implemented "Frontend-First" approach - trust frontend data over stale `sys.last_*` state
+- **Fix**: Implemented comprehensive "Active Cell Output" approach - directly query the currently selected cell's output from JupyterLab frontend instead of using IPython's In/Out history. Added new `handleGetActiveCellOutput` handler in JupyterLab extension and `get_active_cell_output` bridge function.
 
+[Fixed, confirmed]
 ### 11. `notebook_move_cursor` - Success on Non-existent Target
 - **Location**: Part 2.8, Step 10
 - **Severity**: MEDIUM
 - **Issue**: Setting `target`: "999" (non-existent execution count) gives a success response even though the cell does not exist. No cursor movement happens
 - **Expected**: Should return an error indicating cell not found
+- **Fix**: Now uses `_send_and_wait` to get actual frontend response, returns `success: false` with message "Cell with execution count 999 not found"
 
+[Fixed]
 ### 12. `notebook_add_cell` - Error Message Not Passed in Concise Mode
+
 - **Location**: Part 3.4, Step 10
 - **Severity**: MEDIUM
 - **Issue**: When `detailed` is false, error messages are not passed (e.g., invalid `position`: "sideways")
 - **Expected**: Error messages should always be included regardless of `detailed` setting
+- **Fix**: Updated `_to_concise_success_only` helper in `tools_unsafe.py` to preserve `error` field
 
 [Not a bug]
 ### 13. `notebook_apply_patch` - Non-matching Text Error Not Tested

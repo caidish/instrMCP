@@ -125,8 +125,13 @@ class UnsafeToolRegistrar:
         """Convert to concise format with just success.
 
         Used by: add_cell, delete_cell, delete_cells, apply_patch.
+        Preserves error field if present (Bug #12 fix).
         """
-        return {"success": result.get("success", False)}
+        concise = {"success": result.get("success", False)}
+        # Always preserve error messages regardless of detailed mode
+        if "error" in result:
+            concise["error"] = result["error"]
+        return concise
 
     # ===== End concise mode helpers =====
 

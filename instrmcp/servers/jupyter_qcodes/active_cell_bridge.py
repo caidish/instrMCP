@@ -173,6 +173,7 @@ def _on_comm_open(comm, open_msg):
             "delete_cell_response",
             "apply_patch_response",
             "move_cursor_response",
+            "get_active_cell_output_response",
         ]:
             # Response from frontend for our requests
             request_id = data.get("request_id")
@@ -843,5 +844,38 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
 
     if result["success"]:
         result["target"] = target
+
+    return result
+
+
+def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Get the output of the currently active cell directly from JupyterLab frontend.
+
+    This function retrieves the output from the cell that is currently selected
+    in JupyterLab, avoiding stale state issues with IPython's In/Out history.
+
+    FIX for Bug #10: The previous implementation used IPython's sys.last_value
+    and Out history which can be stale. This directly queries the JupyterLab
+    frontend for the active cell's current outputs.
+
+    Args:
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - cell_type (str): Type of the active cell ("code", "markdown", etc.)
+        - cell_index (int): Index of the active cell in the notebook
+        - execution_count (int|None): Execution count for code cells
+        - has_output (bool): Whether the cell has any output
+        - has_error (bool): Whether the cell output contains an error
+        - outputs (list): List of output objects (stream, execute_result, error, etc.)
+        - message (str): Status message
+    """
+    result = _send_and_wait(
+        {"type": "get_active_cell_output"},
+        timeout_s=timeout_s,
+    )
 
     return result
