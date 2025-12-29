@@ -652,9 +652,9 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def get_measureit_status() -> list[TextContent]:
+    async def get_measureit_status(detailed: bool = False) -> list[TextContent]:
         """Check if any MeasureIt sweep is currently running."""
-        result = await proxy.call("measureit_get_status")
+        result = await proxy.call("measureit_get_status", detailed=detailed)
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -666,9 +666,9 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def wait_for_all_sweeps() -> list[TextContent]:
+    async def wait_for_all_sweeps(detailed: bool = False) -> list[TextContent]:
         """Wait until all currently running MeasureIt sweeps finish."""
-        result = await proxy.call("measureit_wait_for_all_sweeps")
+        result = await proxy.call("measureit_wait_for_all_sweeps", detailed=detailed)
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -680,10 +680,12 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def wait_for_sweep(variable_name: str) -> list[TextContent]:
+    async def wait_for_sweep(
+        variable_name: str, detailed: bool = False
+    ) -> list[TextContent]:
         """Wait until the specified MeasureIt sweep finishes."""
         result = await proxy.call(
-            "measureit_wait_for_sweep", variable_name=variable_name
+            "measureit_wait_for_sweep", variable_name=variable_name, detailed=detailed
         )
         return [TextContent(type="text", text=str(result))]
 
@@ -758,8 +760,8 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def list_available_databases() -> list[TextContent]:
-        result = await proxy.call("database_list_available")
+    async def list_available_databases(detailed: bool = False) -> list[TextContent]:
+        result = await proxy.call("database_list_available", detailed=detailed)
         return [TextContent(type="text", text=str(result))]
 
     # Dynamic tool meta-tools (only available in unsafe mode)

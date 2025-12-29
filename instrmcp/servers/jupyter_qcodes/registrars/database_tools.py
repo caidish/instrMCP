@@ -33,27 +33,52 @@ class DatabaseToolRegistrar:
         """Convert full experiments list to concise format.
 
         Concise: database_path and only experiment names.
+        Preserves error field if present.
         """
         experiments = data.get("experiments", [])
-        return {
+        result = {
             "database_path": data.get("database_path"),
             "experiments": [exp.get("name", "") for exp in experiments],
             "count": len(experiments),
         }
+        if "error" in data:
+            result["error"] = data["error"]
+        return result
 
     def _to_concise_dataset_info(self, data: dict) -> dict:
         """Convert full dataset info to concise format.
 
         Concise: id, name, sample, metadata.
+        Preserves error field if present.
         """
         basic_info = data.get("basic_info", {})
         exp_info = data.get("experiment_info", {})
-        return {
+        result = {
             "id": basic_info.get("run_id"),
             "name": basic_info.get("name"),
             "sample": exp_info.get("sample_name"),
             "metadata": data.get("metadata", {}),
         }
+        if "error" in data:
+            result["error"] = data["error"]
+        return result
+
+    def _to_concise_list_available(self, data: dict) -> dict:
+        """Convert full database list to concise format.
+
+        Concise: only database names and paths.
+        Preserves error field if present.
+        """
+        databases = data.get("databases", [])
+        result = {
+            "databases": [
+                {"name": db.get("name"), "path": db.get("path")} for db in databases
+            ],
+            "count": len(databases),
+        }
+        if "error" in data:
+            result["error"] = data["error"]
+        return result
 
     def _generate_code_suggestion(self, data: dict) -> str:
         """Generate a code example for retrieving the dataset."""
@@ -243,18 +268,29 @@ d = ds.get_parameter_data()
                 "openWorldHint": False,
             },
         )
-        async def list_available_databases() -> List[TextContent]:
+        async def list_available_databases(
+            detailed: bool = False,
+        ) -> List[TextContent]:
             """List all available QCodes databases.
 
             Searches common locations including MeasureIt databases directory
             and QCodes configuration paths.
 
-            Returns JSON containing available databases with metadata including
-            name, path, size, source, and experiment count.
+            Args:
+                detailed: If False (default), return only database names and paths;
+                    if True, return full info including size, source, experiment count.
+
+            Returns JSON containing available databases.
             """
             try:
-                result = self.db.list_available_databases()
-                return [TextContent(type="text", text=result)]
+                result_str = self.db.list_available_databases()
+                result = json.loads(result_str)
+
+                # Apply concise mode filtering
+                if not detailed:
+                    result = self._to_concise_list_available(result)
+
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
             except Exception as e:
                 logger.error(f"Error in database_list_available: {e}")
                 return [

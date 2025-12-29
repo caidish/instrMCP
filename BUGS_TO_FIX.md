@@ -129,6 +129,7 @@
 
 ## Missing Features (Consistency Improvements)
 
+[Fixed]
 ### 15. `measureit_get_status` - No `detailed` Option
 - **Location**: Part 5.1
 - **Severity**: LOW (Enhancement)
@@ -137,6 +138,7 @@
   - `detailed: false` → Only active status and sweep names
   - `detailed: true` → Full info (current behavior)
 
+[Fixed]
 ### 16. `measureit_wait_for_sweep` - No `detailed` Option
 - **Location**: Part 5.1
 - **Severity**: LOW (Enhancement)
@@ -145,6 +147,7 @@
   - `detailed: false` → Only sweep's state
   - `detailed: true` → Full info (current behavior)
 
+[Fixed]
 ### 17. `measureit_wait_for_all_sweeps` - No `detailed` Option
 - **Location**: Part 5.1
 - **Severity**: LOW (Enhancement)
@@ -153,6 +156,7 @@
   - `detailed: false` → Only sweep's state
   - `detailed: true` → Full info (current behavior)
 
+[Fixed]
 ### 18. `database_list_available` - No `detailed` Option
 - **Location**: Part 5.2
 - **Severity**: LOW (Enhancement)
