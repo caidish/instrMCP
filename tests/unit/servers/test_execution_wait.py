@@ -382,10 +382,11 @@ class TestWaitForExecution:
         mock_ipython.last_execution_result = initial_result
 
         async def simulate_rapid_execution():
-            await asyncio.sleep(0.05)
+            # Use 0.08s delays (> Windows ~15.6ms timer resolution) to avoid race conditions
+            await asyncio.sleep(0.08)
             mock_ipython.execution_count = 1  # First cell starts
             mock_ipython.user_ns["In"].append("x = 1")
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.08)
             mock_ipython.execution_count = 2  # Second cell starts immediately
             mock_ipython.user_ns["In"].append("y = 2")
 

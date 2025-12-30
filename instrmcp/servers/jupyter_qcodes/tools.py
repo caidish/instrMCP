@@ -1053,8 +1053,10 @@ class QCodesReadOnlyTools:
                 }
 
             # Check 5: Execution count advanced beyond target (another cell ran)
-            # Do final fetch before returning to catch any late outputs
-            if current_count > target_count:
+            # Re-read execution_count to catch rapid changes since loop start
+            # (Windows asyncio.sleep has ~15.6ms resolution, causing race conditions)
+            fresh_count = getattr(self.ipython, "execution_count", 0)
+            if fresh_count > target_count:
                 if not post_completion_fetch_done:
                     post_completion_fetch_done = True
                     final_output = await self._get_cell_output(
