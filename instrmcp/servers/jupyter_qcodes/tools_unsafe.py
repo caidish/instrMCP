@@ -3,16 +3,21 @@ Unsafe mode tools for Jupyter MCP server.
 
 These tools allow cell manipulation and code execution in Jupyter notebooks.
 They are only available when the server is running in unsafe mode.
+
+Security: Code is scanned for dangerous patterns BEFORE execution. Dangerous
+patterns (like os.environ modification, subprocess calls, etc.) will cause
+immediate rejection of the tool call with a clear warning to the client.
 """
 
 import json
 import time
-from typing import List
+from typing import List, Optional
 
 from mcp.types import TextContent
 
 from instrmcp.logging_config import get_logger
 from .tool_logger import log_tool_call
+from .security import CodeScanner, get_default_scanner
 
 logger = get_logger("tools.unsafe")
 
@@ -20,7 +25,13 @@ logger = get_logger("tools.unsafe")
 class UnsafeToolRegistrar:
     """Registers unsafe mode tools with the MCP server."""
 
-    def __init__(self, mcp_server, tools, consent_manager=None):
+    def __init__(
+        self,
+        mcp_server,
+        tools,
+        consent_manager=None,
+        code_scanner: Optional[CodeScanner] = None,
+    ):
         """
         Initialize the unsafe tool registrar.
 
@@ -28,10 +39,68 @@ class UnsafeToolRegistrar:
             mcp_server: FastMCP server instance
             tools: QCodesReadOnlyTools instance
             consent_manager: Optional ConsentManager for execute_cell consent
+            code_scanner: Optional CodeScanner for dangerous pattern detection.
+                         If None, uses the default scanner.
         """
         self.mcp = mcp_server
         self.tools = tools
         self.consent_manager = consent_manager
+        self.code_scanner = code_scanner or get_default_scanner()
+
+    def _scan_and_reject(
+        self, code: str, tool_name: str
+    ) -> Optional[List[TextContent]]:
+        """Scan code for dangerous patterns and return rejection if blocked.
+
+        This runs BEFORE consent dialogs - it's a hard security boundary.
+
+        Args:
+            code: Python code to scan
+            tool_name: Name of the tool for logging
+
+        Returns:
+            List[TextContent] with rejection message if blocked, None if safe
+        """
+        if not code or not code.strip():
+            return None
+
+        # Log that scanning is happening (visible confirmation)
+        logger.info(f"🔍 Security scan starting for {tool_name} ({len(code)} chars)")
+
+        scan_result = self.code_scanner.scan(code)
+
+        if scan_result.blocked:
+            rejection_msg = self.code_scanner.get_rejection_message(scan_result)
+            logger.error(
+                f"🚫 {tool_name} blocked by code scanner: {scan_result.block_reason}"
+            )
+            # Print to ensure visibility even if logging isn't configured
+            print(f"🚫 BLOCKED: {scan_result.block_reason}")
+
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "success": False,
+                            "blocked": True,
+                            "error": f"Security policy violation: {scan_result.block_reason}",
+                            "security_scan": scan_result.to_dict(),
+                            "message": rejection_msg,
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
+
+        # Log warnings for non-blocking issues (HIGH/MEDIUM that weren't blocked)
+        if scan_result.issues:
+            logger.warning(
+                f"⚠️  {tool_name}: {len(scan_result.issues)} potential risk(s) detected "
+                f"but not blocked"
+            )
+
+        return None
 
     # ===== Concise mode helpers =====
 
@@ -170,12 +239,17 @@ class UnsafeToolRegistrar:
                 content: New Python code content to set in the active cell
                 detailed: If False (default), return concise summary; if True, return full info
             """
+            # SECURITY: Scan the new content for dangerous patterns BEFORE consent
+            rejection = self._scan_and_reject(content, "notebook_update_editing_cell")
+            if rejection:
+                return rejection
+
             # Request consent if consent manager is available
             if self.consent_manager:
                 try:
                     # Get current cell content to show what will be replaced
                     cell_info = await self.tools.get_editing_cell()
-                    old_content = cell_info.get("text", "")
+                    old_content = cell_info.get("cell_content", "")
 
                     consent_result = await self.consent_manager.request_consent(
                         operation="update_cell",
@@ -292,13 +366,37 @@ class UnsafeToolRegistrar:
                 - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or
                   measureit_wait_for_all_sweeps() to wait for completion before proceeding.
             """
+            # SECURITY: First get cell content and scan for dangerous patterns
+            # This runs BEFORE consent - it's a hard security boundary
+            try:
+                cell_info = await self.tools.get_editing_cell()
+                cell_content = cell_info.get("cell_content", "")
+            except Exception as e:
+                # CRITICAL: Cannot proceed without cell content for security scan
+                # This is a hard security boundary - never execute without scanning
+                logger.error(f"SECURITY: Cannot retrieve cell for security scan: {e}")
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "blocked": True,
+                                "error": "Security scan failed: unable to retrieve cell content. Execution blocked.",
+                            },
+                            indent=2,
+                        ),
+                    )
+                ]
+
+            # Scan for dangerous patterns and reject if found
+            rejection = self._scan_and_reject(cell_content, "notebook_execute_cell")
+            if rejection:
+                return rejection
+
             # Request consent if consent manager is available
             if self.consent_manager:
                 try:
-                    # Get current cell content for consent dialog
-                    cell_info = await self.tools.get_editing_cell()
-                    cell_content = cell_info.get("text", "")
-
                     consent_result = await self.consent_manager.request_consent(
                         operation="execute_cell",
                         tool_name="notebook_execute_cell",
@@ -405,6 +503,12 @@ class UnsafeToolRegistrar:
                 content: Initial content for the new cell - default: empty string
                 detailed: If False (default), return just success; if True, return full info
             """
+            # SECURITY: Scan content for dangerous patterns (only for code cells)
+            if cell_type == "code" and content:
+                rejection = self._scan_and_reject(content, "notebook_add_cell")
+                if rejection:
+                    return rejection
+
             try:
                 result = await self.tools.add_new_cell(cell_type, position, content)
 
@@ -453,7 +557,7 @@ class UnsafeToolRegistrar:
                 try:
                     # Get current cell content for consent dialog
                     cell_info = await self.tools.get_editing_cell()
-                    cell_content = cell_info.get("text", "")
+                    cell_content = cell_info.get("cell_content", "")
 
                     consent_result = await self.consent_manager.request_consent(
                         operation="delete_cell",
@@ -693,12 +797,57 @@ class UnsafeToolRegistrar:
                 new_text: Text to replace with (can be empty to delete text)
                 detailed: If False (default), return just success; if True, return full info
             """
+            # SECURITY: Get current cell content and compute the patched result
+            # We must scan the FULL resulting code, not just the new_text fragment
+            try:
+                cell_info = await self.tools.get_editing_cell()
+                current_content = cell_info.get("cell_content", "")
+            except Exception as e:
+                # CRITICAL: Cannot proceed without cell content for security scan
+                logger.error(
+                    f"SECURITY: Cannot retrieve cell for patch security scan: {e}"
+                )
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "blocked": True,
+                                "error": "Security scan failed: unable to retrieve cell content for patch.",
+                            },
+                            indent=2,
+                        ),
+                    )
+                ]
+
+            # Verify the old_text exists in the cell
+            if old_text not in current_content:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "error": "Patch failed: old_text not found in cell content.",
+                            },
+                            indent=2,
+                        ),
+                    )
+                ]
+
+            # Compute the resulting code after patch application
+            patched_content = current_content.replace(old_text, new_text, 1)
+
+            # SECURITY: Scan the FULL resulting code for dangerous patterns
+            rejection = self._scan_and_reject(patched_content, "notebook_apply_patch")
+            if rejection:
+                return rejection
+
             # Request consent if consent manager is available
             if self.consent_manager:
                 try:
-                    # Get current cell content to show diff
-                    cell_info = await self.tools.get_editing_cell()
-                    cell_content = cell_info.get("cell_content", "")
+                    cell_content = current_content  # For consent dialog
 
                     consent_result = await self.consent_manager.request_consent(
                         operation="apply_patch",
