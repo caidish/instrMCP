@@ -9,6 +9,8 @@ Used by both Claude Desktop and Codex launchers to avoid code duplication.
 
 from __future__ import annotations
 
+import asyncio
+import itertools
 import json
 import logging
 from typing import Optional
@@ -29,16 +31,68 @@ class HttpMCPProxy:
         self.working_endpoint: Optional[str] = None
         self.session_id: Optional[str] = None
         self._resource_cache: dict = {}  # Cache for resource list
+        # Concurrency-safe request ID counter (thread-safe via itertools.count)
+        self._request_id_counter = itertools.count(start=1)
+        # Lock to prevent race condition during session initialization
+        self._session_lock = asyncio.Lock()
+
+    def _next_request_id(self) -> int:
+        """Generate a unique request ID for each JSON-RPC call."""
+        return next(self._request_id_counter)
+
+    def _parse_sse_response(self, text: str, expected_id: int) -> dict:
+        """
+        Parse SSE response text, handling multiple data: events.
+
+        Iterates through all 'data:' events and returns the JSON-RPC response
+        that matches the expected request ID. If no ID match is found, returns
+        the last valid JSON-RPC response (for backwards compatibility).
+
+        Args:
+            text: Raw response text (may contain multiple SSE events)
+            expected_id: The request ID we're looking for
+
+        Returns:
+            Parsed JSON-RPC response dict
+        """
+        # If it's not SSE format, try parsing as regular JSON
+        if "data: " not in text:
+            return json.loads(text)
+
+        # Parse all SSE data events
+        responses = []
+        for line in text.split("\n"):
+            line = line.strip()
+            if line.startswith("data: "):
+                try:
+                    payload = json.loads(line[6:])  # Skip "data: " prefix
+                    if isinstance(payload, dict) and "jsonrpc" in payload:
+                        responses.append(payload)
+                except json.JSONDecodeError:
+                    continue
+
+        if not responses:
+            raise ValueError("No valid JSON-RPC response found in SSE stream")
+
+        # Try to find response matching our request ID
+        for resp in responses:
+            if resp.get("id") == expected_id:
+                return resp
+
+        # Fallback: return the last response (typically the final result)
+        # This handles servers that may use different ID formats
+        return responses[-1]
 
     async def _find_working_endpoint(self) -> str:
         if self.working_endpoint:
             return self.working_endpoint
 
         endpoint = f"{self.base_url}/mcp"
+        request_id = self._next_request_id()
 
         test_request = {
             "jsonrpc": "2.0",
-            "id": 0,
+            "id": request_id,
             "method": "tools/list",
             "params": {},
         }
@@ -53,12 +107,7 @@ class HttpMCPProxy:
                 },
             )
             if resp.status_code == 200:
-                # SSE or JSON
-                text = resp.text
-                if "data: " in text:
-                    payload = json.loads(text.split("data: ")[1].strip())
-                else:
-                    payload = resp.json()
+                payload = self._parse_sse_response(resp.text, request_id)
                 if "jsonrpc" in payload and ("result" in payload or "error" in payload):
                     self.working_endpoint = endpoint
                     return endpoint
@@ -70,61 +119,70 @@ class HttpMCPProxy:
         return endpoint
 
     async def _ensure_session(self) -> None:
+        # Fast path: already initialized (no lock needed for read)
         if self.session_id:
             return
 
-        endpoint = await self._find_working_endpoint()
-        init_request = {
-            "jsonrpc": "2.0",
-            "id": "init",
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "InstrMCP Proxy", "version": "1.0.0"},
-            },
-        }
+        # Acquire lock to prevent concurrent session initialization
+        async with self._session_lock:
+            # Double-check after acquiring lock (another coroutine may have initialized)
+            if self.session_id:
+                return
 
-        try:
-            resp = await self.client.post(
-                endpoint,
-                json=init_request,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
+            endpoint = await self._find_working_endpoint()
+            request_id = self._next_request_id()
+            init_request = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "InstrMCP Proxy", "version": "1.0.0"},
                 },
-            )
-            if resp.status_code == 200:
-                self.session_id = (
-                    resp.headers.get("mcp-session-id") or "default-session"
-                )
-                # Send initialized notification
-                await self.client.post(
+            }
+
+            try:
+                resp = await self.client.post(
                     endpoint,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "notifications/initialized",
-                        "params": {},
-                    },
+                    json=init_request,
                     headers={
                         "Content-Type": "application/json",
                         "Accept": "application/json, text/event-stream",
-                        "mcp-session-id": self.session_id,
                     },
                 )
-            else:
+                if resp.status_code == 200:
+                    self.session_id = (
+                        resp.headers.get("mcp-session-id") or "default-session"
+                    )
+                    # Send initialized notification
+                    await self.client.post(
+                        endpoint,
+                        json={
+                            "jsonrpc": "2.0",
+                            "method": "notifications/initialized",
+                            "params": {},
+                        },
+                        headers={
+                            "Content-Type": "application/json",
+                            "Accept": "application/json, text/event-stream",
+                            "mcp-session-id": self.session_id,
+                        },
+                    )
+                else:
+                    self.session_id = "default-session"
+            except Exception:
                 self.session_id = "default-session"
-        except Exception:
-            self.session_id = "default-session"
 
     async def call(self, tool_name: str, **kwargs) -> dict:
         try:
             await self._ensure_session()
             endpoint = await self._find_working_endpoint()
+            request_id = self._next_request_id()
 
             req = {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": request_id,
                 "method": "tools/call",
                 "params": {"name": tool_name, "arguments": kwargs or {}},
             }
@@ -139,11 +197,7 @@ class HttpMCPProxy:
             resp = await self.client.post(endpoint, json=req, headers=headers)
             resp.raise_for_status()
 
-            text = resp.text
-            if "data: " in text:
-                payload = json.loads(text.split("data: ")[1].strip())
-            else:
-                payload = resp.json()
+            payload = self._parse_sse_response(resp.text, request_id)
 
             if "error" in payload:
                 return {"error": f"MCP error: {payload['error']}"}
@@ -163,10 +217,11 @@ class HttpMCPProxy:
         try:
             await self._ensure_session()
             endpoint = await self._find_working_endpoint()
+            request_id = self._next_request_id()
 
             req = {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": request_id,
                 "method": "resources/list",
                 "params": {},
             }
@@ -181,11 +236,7 @@ class HttpMCPProxy:
             resp = await self.client.post(endpoint, json=req, headers=headers)
             resp.raise_for_status()
 
-            text = resp.text
-            if "data: " in text:
-                payload = json.loads(text.split("data: ")[1].strip())
-            else:
-                payload = resp.json()
+            payload = self._parse_sse_response(resp.text, request_id)
 
             if "error" in payload:
                 logger.error(f"Error listing resources: {payload['error']}")
@@ -205,10 +256,11 @@ class HttpMCPProxy:
         try:
             await self._ensure_session()
             endpoint = await self._find_working_endpoint()
+            request_id = self._next_request_id()
 
             req = {
                 "jsonrpc": "2.0",
-                "id": 3,
+                "id": request_id,
                 "method": "resources/read",
                 "params": {"uri": uri},
             }
@@ -223,11 +275,7 @@ class HttpMCPProxy:
             resp = await self.client.post(endpoint, json=req, headers=headers)
             resp.raise_for_status()
 
-            text = resp.text
-            if "data: " in text:
-                payload = json.loads(text.split("data: ")[1].strip())
-            else:
-                payload = resp.json()
+            payload = self._parse_sse_response(resp.text, request_id)
 
             if "error" in payload:
                 return {"error": f"MCP error: {payload['error']}"}
@@ -236,6 +284,32 @@ class HttpMCPProxy:
             return {"error": "Invalid JSON-RPC response"}
         except Exception as e:
             return {"error": f"Failed to read resource: {e}"}
+
+
+def _parse_sse_text(text: str) -> dict:
+    """
+    Parse SSE response text for standalone functions.
+
+    Returns the last valid JSON-RPC response from the SSE stream.
+    """
+    if "data: " not in text:
+        return json.loads(text)
+
+    # Parse all SSE data events and return the last valid one
+    last_valid = None
+    for line in text.split("\n"):
+        line = line.strip()
+        if line.startswith("data: "):
+            try:
+                payload = json.loads(line[6:])
+                if isinstance(payload, dict) and "jsonrpc" in payload:
+                    last_valid = payload
+            except json.JSONDecodeError:
+                continue
+
+    if last_valid is None:
+        raise ValueError("No valid JSON-RPC response found in SSE stream")
+    return last_valid
 
 
 async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bool:
@@ -299,12 +373,7 @@ async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bo
             if test_resp.status_code != 200:
                 return False
 
-            text = test_resp.text
-            payload = (
-                json.loads(text.split("data: ")[1].strip())
-                if "data: " in text
-                else test_resp.json()
-            )
+            payload = _parse_sse_text(test_resp.text)
             return "jsonrpc" in payload and ("result" in payload or "error" in payload)
     except Exception:
         return False
