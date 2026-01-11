@@ -34,7 +34,7 @@ class DatabaseToolRegistrar:
     def _to_concise_list_experiments(self, data: dict) -> dict:
         """Convert full experiments list to concise format.
 
-        Concise: database_path and only experiment names.
+        Concise: database_path, experiment names, and sweep groups summary.
         Preserves error field if present.
         """
         experiments = data.get("experiments", [])
@@ -43,6 +43,12 @@ class DatabaseToolRegistrar:
             "experiments": [exp.get("name", "") for exp in experiments],
             "count": len(experiments),
         }
+        # Include concise sweep groups: "type: run_ids"
+        sweep_groups = data.get("sweep_groups", [])
+        if sweep_groups:
+            result["sweep_groups"] = [
+                f"{g['type']}: {g['run_ids']}" for g in sweep_groups
+            ]
         if "error" in data:
             result["error"] = data["error"]
         return result
@@ -204,10 +210,10 @@ d = ds.get_parameter_data()
                 if not detailed:
                     result = self._to_concise_list_experiments(result)
 
-                # Add hint for data loading templates
+                # Add hint for data loading code
                 result["hint"] = (
-                    "For dataset loading code, use database_get_dataset_info with "
-                    "code_suggestion=True, or fetch resource://database_access{0d,1d,2d}_template"
+                    "For dataset loading code, use database_get_dataset_info "
+                    "with code_suggestion=True"
                 )
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]

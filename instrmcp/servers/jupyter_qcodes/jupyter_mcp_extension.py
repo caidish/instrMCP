@@ -139,7 +139,9 @@ def _auto_detect_options() -> Dict[str, bool]:
         qcodes_spec = importlib.util.find_spec("qcodes")
         if qcodes_spec is not None:
             # Use spec check instead of import to avoid blocking during extension load
-            detected["database"] = importlib.util.find_spec("qcodes.dataset") is not None
+            detected["database"] = (
+                importlib.util.find_spec("qcodes.dataset") is not None
+            )
             if detected["database"]:
                 logger.debug("Auto-detected: QCodes database available")
         else:

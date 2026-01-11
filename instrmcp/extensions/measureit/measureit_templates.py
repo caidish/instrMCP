@@ -188,7 +188,7 @@ s.start()
             "Use spacebar during sweep to reverse direction",
             "Bidirectional sweeps are useful for hysteresis measurements",
             "Set appropriate step size to avoid damaging instruments",
-            "continual=True useful for real-time monitoring"
+            "continual=True useful for real-time monitoring",
         ],
     }
 

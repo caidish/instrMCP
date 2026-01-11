@@ -13,6 +13,7 @@ from ..active_cell_bridge import (
     get_cell_outputs,
     get_cached_cell_output,
     get_active_cell_output,
+    invalidate_cell_output_cache,  # noqa: F401 - exposed for unsafe tools to clear stale state
 )
 from instrmcp.logging_config import get_logger
 from ..tool_logger import log_tool_call
@@ -121,10 +122,13 @@ class NotebookToolRegistrar:
 
         return result
 
-    def _to_concise_notebook_cells(self, result: dict) -> dict:
+    def _to_concise_notebook_cells(
+        self, result: dict, include_output: bool = True
+    ) -> dict:
         """Convert full notebook cells to concise format.
 
-        Concise: recent cells with cell_number, input (truncated), has_output, has_error, status.
+        Concise: recent cells with cell_number, input (truncated).
+        If include_output=True, also includes has_output, has_error, status.
         """
         concise_cells = []
         for cell in result.get("cells", []):
@@ -132,15 +136,15 @@ class NotebookToolRegistrar:
             truncated_input = (
                 input_text[:100] + "..." if len(input_text) > 100 else input_text
             )
-            concise_cells.append(
-                {
-                    "cell_number": cell.get("cell_number"),
-                    "input": truncated_input,
-                    "has_output": cell.get("has_output", False),
-                    "has_error": cell.get("has_error", False),
-                    "status": cell.get("status"),
-                }
-            )
+            concise_cell = {
+                "cell_number": cell.get("cell_number"),
+                "input": truncated_input,
+            }
+            if include_output:
+                concise_cell["has_output"] = cell.get("has_output", False)
+                concise_cell["has_error"] = cell.get("has_error", False)
+                concise_cell["status"] = cell.get("status")
+            concise_cells.append(concise_cell)
         return {"cells": concise_cells, "count": len(concise_cells)}
 
     def _to_concise_move_cursor(self, result: dict) -> dict:
@@ -169,19 +173,24 @@ class NotebookToolRegistrar:
         """
         Request and retrieve cell output from JupyterLab frontend.
 
+        Uses timestamp-based cache validation to avoid returning stale
+        error states that no longer reflect the current cell state.
+
         Args:
             cell_number: Execution count of the cell
             timeout_s: Timeout for waiting for response
 
         Returns:
-            Dictionary with output data or None if not available
+            Dictionary with output data or None if not available/expired
         """
-        # First check cache
+        # First check cache with TTL validation (default 60 seconds)
+        # This prevents stale error states from persisting
         cached = get_cached_cell_output(cell_number)
-        if cached:
-            return cached
+        if cached and cached.get("data"):
+            # Extract just the data portion, not the metadata wrapper
+            return cached.get("data")
 
-        # Request from frontend
+        # Request fresh data from frontend
         result = get_cell_outputs([cell_number], timeout_s=timeout_s)
         if not result.get("success"):
             return None
@@ -189,8 +198,11 @@ class NotebookToolRegistrar:
         # Wait a bit for response to arrive and be cached
         time.sleep(0.1)
 
-        # Check cache again
-        return get_cached_cell_output(cell_number)
+        # Check cache again and extract data
+        cached = get_cached_cell_output(cell_number)
+        if cached and cached.get("data"):
+            return cached.get("data")
+        return None
 
     def register_all(self):
         """Register all notebook tools."""
@@ -864,12 +876,12 @@ class NotebookToolRegistrar:
                     "count": len(cells),
                     "requested": num_cells,
                     "error_count": error_count,
-                    "note": "Only the most recent error can be captured. Older errors are not available.",
+                    "note": "Only the most recent cell's output (print/error) can be captured. Older cells lose their output.",
                 }
 
                 # Apply concise mode filtering
                 if not detailed:
-                    result = self._to_concise_notebook_cells(result)
+                    result = self._to_concise_notebook_cells(result, include_output)
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

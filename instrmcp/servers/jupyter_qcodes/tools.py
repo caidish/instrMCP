@@ -952,10 +952,11 @@ class QCodesReadOnlyTools:
             Dictionary with output data or None if not available
         """
         # First check cache (unless bypassing)
+        # Note: get_cached_cell_output now returns a wrapper dict with "data" key
         if not bypass_cache:
             cached = active_cell_bridge.get_cached_cell_output(cell_number)
-            if cached:
-                return cached
+            if cached and cached.get("data"):
+                return cached.get("data")
 
         # Request from frontend
         result = active_cell_bridge.get_cell_outputs([cell_number], timeout_s=timeout_s)
@@ -965,8 +966,11 @@ class QCodesReadOnlyTools:
         # Wait a bit for response to arrive and be cached (non-blocking)
         await asyncio.sleep(0.1)
 
-        # Check cache again
-        return active_cell_bridge.get_cached_cell_output(cell_number)
+        # Check cache again and extract data from wrapper
+        cached = active_cell_bridge.get_cached_cell_output(cell_number)
+        if cached and cached.get("data"):
+            return cached.get("data")
+        return None
 
     def _process_frontend_output(
         self,
@@ -1111,9 +1115,9 @@ class QCodesReadOnlyTools:
                 frontend_output = await self._get_cell_output(target_count)
             else:
                 # After completion: only check cache (no new frontend requests)
-                frontend_output = active_cell_bridge.get_cached_cell_output(
-                    target_count
-                )
+                # Note: get_cached_cell_output returns a wrapper with "data" key
+                cached_result = active_cell_bridge.get_cached_cell_output(target_count)
+                frontend_output = cached_result.get("data") if cached_result else None
 
             # Process frontend output (check for errors or data)
             result = self._process_frontend_output(
