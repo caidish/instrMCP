@@ -460,6 +460,87 @@ class QCodesReadOnlyTools:
 
         return enhanced_snapshot
 
+    async def get_parameter_info(
+        self, instrument_name: str, parameter_name: str, detailed: bool = False
+    ) -> Dict[str, Any]:
+        """Get metadata information about a specific parameter.
+
+        Args:
+            instrument_name: Name of the instrument in namespace
+            parameter_name: Parameter path (e.g., "voltage", "ch01.voltage")
+            detailed: If False (default), return core metadata only;
+                     if True, return all available metadata including cache
+
+        Returns:
+            Dictionary with parameter metadata
+        """
+        param = self._get_parameter(instrument_name, parameter_name)
+
+        # Core metadata (always returned)
+        info: Dict[str, Any] = {
+            "name": param.name,
+            "label": getattr(param, "label", None),
+            "unit": getattr(param, "unit", None),
+            "gettable": getattr(param, "gettable", False),
+            "settable": getattr(param, "settable", False),
+        }
+
+        # Get validator info (vals) - contains limits
+        vals = getattr(param, "vals", None)
+        if vals is not None:
+            vals_type = type(vals).__name__
+            vals_info: Dict[str, Any] = {"type": vals_type}
+            # Extract min/max for range-based validators (Numbers, Ints, etc.)
+            if hasattr(vals, "_min_value"):
+                vals_info["min_value"] = vals._min_value
+            if hasattr(vals, "_max_value"):
+                vals_info["max_value"] = vals._max_value
+            # Only include valid_values for truly enumerated validators (Enum, OnOff, Bool)
+            # NOT for Numbers/Ints which have valid_values as (min, max) tuple
+            if vals_type in ("Enum", "OnOff", "Bool", "Strings"):
+                if hasattr(vals, "_valid_values"):
+                    vals_info["valid_values"] = list(vals._valid_values)
+                elif hasattr(vals, "valid_values"):
+                    vals_info["valid_values"] = list(vals.valid_values)
+            info["vals"] = vals_info
+        else:
+            info["vals"] = None
+
+        if not detailed:
+            return info
+
+        # Extended metadata (only when detailed=True)
+        info["full_name"] = getattr(param, "full_name", None)
+        info["instrument"] = instrument_name
+        info["parameter_path"] = parameter_name
+
+        # Scale and offset (only on some parameter types like DelegateParameter)
+        if hasattr(param, "scale"):
+            info["scale"] = param.scale
+        if hasattr(param, "offset"):
+            info["offset"] = param.offset
+
+        # Additional optional attributes
+        info["docstring"] = getattr(param, "__doc__", None)
+        info["post_delay"] = getattr(param, "post_delay", None)
+        info["step"] = getattr(param, "step", None)
+        info["inter_delay"] = getattr(param, "inter_delay", None)
+
+        # Cache information
+        cache = getattr(param, "cache", None)
+        if cache is not None:
+            cache_info: Dict[str, Any] = {}
+            try:
+                cache_info["raw_value"] = cache.raw_value
+                cache_info["timestamp"] = cache.timestamp
+                if cache.timestamp:
+                    cache_info["age_seconds"] = time.time() - cache.timestamp
+            except Exception:
+                cache_info["error"] = "Unable to read cache"
+            info["cache"] = cache_info
+
+        return info
+
     async def _get_single_parameter_value(
         self, instrument_name: str, parameter_name: str, fresh: bool = False
     ) -> Dict[str, Any]:
@@ -1469,15 +1550,21 @@ class QCodesReadOnlyTools:
     #     await self.cache.clear()
     #     return {"status": "cache_cleared"}
 
-    async def wait_for_all_sweeps(self) -> Dict[str, Any]:
+    async def wait_for_all_sweeps(self, timeout: float | None = None) -> Dict[str, Any]:
         """Wait until all running measureit sweeps finish.
 
         Waits until all currently running sweeps have stopped running and returns information about them.
 
+        Args:
+            timeout: Maximum time to wait in seconds. If None, wait indefinitely.
+
         Returns:
             Dict containing:
                 sweeps: Dict mapping variable names to Dicts of information about the initially running sweeps as in get_measureit_status, empty if no sweeps were running.
-                error: str (if any error occurred)
+                error: str (if any error occurred, including timeout or sweep error)
+                timed_out: bool (True if timeout was reached)
+                sweep_error: bool (True if any sweep ended with error state)
+                errored_sweeps: list of sweep names that had errors (if any)
         """
         try:
             status = await self.get_measureit_status()
@@ -1496,8 +1583,30 @@ class QCodesReadOnlyTools:
         if not initial_running:
             return {"sweeps": None}
 
+        start_time = time.time()
         while True:
             await asyncio.sleep(WAIT_DELAY)
+
+            # Check timeout
+            if timeout is not None and (time.time() - start_time) > timeout:
+                running_names = [
+                    k
+                    for k, v in initial_running.items()
+                    if v["state"] in ("ramping", "running")
+                ]
+                return {
+                    "sweeps": initial_running,
+                    "error": f"Timeout after {timeout}s waiting for sweeps to complete",
+                    "timed_out": True,
+                    "kill_suggestion": (
+                        ", ".join(
+                            [f"measureit_kill_sweep('{n}')" for n in running_names]
+                        )
+                        if running_names
+                        else None
+                    ),
+                }
+
             status = await self.get_measureit_status()
 
             if status.get("error"):
@@ -1505,28 +1614,61 @@ class QCodesReadOnlyTools:
 
             current_sweeps = status["sweeps"]
             still_running = False
+            errored_sweeps = []
+
             for k in initial_running.keys():
                 if k in current_sweeps:
-                    still_running = still_running or (
-                        current_sweeps[k]["state"] in ("ramping", "running")
-                    )
                     initial_running[k] = current_sweeps[k]
+                    state = current_sweeps[k]["state"]
+
+                    if state in ("ramping", "running"):
+                        still_running = True
+                    elif state == "error":
+                        errored_sweeps.append(k)
+
+            # If any sweep has errored, return immediately with error info
+            if errored_sweeps:
+                error_messages = []
+                for name in errored_sweeps:
+                    sweep_info = initial_running.get(name, {})
+                    msg = sweep_info.get(
+                        "error_message", f"Sweep '{name}' ended with error"
+                    )
+                    error_messages.append(msg)
+
+                return {
+                    "sweeps": initial_running,
+                    "error": "; ".join(error_messages),
+                    "sweep_error": True,
+                    "errored_sweeps": errored_sweeps,
+                    "kill_suggestion": ", ".join(
+                        [f"measureit_kill_sweep('{n}')" for n in errored_sweeps]
+                    ),
+                }
 
             if not still_running:
                 break
 
         return {"sweeps": initial_running}
 
-    async def wait_for_sweep(self, var_name: str) -> Dict[str, Any]:
+    async def wait_for_sweep(
+        self, var_name: str, timeout: float | None = None
+    ) -> Dict[str, Any]:
         """Wait for a measureit sweep with a given variable name to finish.
 
         Waits for the sweep with the given name to stop running and returns information about it.
+
+        Args:
+            var_name: Name of the sweep variable to wait for.
+            timeout: Maximum time to wait in seconds. If None, wait indefinitely.
 
         Returns:
             Dict containing:
                 sweep: Dict of information about the sweep as in get_measureit_status, or None if no
                 running sweep with this name exists.
-                error: str (if any error occurred)
+                error: str (if any error occurred, including timeout or sweep error)
+                timed_out: bool (True if timeout was reached)
+                sweep_error: bool (True if sweep ended with error state)
         """
         status = await self.get_measureit_status()
         if status.get("error"):
@@ -1536,8 +1678,19 @@ class QCodesReadOnlyTools:
         if not target or target["state"] not in ("ramping", "running"):
             return {"sweep": None}
 
+        start_time = time.time()
         while True:
             await asyncio.sleep(WAIT_DELAY)
+
+            # Check timeout
+            if timeout is not None and (time.time() - start_time) > timeout:
+                return {
+                    "sweep": target,
+                    "error": f"Timeout after {timeout}s waiting for sweep '{var_name}' to complete",
+                    "timed_out": True,
+                    "kill_suggestion": f"Use measureit_kill_sweep('{var_name}') to stop the sweep and release resources",
+                }
+
             status = await self.get_measureit_status()
             if status.get("error"):
                 return {"sweep": target, "error": status["error"]}
@@ -1545,6 +1698,17 @@ class QCodesReadOnlyTools:
 
             if not target:
                 break
+
+            # Check for error state - return early with error message
+            if target["state"] == "error":
+                error_msg = target.get("error_message", "Sweep ended with error")
+                return {
+                    "sweep": target,
+                    "error": error_msg,
+                    "sweep_error": True,
+                    "kill_suggestion": f"Use measureit_kill_sweep('{var_name}') to release resources after error",
+                }
+
             if target["state"] not in ["ramping", "running"]:
                 break
 
@@ -1594,6 +1758,11 @@ class QCodesReadOnlyTools:
                     sweep_info["time_elapsed"] = progress_state.time_elapsed
                     sweep_info["time_remaining"] = progress_state.time_remaining
 
+                    # Capture error information if present
+                    error_message = getattr(progress_state, "error_message", None)
+                    if error_message:
+                        sweep_info["error_message"] = error_message
+
                     result["sweeps"][var_name] = sweep_info
 
             return result
@@ -1601,6 +1770,76 @@ class QCodesReadOnlyTools:
         except Exception as e:
             logger.error(f"Error checking MeasureIt status: {e}")
             return {"active": False, "sweeps": {}, "error": str(e)}
+
+    async def kill_sweep(self, var_name: str) -> Dict[str, Any]:
+        """Kill a running MeasureIt sweep to release resources.
+
+        UNSAFE: This tool stops a running sweep, which may leave instruments
+        in an intermediate state. Use when a sweep needs to be terminated
+        due to timeout, error, or user request.
+
+        Args:
+            var_name: Name of the sweep variable in the notebook namespace
+
+        Returns:
+            Dict containing:
+                success: bool - whether the kill was successful
+                sweep_name: str - name of the sweep
+                previous_state: str - state before kill
+                error: str (if any error occurred)
+        """
+        try:
+            if BaseSweep is None:
+                return {
+                    "success": False,
+                    "sweep_name": var_name,
+                    "error": "MeasureIt library not available",
+                }
+
+            # Check if the variable exists in namespace
+            if var_name not in self.namespace:
+                return {
+                    "success": False,
+                    "sweep_name": var_name,
+                    "error": f"Variable '{var_name}' not found in namespace",
+                }
+
+            sweep = self.namespace[var_name]
+
+            # Verify it's a sweep object
+            if not isinstance(sweep, BaseSweep):
+                return {
+                    "success": False,
+                    "sweep_name": var_name,
+                    "error": f"Variable '{var_name}' is not a MeasureIt sweep (got {type(sweep).__name__})",
+                }
+
+            # Get state before kill
+            previous_state = sweep.progressState.state.value
+
+            # Kill the sweep
+            await asyncio.to_thread(sweep.kill)
+
+            # Verify the sweep was killed
+            new_state = sweep.progressState.state.value
+
+            return {
+                "success": True,
+                "sweep_name": var_name,
+                "sweep_type": type(sweep).__name__,
+                "previous_state": previous_state,
+                "new_state": new_state,
+                "message": f"Sweep '{var_name}' killed successfully. Resources released.",
+                "warning": "UNSAFE: Sweep was terminated. Instruments may need re-initialization.",
+            }
+
+        except Exception as e:
+            logger.error(f"Error killing sweep '{var_name}': {e}")
+            return {
+                "success": False,
+                "sweep_name": var_name,
+                "error": str(e),
+            }
 
     async def cleanup(self):
         """Clean up resources."""

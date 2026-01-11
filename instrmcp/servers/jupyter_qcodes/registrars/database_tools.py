@@ -10,6 +10,8 @@ from typing import List, Optional
 
 from mcp.types import TextContent
 
+from .database_internal import generate_code_suggestion, analyze_sweep_groups
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +83,31 @@ class DatabaseToolRegistrar:
         return result
 
     def _generate_code_suggestion(self, data: dict) -> str:
-        """Generate a code example for retrieving the dataset."""
+        """Generate comprehensive code example for retrieving the dataset.
+
+        Uses the database_internal module which provides sweep-type-aware
+        code generation with automatic grouping of related sweeps.
+        """
+        database_path = data.get("database_path", "")
+        basic_info = data.get("basic_info", {})
+        run_id = basic_info.get("run_id", 1)
+
+        try:
+            # Use the new comprehensive code generation
+            result = generate_code_suggestion(
+                database_path=database_path,
+                run_id=run_id,
+                include_groups=True,
+            )
+            return result.get("code_by_run_id", {}).get(
+                run_id, self._generate_fallback_code(data)
+            )
+        except Exception as e:
+            logger.warning(f"Comprehensive code generation failed: {e}")
+            return self._generate_fallback_code(data)
+
+    def _generate_fallback_code(self, data: dict) -> str:
+        """Generate basic fallback code when sweep type cannot be determined."""
         database_path = data.get("database_path", "")
         basic_info = data.get("basic_info", {})
         run_id = basic_info.get("run_id", 1)
@@ -92,7 +118,7 @@ class DatabaseToolRegistrar:
         for outer_key, inner_dict in parameter_data.items():
             if isinstance(inner_dict, dict):
                 for inner_key in inner_dict.keys():
-                    var_name = inner_key.replace(".", "_")  # Make valid Python var
+                    var_name = inner_key.replace(".", "_")
                     param_code_lines.append(
                         f'{var_name} = d["{outer_key}"]["{inner_key}"]'
                     )
@@ -101,7 +127,7 @@ class DatabaseToolRegistrar:
             "\n".join(param_code_lines) if param_code_lines else "# No parameters"
         )
 
-        code = f"""from qcodes.dataset import load_by_id
+        return f"""from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
 db = "{database_path}"
@@ -113,7 +139,6 @@ d = ds.get_parameter_data()
 # Extract parameter arrays:
 {param_code}
 """
-        return code
 
     # ===== End concise mode helpers =====
 
@@ -154,9 +179,36 @@ d = ds.get_parameter_data()
                 result_str = self.db.list_experiments(database_path=database_path)
                 result = json.loads(result_str)
 
+                # Detect sweep groups (Sweep2D parent, SweepQueue batches)
+                db_path = result.get("database_path")
+                if db_path:
+                    try:
+                        groups = analyze_sweep_groups(db_path)
+                        # Filter to only show multi-run groups
+                        grouped = [
+                            {
+                                "type": g.group_type,
+                                "sweep_type": g.sweep_type.value,
+                                "run_ids": g.run_ids,
+                                "description": g.description,
+                            }
+                            for g in groups
+                            if len(g.run_ids) > 1
+                        ]
+                        if grouped:
+                            result["sweep_groups"] = grouped
+                    except Exception as e:
+                        logger.debug(f"Could not analyze sweep groups: {e}")
+
                 # Apply concise mode filtering
                 if not detailed:
                     result = self._to_concise_list_experiments(result)
+
+                # Add hint for data loading templates
+                result["hint"] = (
+                    "For dataset loading code, use database_get_dataset_info with "
+                    "code_suggestion=True, or fetch resource://database_access{0d,1d,2d}_template"
+                )
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             except Exception as e:

@@ -13,7 +13,13 @@ Key features:
 - Builtins access detection (`getattr(__builtins__, "eval")`)
 - Environment modification detection (original attack vector)
 - Dangerous file operation detection
+- IPython magic and shell escape detection (%%bash, !source, etc.)
 - Optional Bandit integration for additional coverage
+
+Security Architecture:
+1. IPython Scanner (pre-AST) - catches %%bash, !command, get_ipython() bypasses
+2. AST Scanner - catches Python-level dangerous patterns
+Both must pass for code to be considered safe.
 """
 
 import ast
@@ -21,6 +27,12 @@ import logging
 from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+
+from .ipython_scanner import (
+    IPythonScanner,
+    IPythonScanResult,
+    get_default_ipython_scanner,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -667,36 +679,46 @@ class PickleVisitor(BaseSecurityVisitor):
 
 
 class CodeScanner:
-    """AST-based security scanner for Python code.
+    """Combined security scanner for Python and IPython code.
 
-    This scanner uses Abstract Syntax Tree analysis to detect dangerous patterns,
-    providing robust detection that can't be bypassed by simple obfuscation.
+    This scanner combines two layers of defense:
+    1. IPython Scanner (pre-AST) - Detects %%bash, !command, get_ipython() bypasses
+    2. AST Scanner - Detects Python-level dangerous patterns
+
+    Both scanners must pass for code to be considered safe.
     """
 
     def __init__(
         self,
         block_high_risk: bool = True,
         block_medium_risk: bool = False,
+        ipython_scanner: Optional[IPythonScanner] = None,
     ):
         """Initialize the code scanner.
 
         Args:
             block_high_risk: Whether to block HIGH risk patterns (default: True)
             block_medium_risk: Whether to block MEDIUM risk patterns (default: False)
+            ipython_scanner: Optional IPython scanner. If None, uses default scanner.
         """
         self.block_high_risk = block_high_risk
         self.block_medium_risk = block_medium_risk
+        self.ipython_scanner = ipython_scanner or get_default_ipython_scanner()
 
         logger.debug(
-            f"AST CodeScanner initialized: "
+            f"CodeScanner initialized (AST + IPython): "
             f"block_high={block_high_risk}, block_medium={block_medium_risk}"
         )
 
     def scan(self, code: str) -> ScanResult:
-        """Scan code for security issues using AST analysis.
+        """Scan code for security issues using IPython and AST analysis.
+
+        This method runs TWO layers of security scanning:
+        1. IPython Scanner - Detects %%bash, !command, get_ipython() bypasses
+        2. AST Scanner - Detects Python-level dangerous patterns
 
         Args:
-            code: Python code to scan
+            code: Python/IPython code to scan
 
         Returns:
             ScanResult with detected issues and blocking decision
@@ -704,11 +726,47 @@ class CodeScanner:
         if not code or not code.strip():
             return ScanResult(is_safe=True)
 
-        # Parse to AST
+        # LAYER 1: IPython Scanner - Run FIRST to catch shell injection attacks
+        # This catches %%bash, !source ~/.zshrc, get_ipython().system(), etc.
+        ipython_result = self.ipython_scanner.scan(code)
+        if ipython_result.blocked:
+            # Convert IPython result to ScanResult format
+            logger.error(f"IPython scan BLOCKED: {ipython_result.block_reason}")
+            ipython_issues = [
+                SecurityIssue(
+                    rule_id=issue.rule_id,
+                    description=issue.description,
+                    risk_level=RiskLevel.CRITICAL,  # IPython bypasses are always critical
+                    line_number=issue.line_number,
+                    matched_code=issue.matched_code,
+                    suggestion=issue.suggestion,
+                )
+                for issue in ipython_result.issues
+            ]
+            return ScanResult(
+                is_safe=False,
+                issues=ipython_issues,
+                blocked=True,
+                block_reason=f"[IPython] {ipython_result.block_reason}",
+            )
+
+        # LAYER 2: AST Scanner - Parse Python code
+        # Note: Code with IPython magics (%%bash) may fail to parse as Python,
+        # but we've already checked for dangerous magics above.
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
-            # Invalid Python - can't execute, so technically "safe"
+            # Code may contain non-Python syntax (like %%bash content after the magic).
+            # If IPython scanner passed, we check if this is just a cell magic body.
+            # If the code starts with %% it's a cell magic and the "body" isn't Python.
+            if code.strip().startswith("%%"):
+                # IPython scanner already approved - the magic itself is safe
+                # The body content is shell/other language, not Python to analyze
+                logger.debug(
+                    f"Non-Python cell magic body, IPython scanner approved: {e.msg}"
+                )
+                return ScanResult(is_safe=True)
+            # Regular Python syntax error - can't execute anyway
             logger.debug(f"Syntax error in code (line {e.lineno}): {e.msg}")
             return ScanResult(is_safe=True)
 

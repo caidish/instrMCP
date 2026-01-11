@@ -123,7 +123,7 @@ init_database(database_name, exp_name, sample_name, s)
 ensure_qt()
 s.start()
 
-# To pause: s.pause() or press ESC, spacebar to reverse direction
+# To pause: s.pause()
 """,
         "advanced_patterns": {
             "fast_sweep": """# Fast sweep with reduced plotting
@@ -131,10 +131,10 @@ s = Sweep1D(
     freq_source.frequency,
     start=1e6, stop=10e6,   # 1-10 MHz
     step=1e5,               # 100 kHz steps
-    inter_delay=0.01,       # Fast measurements
+    inter_delay=0.1,       # Fast measurements
     save_data=True,
     bidirectional=False,
-    plot_bin=20             # Plot every 20th point
+    plot_bin=1            # Plot every point
 )
 s.follow_param(spectrum_analyzer.power)
 init_database("fast_sweep.db", "frequency_response", "device_B", s)
@@ -178,7 +178,7 @@ s.start()
             "start": "Starting value for sweep",
             "stop": "Ending value for sweep",
             "step": "Step size between measured datapoints",
-            "inter_delay": "Delay between measurements (seconds)",
+            "inter_delay": "Delay between measurements (seconds), don't be <0.01 so the measurement is stable.",
             "bidirectional": "True: sweep back and forth, False: one direction",
             "continual": "True: sweep continuously, False: stop after completion",
             "plot_bin": "Plot every Nth point for performance",
@@ -188,8 +188,7 @@ s.start()
             "Use spacebar during sweep to reverse direction",
             "Bidirectional sweeps are useful for hysteresis measurements",
             "Set appropriate step size to avoid damaging instruments",
-            "continual=True useful for real-time monitoring",
-            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
+            "continual=True useful for real-time monitoring"
         ],
     }
 
@@ -282,7 +281,7 @@ s.start()
 s = Sweep2D(
     [rf_source.frequency, 1e6, 10e6, 50e3],    # 1-10 MHz, 50kHz steps
     [rf_source.power, -30, 0, 1],               # -30 to 0 dBm, 1dB steps
-    inter_delay=0.02,      # Fast RF measurements
+    inter_delay=0.1,      # Fast RF measurements
     outer_delay=0.1,       # Quick power changes
     save_data=True,
     plot_data=True
@@ -327,13 +326,12 @@ s.start()
             "out_ministeps": "Number of mini-steps per outer parameter change",
         },
         "tips": [
-            "Inner parameter is swept rapidly back and forth",
+            "Inner parameter is swept relatively rapidly back and forth",
             "Outer parameter steps when inner sweep completes",
             "Use follow_heatmap_param() for real-time 2D plotting",
             "back_multiplier speeds up return sweeps",
             "Adjust outer_delay for instrument settling time",
             "Large maps can take hours - plan accordingly",
-            "To see if the sweep is finished or not, check s.progressState.state == SweepState.DONE",
         ],
     }
 
@@ -352,8 +350,6 @@ def get_simulsweep_template() -> str:
             "Correlated parameter sweeps",
             "Diagonal cuts through parameter space",
             "Maintaining parameter ratios",
-            "Multi-parameter optimization",
-            "Synchronized instrument control",
         ],
         "basic_pattern": """# SimulSweep - Simultaneous parameter sweeping
 import os
@@ -866,6 +862,212 @@ if sweep.progressState.state == SweepState.PAUSED and sweep.continual:
     return json.dumps(template, indent=2)
 
 
+# =============================================================================
+# Data Access Templates - For loading saved data from QCodes database
+# =============================================================================
+
+
+def get_database_access0d_template() -> str:
+    """Get template for loading Sweep0D data from QCodes database."""
+    template = {
+        "description": "Load Sweep0D (time-based) data from QCodes database",
+        "data_structure": "data['dependent']['time'] for time array",
+        "code": """from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+ds = load_by_id(RUN_ID)
+data = ds.get_parameter_data()
+
+# Extract time and measured values
+# Key: data is keyed by DEPENDENT param, not 'time'
+first_param = list(data.keys())[0]
+time = data[first_param]["time"]
+values = data[first_param][first_param]
+
+# Plot
+import matplotlib.pyplot as plt
+plt.plot(time, values)
+plt.xlabel("Time (s)")
+""",
+        "gotchas": [
+            "Time is accessed via data['dependent']['time'], NOT data['time']",
+        ],
+    }
+    return json.dumps(template, indent=2)
+
+
+def get_database_access1d_template() -> str:
+    """Get template for loading Sweep1D data from QCodes database."""
+    template = {
+        "description": "Load Sweep1D data from QCodes database",
+        "data_structure": "data['dependent']['setpoint'] for x, data['dependent']['dependent'] for y",
+        "code": """from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+ds = load_by_id(RUN_ID)
+data = ds.get_parameter_data()
+
+# Extract setpoint and measured values
+# Key: access setpoint via dependent param key
+dependent_name = "instr_measured"  # e.g., "lockin_x"
+setpoint_name = "instr_swept"      # e.g., "gate_voltage"
+
+x = data[dependent_name][setpoint_name]
+y = data[dependent_name][dependent_name]
+
+# Plot
+import matplotlib.pyplot as plt
+plt.plot(x, y)
+""",
+        "gotchas": [
+            "Use data['dependent']['setpoint'], NOT data['setpoint']['dependent']",
+        ],
+    }
+    return json.dumps(template, indent=2)
+
+
+def get_database_access2d_template() -> str:
+    """Get template for loading Sweep2D data from QCodes database."""
+    template = {
+        "description": "Load Sweep2D data from QCodes database",
+        "critical_info": "Each run = ONE y-line. Full 2D requires loading ALL runs in experiment.",
+        "single_run_code": """# Single run = one horizontal line at constant y
+from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+import numpy as np
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+ds = load_by_id(RUN_ID)
+data = ds.get_parameter_data()
+
+# Extract data - this is ONE y-line only
+dependent = "instr_z"  # measured param
+inner = "instr_x"      # fast axis (swept)
+outer = "instr_y"      # slow axis (constant for this run)
+
+x = data[dependent][inner]
+y_value = np.unique(data[outer][outer])[0]  # Single y value
+z = data[dependent][dependent]
+
+print(f"This run: y = {y_value}, {len(x)} x-points")
+# Plot as 1D line
+""",
+        "parent_group_code": """# Full 2D: Combine all runs in parent group
+from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+import numpy as np
+import matplotlib.pyplot as plt
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+# All run IDs in Sweep2D parent (same experiment)
+run_ids = [6, 7, 8, 9, 10, 11]  # Adjust to actual IDs
+
+all_x, all_y, all_z = [], [], []
+for rid in run_ids:
+    ds = load_by_id(rid)
+    data = ds.get_parameter_data()
+    all_x.extend(data["instr_z"]["instr_x"])
+    all_y.extend(data["instr_y"]["instr_y"])  # y is separate dependent!
+    all_z.extend(data["instr_z"]["instr_z"])
+
+x, y, z = np.array(all_x), np.array(all_y), np.array(all_z)
+
+# Scatter handles non-uniform grids from bidirectional sweeps
+plt.scatter(x, y, c=z, s=10, cmap='viridis')
+plt.colorbar()
+""",
+        "gotchas": [
+            "Single run = ONE y-line, not full 2D grid",
+            "Outer param (y) stored as SEPARATE dependent: data['y']['y']",
+            "Bidirectional sweeps have extra points; use scatter not pcolormesh",
+            "Full 2D requires combining all runs in same experiment",
+        ],
+    }
+    return json.dumps(template, indent=2)
+
+
+def get_database_access_simulsweep_template() -> str:
+    """Get template for loading SimulSweep data from QCodes database."""
+    template = {
+        "description": "Load SimulSweep data from QCodes database",
+        "data_structure": "Multiple setpoints swept simultaneously",
+        "code": """from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+ds = load_by_id(RUN_ID)
+data = ds.get_parameter_data()
+
+# SimulSweep: multiple setpoints, access via first dependent
+first_dep = list(data.keys())[0]
+
+# Setpoints (all swept simultaneously)
+x1 = data[first_dep]["instr1_param"]
+x2 = data[first_dep]["instr2_param"]
+
+# Measured values - each is its own dependent
+z1 = data["instr1_measured"]["instr1_measured"]
+z2 = data["instr2_measured"]["instr2_measured"]
+
+# Plot
+import matplotlib.pyplot as plt
+fig, axes = plt.subplots(1, 2)
+axes[0].plot(x1, z1)
+axes[1].plot(x2, z2)
+""",
+        "gotchas": [
+            "Setpoints accessed via data['dependent']['setpoint']",
+            "Each dependent param is its own outer key",
+        ],
+    }
+    return json.dumps(template, indent=2)
+
+
+def get_database_access_sweepqueue_template() -> str:
+    """Get template for loading SweepQueue data from QCodes database."""
+    template = {
+        "description": "Load SweepQueue batch data from QCodes database",
+        "info": "SweepQueue creates multiple consecutive runs, each may be different sweep type",
+        "code": """from qcodes.dataset import load_by_id
+from qcodes.dataset.sqlite.database import initialise_or_create_database_at
+
+db_path = "path/to/database.db"
+initialise_or_create_database_at(db_path)
+
+# SweepQueue batch: consecutive run IDs
+run_ids = [4, 5, 6]  # Adjust to actual IDs
+
+datasets = {}
+for rid in run_ids:
+    ds = load_by_id(rid)
+    datasets[rid] = ds.get_parameter_data()
+    print(f"Run {rid}: {len(ds)} points, params: {list(datasets[rid].keys())}")
+
+# Access individual run
+data = datasets[run_ids[0]]
+# Then use appropriate pattern based on sweep type (0D/1D/2D/SimulSweep)
+""",
+        "gotchas": [
+            "Each run in queue may be different sweep type",
+            "Check run metadata to determine sweep type before loading",
+            "Runs have 'launched_by: SweepQueue' in measureit metadata",
+        ],
+    }
+    return json.dumps(template, indent=2)
+
+
 def get_measureit_code_examples() -> str:
     """
     Get all available MeasureIt patterns in a structured format.
@@ -994,9 +1196,18 @@ sweep2d.follow_heatmap_param([primary_signal])
                 "Use plot_bin parameter for long measurements",
                 "Adjust inter_delay based on instrument response time",
                 "For 2D sweeps, use back_multiplier > 1 for faster returns",
-                "Group related parameters when following multiple signals",
-                "Consider continual=True for real-time monitoring applications",
             ],
+        },
+        "data_loading_guidance": {
+            "note": "Use separate resources for detailed data loading templates",
+            "resources": [
+                "resource://database_access0d_template",
+                "resource://database_access1d_template",
+                "resource://database_access2d_template",
+                "resource://database_access_simulsweep_template",
+                "resource://database_access_sweepqueue_template",
+            ],
+            "critical_rule": "data['dependent']['setpoint'], NOT data['setpoint']['dependent']",
         },
     }
 

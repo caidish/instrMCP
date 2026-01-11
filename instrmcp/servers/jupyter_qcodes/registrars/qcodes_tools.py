@@ -45,14 +45,18 @@ class QCodesToolRegistrar:
                 "count": info.get("count", 0),
             }
 
-        # For specific instrument, return concise summary
+        # For specific instrument, return concise summary with parameter list
         hierarchy_info = info.get("hierarchy_info", {})
+        direct_params = hierarchy_info.get("direct_parameters", [])
+        channel_info = hierarchy_info.get("channel_info", {})
+
         return {
             "status": "success",
             "name": info.get("name", name),
+            "parameters": hierarchy_info.get("all_parameters", []),
             "parameter_summary": {
-                "direct_count": len(hierarchy_info.get("direct_parameters", [])),
-                "channel_count": len(hierarchy_info.get("channel_info", {})),
+                "direct_count": len(direct_params),
+                "channel_count": len(channel_info),
                 "total_count": hierarchy_info.get("parameter_count", 0),
             },
             "has_channels": hierarchy_info.get("has_channels", False),
@@ -88,6 +92,7 @@ class QCodesToolRegistrar:
     def register_all(self):
         """Register all QCodes instrument tools."""
         self._register_instrument_info()
+        self._register_get_parameter_info()
         self._register_get_parameter_values()
 
     def _register_instrument_info(self):
@@ -148,6 +153,75 @@ class QCodesToolRegistrar:
                     str(e),
                 )
                 logger.error(f"Error in qcodes_instrument_info: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_get_parameter_info(self):
+        """Register the qcodes_get_parameter_info tool."""
+
+        @self.mcp.tool(
+            name="qcodes_get_parameter_info",
+            annotations={
+                "title": "Get Parameter Info",
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
+        async def get_parameter_info(
+            instrument: str, parameter: str, detailed: bool = False
+        ) -> List[TextContent]:
+            """Get metadata information about a specific QCodes parameter.
+
+            Args:
+                instrument: Instrument name in namespace
+                parameter: Parameter path (e.g., "voltage", "ch01.voltage")
+                detailed: If False (default), return core metadata (name, label,
+                         unit, vals, gettable/settable); if True, return all
+                         available metadata including scale, offset, cache, etc.
+
+            Returns:
+                Parameter metadata including validator limits (vals).
+            """
+            start = time.perf_counter()
+            try:
+                info = await self.tools.get_parameter_info(
+                    instrument, parameter, detailed
+                )
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_get_parameter_info",
+                    {
+                        "instrument": instrument,
+                        "parameter": parameter,
+                        "detailed": detailed,
+                    },
+                    duration,
+                    "success",
+                )
+
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(info, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "qcodes_get_parameter_info",
+                    {
+                        "instrument": instrument,
+                        "parameter": parameter,
+                        "detailed": detailed,
+                    },
+                    duration,
+                    "error",
+                    str(e),
+                )
+                logger.error(f"Error in qcodes_get_parameter_info: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

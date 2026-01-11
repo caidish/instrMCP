@@ -236,10 +236,17 @@ class ResourceRegistrar:
                     get_sweepqueue_template,
                     get_common_patterns_template,
                     get_measureit_code_examples,
+                    # Data access templates
+                    get_database_access0d_template,
+                    get_database_access1d_template,
+                    get_database_access2d_template,
+                    get_database_access_simulsweep_template,
+                    get_database_access_sweepqueue_template,
                 )
 
                 resource_map.update(
                     {
+                        # Sweep templates (for running measurements)
                         "resource://measureit_sweep0d_template": lambda: get_sweep0d_template(),
                         "resource://measureit_sweep1d_template": lambda: get_sweep1d_template(),
                         "resource://measureit_sweep2d_template": lambda: get_sweep2d_template(),
@@ -247,6 +254,12 @@ class ResourceRegistrar:
                         "resource://measureit_sweepqueue_template": lambda: get_sweepqueue_template(),
                         "resource://measureit_common_patterns": lambda: get_common_patterns_template(),
                         "resource://measureit_code_examples": lambda: get_measureit_code_examples(),
+                        # Data access templates (for loading saved data)
+                        "resource://database_access0d_template": lambda: get_database_access0d_template(),
+                        "resource://database_access1d_template": lambda: get_database_access1d_template(),
+                        "resource://database_access2d_template": lambda: get_database_access2d_template(),
+                        "resource://database_access_simulsweep_template": lambda: get_database_access_simulsweep_template(),
+                        "resource://database_access_sweepqueue_template": lambda: get_database_access_sweepqueue_template(),
                     }
                 )
 
@@ -397,9 +410,16 @@ class ResourceRegistrar:
             get_sweepqueue_template,
             get_common_patterns_template,
             get_measureit_code_examples,
+            # Data access templates
+            get_database_access0d_template,
+            get_database_access1d_template,
+            get_database_access2d_template,
+            get_database_access_simulsweep_template,
+            get_database_access_sweepqueue_template,
         )
 
         templates = [
+            # Sweep templates (for running measurements)
             (
                 "measureit_sweep0d_template",
                 "MeasureIt Sweep0D Template",
@@ -441,6 +461,37 @@ class ResourceRegistrar:
                 "MeasureIt Code Examples",
                 "Complete collection of ALL MeasureIt patterns in structured format",
                 get_measureit_code_examples,
+            ),
+            # Data access templates (for loading saved data from database)
+            (
+                "database_access0d_template",
+                "Database Access Sweep0D",
+                "Load Sweep0D time-based data from QCodes database",
+                get_database_access0d_template,
+            ),
+            (
+                "database_access1d_template",
+                "Database Access Sweep1D",
+                "Load Sweep1D data from QCodes database",
+                get_database_access1d_template,
+            ),
+            (
+                "database_access2d_template",
+                "Database Access Sweep2D",
+                "Load Sweep2D data from QCodes database (single run or parent group)",
+                get_database_access2d_template,
+            ),
+            (
+                "database_access_simulsweep_template",
+                "Database Access SimulSweep",
+                "Load SimulSweep data from QCodes database",
+                get_database_access_simulsweep_template,
+            ),
+            (
+                "database_access_sweepqueue_template",
+                "Database Access SweepQueue",
+                "Load SweepQueue batch data from QCodes database",
+                get_database_access_sweepqueue_template,
             ),
         ]
 

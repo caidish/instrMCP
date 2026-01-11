@@ -423,6 +423,26 @@ def create_stdio_proxy_server(
         )
         return [TextContent(type="text", text=str(result))]
 
+    @mcp.tool(
+        name="qcodes_get_parameter_info",
+        annotations={
+            "title": "Get Parameter Info",
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
+    async def get_parameter_info(
+        instrument: str, parameter: str, detailed: bool = False
+    ) -> list[TextContent]:
+        result = await proxy.call(
+            "qcodes_get_parameter_info",
+            instrument=instrument,
+            parameter=parameter,
+            detailed=detailed,
+        )
+        return [TextContent(type="text", text=str(result))]
+
     # Jupyter notebook variable tools
     @mcp.tool(
         name="notebook_list_variables",
@@ -735,9 +755,31 @@ def create_stdio_proxy_server(
             "openWorldHint": False,
         },
     )
-    async def wait_for_all_sweeps(detailed: bool = False) -> list[TextContent]:
-        """Wait until all currently running MeasureIt sweeps finish."""
-        result = await proxy.call("measureit_wait_for_all_sweeps", detailed=detailed)
+    async def wait_for_all_sweeps(
+        timeout: Optional[float] = None, detailed: bool = False
+    ) -> list[TextContent]:
+        """Wait until all currently running MeasureIt sweeps finish.
+
+        IMPORTANT: Calculate timeout based on sweep parameters before calling.
+        Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
+        Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
+        If sweep duration is unknown, use a reasonable default (e.g., 300s) or
+        call measureit_get_status first to check time_remaining.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, wait indefinitely.
+                STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
+            detailed: If False (default), return only sweep states;
+                if True, return full sweep information.
+
+        Returns JSON containing:
+            - sweeps: Dict of sweep info (or None if no sweeps were running)
+            - error: Error message if timeout or other error occurred
+            - timed_out: True if the timeout was reached
+        """
+        result = await proxy.call(
+            "measureit_wait_for_all_sweeps", timeout=timeout, detailed=detailed
+        )
         return [TextContent(type="text", text=str(result))]
 
     @mcp.tool(
@@ -750,11 +792,73 @@ def create_stdio_proxy_server(
         },
     )
     async def wait_for_sweep(
-        variable_name: str, detailed: bool = False
+        variable_name: str,
+        timeout: Optional[float] = None,
+        detailed: bool = False,
     ) -> list[TextContent]:
-        """Wait until the specified MeasureIt sweep finishes."""
+        """Wait until the specified MeasureIt sweep finishes.
+
+        IMPORTANT: Calculate timeout based on sweep parameters before calling.
+        Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
+        Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
+        If sweep duration is unknown, use a reasonable default (e.g., 300s) or
+        call measureit_get_status(detailed=True) first to check time_remaining.
+
+        Args:
+            variable_name: Name of the sweep variable to wait for.
+            timeout: Maximum time to wait in seconds. If None, wait indefinitely.
+                STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
+            detailed: If False (default), return only sweep state;
+                if True, return full sweep information.
+
+        Returns JSON containing:
+            - sweep: Dict of sweep info (or None if no matching sweep was running)
+            - error: Error message if timeout or other error occurred
+            - timed_out: True if the timeout was reached
+        """
         result = await proxy.call(
-            "measureit_wait_for_sweep", variable_name=variable_name, detailed=detailed
+            "measureit_wait_for_sweep",
+            variable_name=variable_name,
+            timeout=timeout,
+            detailed=detailed,
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @mcp.tool(
+        name="measureit_kill_sweep",
+        annotations={
+            "title": "Kill Sweep",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
+    async def kill_sweep(variable_name: str) -> list[TextContent]:
+        """Kill a running MeasureIt sweep to release resources.
+
+        UNSAFE: This tool stops a running sweep, which may leave instruments
+        in an intermediate state. Use when a sweep needs to be terminated
+        due to timeout, error, or user request.
+
+        After killing a sweep, you may need to:
+        - Re-initialize instruments to a known state
+        - Check instrument parameters before starting a new sweep
+
+        Args:
+            variable_name: Name of the sweep variable in the notebook namespace
+                (e.g., "sweep1d", "my_sweep")
+
+        Returns JSON containing:
+            - success: bool - whether the kill was successful
+            - sweep_name: str - name of the sweep
+            - previous_state: str - state before kill
+            - new_state: str - state after kill
+            - error: str (if any error occurred)
+        """
+        result = await proxy.call(
+            "measureit_kill_sweep",
+            variable_name=variable_name,
         )
         return [TextContent(type="text", text=str(result))]
 

@@ -16,6 +16,15 @@ from .code_scanner import (
     is_code_safe,
     get_default_scanner,
 )
+from .ipython_scanner import (
+    IPythonScanner,
+    IPythonScanResult,
+    IPythonSecurityIssue,
+    IPythonRiskLevel,
+    scan_ipython,
+    is_ipython_safe,
+    get_default_ipython_scanner,
+)
 
 __all__ = [
     # Audit
@@ -25,7 +34,7 @@ __all__ = [
     "log_tool_revocation",
     # Consent
     "ConsentManager",
-    # Code Scanner
+    # Code Scanner (combined AST + IPython)
     "CodeScanner",
     "ScanResult",
     "SecurityIssue",
@@ -33,4 +42,12 @@ __all__ = [
     "scan_code",
     "is_code_safe",
     "get_default_scanner",
+    # IPython Scanner (for direct access if needed)
+    "IPythonScanner",
+    "IPythonScanResult",
+    "IPythonSecurityIssue",
+    "IPythonRiskLevel",
+    "scan_ipython",
+    "is_ipython_safe",
+    "get_default_ipython_scanner",
 ]
