@@ -1025,7 +1025,7 @@ class QCodesReadOnlyTools:
     async def _wait_for_execution(
         self, initial_count: int, timeout: float = 30.0
     ) -> Dict[str, Any]:
-        """Wait for cell execution to complete.
+        """Wait for cell execution to complete (simplified - no output retrieval).
 
         Two-phase approach:
         1. Wait for execution_count to increase (execution started)
@@ -1035,30 +1035,29 @@ class QCodesReadOnlyTools:
         which is set at the END of IPython's run_cell. This handles all cells
         including long-running silent ones (e.g., `time.sleep(10); x = 1`).
 
-        After completion is detected, a short grace period allows frontend
-        outputs to propagate before returning.
+        IMPORTANT: This method only waits for completion and detects errors.
+        Output retrieval is done separately by the caller using
+        active_cell_bridge.get_active_cell_output() for consistency with
+        notebook_get_editing_cell_output.
 
         Args:
             initial_count: The execution_count before triggering execution
             timeout: Maximum seconds to wait (default: 30)
 
         Returns:
-            Dictionary with execution status and output
+            Dictionary with execution status (no output fields - caller fetches output)
         """
         import sys
         import traceback as tb_module
 
         start_time = time.time()
         poll_interval = 0.1  # 100ms
-        OUTPUT_GRACE = 0.5  # seconds to wait for frontend outputs after completion
 
         # Capture initial state for identity comparison
         initial_last_traceback = getattr(sys, "last_traceback", None)
         initial_last_result = getattr(self.ipython, "last_execution_result", None)
 
         target_count = None
-        completion_detected_time = None  # When last_execution_result changed
-        post_completion_fetch_done = False  # Track if we've done final frontend fetch
 
         while (time.time() - start_time) < timeout:
             current_count = getattr(self.ipython, "execution_count", 0)
@@ -1074,7 +1073,6 @@ class QCodesReadOnlyTools:
 
             # Phase 2: Wait for execution to COMPLETE
             In = self.ipython.user_ns.get("In", [])
-            Out = self.ipython.user_ns.get("Out", {})
             cell_input = In[target_count] if target_count < len(In) else ""
 
             # Check 1: Error detected (compare traceback object identity, not type)
@@ -1083,12 +1081,11 @@ class QCodesReadOnlyTools:
                 current_last_traceback is not None
                 and current_last_traceback is not initial_last_traceback
             ):
-                # New error occurred - return immediately
+                # New error occurred - return immediately with error info
                 error_type = getattr(sys, "last_type", None)
                 return {
                     "status": "error",
                     "has_error": True,
-                    "has_output": False,
                     "cell_number": target_count,
                     "input": cell_input,
                     "error_type": error_type.__name__ if error_type else "Unknown",
@@ -1103,90 +1100,25 @@ class QCodesReadOnlyTools:
                 and current_last_result is not initial_last_result
             )
 
-            if execution_completed and completion_detected_time is None:
-                completion_detected_time = time.time()
-
-            # Check 3: Frontend outputs
-            # Strategy: Before completion, poll frontend. After completion, only check
-            # cache during grace period to avoid spamming frontend. After grace elapses,
-            # do ONE final frontend fetch to catch late outputs.
-            if completion_detected_time is None:
-                # Before completion: poll frontend as usual
-                frontend_output = await self._get_cell_output(target_count)
-            else:
-                # After completion: only check cache (no new frontend requests)
-                # Note: get_cached_cell_output returns a wrapper with "data" key
-                cached_result = active_cell_bridge.get_cached_cell_output(target_count)
-                frontend_output = cached_result.get("data") if cached_result else None
-
-            # Process frontend output (check for errors or data)
-            result = self._process_frontend_output(
-                frontend_output, target_count, cell_input
-            )
-            if result:
-                return result
-
-            # Check 4: Out cache populated (expression result)
-            if target_count in Out:
+            if execution_completed:
+                # Execution completed successfully - return without output
+                # (caller will fetch output using get_active_cell_output)
                 return {
                     "status": "completed",
                     "has_error": False,
-                    "has_output": True,
                     "cell_number": target_count,
                     "input": cell_input,
-                    "output": str(Out[target_count]),
                 }
 
-            # Check 5: Execution count advanced beyond target (another cell ran)
-            # Re-read execution_count to catch rapid changes since loop start
-            # (Windows asyncio.sleep has ~15.6ms resolution, causing race conditions)
+            # Check 3: Execution count advanced beyond target (another cell ran)
             fresh_count = getattr(self.ipython, "execution_count", 0)
             if fresh_count > target_count:
-                if not post_completion_fetch_done:
-                    post_completion_fetch_done = True
-                    final_output = await self._get_cell_output(
-                        target_count, bypass_cache=True
-                    )
-                    result = self._process_frontend_output(
-                        final_output, target_count, cell_input
-                    )
-                    if result:
-                        return result
                 return {
                     "status": "completed",
                     "has_error": False,
-                    "has_output": False,
                     "cell_number": target_count,
                     "input": cell_input,
-                    "message": "Cell executed successfully with no output",
                 }
-
-            # Check 6: Completion detected + grace period elapsed (silent cell)
-            # After grace period, do ONE final frontend fetch to catch late outputs
-            if completion_detected_time is not None:
-                grace_elapsed = time.time() - completion_detected_time
-                if grace_elapsed >= OUTPUT_GRACE:
-                    # Final frontend fetch after grace period (only once)
-                    if not post_completion_fetch_done:
-                        post_completion_fetch_done = True
-                        final_output = await self._get_cell_output(
-                            target_count, bypass_cache=True
-                        )
-                        result = self._process_frontend_output(
-                            final_output, target_count, cell_input
-                        )
-                        if result:
-                            return result
-
-                    # No output after final fetch - return completed with no output
-                    return {
-                        "status": "completed",
-                        "has_error": False,
-                        "has_output": False,
-                        "cell_number": target_count,
-                        "input": cell_input,
-                        "message": "Cell executed (no output)",
-                    }
 
             await asyncio.sleep(poll_interval)
 
@@ -1204,6 +1136,9 @@ class QCodesReadOnlyTools:
 
         UNSAFE: This tool executes code in the active notebook cell. The code will run
         in the frontend with output appearing in the notebook.
+
+        Output retrieval uses the same robust logic as notebook_get_editing_cell_output
+        via active_cell_bridge.get_active_cell_output().
 
         Args:
             timeout: Maximum seconds to wait for execution to complete (default: 30)
@@ -1232,35 +1167,90 @@ class QCodesReadOnlyTools:
                 )
                 return exec_result
 
-            # 3. Wait for execution to complete (polls execution_count)
-            output_result = await self._wait_for_execution(initial_count, timeout)
+            # 3. Wait for execution to complete (simplified - no output polling)
+            wait_result = await self._wait_for_execution(initial_count, timeout)
 
             # 4. Handle timeout
-            if output_result.get("status") == "timeout":
+            if wait_result.get("status") == "timeout":
                 return {
                     "success": True,
                     "executed": True,
                     "execution_count": 0,
-                    **output_result,
+                    **wait_result,
                     "source": "execute_editing_cell",
                     "bridge_status": active_cell_bridge.get_bridge_status(),
                     "warning": "UNSAFE: Code was executed in the active cell",
                 }
 
-            # 5. Combine results
+            # 5. Handle errors detected during wait
+            if wait_result.get("has_error"):
+                return {
+                    "success": True,
+                    "executed": True,
+                    "execution_count": wait_result.get("cell_number", 0),
+                    **wait_result,
+                    "has_output": False,
+                    "source": "execute_editing_cell",
+                    "bridge_status": active_cell_bridge.get_bridge_status(),
+                    "warning": "UNSAFE: Code was executed in the active cell",
+                }
+
+            # 6. Fetch output using shared logic from get_active_cell_output
+            # This is the same path used by notebook_get_editing_cell_output
+            output_result = active_cell_bridge.get_active_cell_output(timeout_s=2.0)
+
+            # 7. Build combined result
             combined_result = {
                 "success": True,
                 "executed": True,
-                "execution_count": output_result.get("cell_number", 0),
-                **output_result,
+                "execution_count": wait_result.get("cell_number", 0),
+                "status": wait_result.get("status", "completed"),
+                "cell_number": wait_result.get("cell_number", 0),
+                "input": wait_result.get("input", ""),
+                "has_error": False,
                 "source": "execute_editing_cell",
                 "bridge_status": active_cell_bridge.get_bridge_status(),
                 "warning": "UNSAFE: Code was executed in the active cell",
             }
 
-            # 6. Detect if a MeasureIt sweep was started and extract sweep names
+            # 8. Merge output data from get_active_cell_output
+            if output_result.get("success"):
+                outputs = output_result.get("outputs", [])
+                has_output = output_result.get("has_output", False)
+                has_error = output_result.get("has_error", False)
+
+                combined_result["has_output"] = has_output
+                combined_result["outputs"] = outputs
+
+                # Check for errors in frontend output (may have been missed by sys.last_*)
+                if has_error:
+                    combined_result["has_error"] = True
+                    combined_result["status"] = "error"
+                    # Extract error details from outputs
+                    for out in outputs:
+                        if out.get("type") == "error":
+                            combined_result["error_type"] = out.get(
+                                "ename", "UnknownError"
+                            )
+                            combined_result["error_message"] = out.get("evalue", "")
+                            combined_result["traceback"] = "\n".join(
+                                out.get("traceback", [])
+                            )
+                            break
+            else:
+                # Frontend fetch failed - check IPython Out cache as fallback
+                Out = self.ipython.user_ns.get("Out", {})
+                cell_num = wait_result.get("cell_number", 0)
+                if cell_num in Out:
+                    combined_result["has_output"] = True
+                    combined_result["output"] = str(Out[cell_num])
+                else:
+                    combined_result["has_output"] = False
+                    combined_result["message"] = "Cell executed (output fetch failed)"
+
+            # 9. Detect if a MeasureIt sweep was started and extract sweep names
             # Use bridge text (captured before execution) as fallback if IPython In[] is empty
-            cell_input = output_result.get("input", "") or cell_text_from_bridge
+            cell_input = wait_result.get("input", "") or cell_text_from_bridge
             sweep_pattern = r"(\w+)\.start\s*\("
             sweep_matches = re.findall(sweep_pattern, cell_input)
 
