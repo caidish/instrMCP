@@ -896,7 +896,7 @@ def create_stdio_proxy_server(
         id: int,
         database_path: Optional[str] = None,
         detailed: bool = False,
-        code_suggestion: bool = False,
+        code_suggestion: bool = True,
     ) -> list[TextContent]:
         result = await proxy.call(
             "database_get_dataset_info",

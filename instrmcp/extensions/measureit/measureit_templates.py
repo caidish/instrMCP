@@ -871,7 +871,7 @@ def get_database_access0d_template() -> str:
     """Get template for loading Sweep0D data from QCodes database."""
     template = {
         "description": "Load Sweep0D (time-based) data from QCodes database",
-        "data_structure": "data['dependent']['time'] for time array",
+        "data_structure": "DataFrame with time as first column, measured params as other columns",
         "code": """from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
@@ -879,21 +879,18 @@ db_path = "path/to/database.db"
 initialise_or_create_database_at(db_path)
 
 ds = load_by_id(RUN_ID)
-data = ds.get_parameter_data()
+df = ds.to_pandas_dataframe().reset_index()
 
-# Extract time and measured values
-# Key: data is keyed by DEPENDENT param, not 'time'
-first_param = list(data.keys())[0]
-time = data[first_param]["time"]
-values = data[first_param][first_param]
+# DataFrame columns: time + all measured parameters
+print("Columns:", df.columns.tolist())
+print(df.head())
 
-# Plot
-import matplotlib.pyplot as plt
-plt.plot(time, values)
-plt.xlabel("Time (s)")
+# Optional: Plot (uncomment to use)
+# import matplotlib.pyplot as plt
+# df.plot(x="time", y=df.columns[1])
 """,
         "gotchas": [
-            "Time is accessed via data['dependent']['time'], NOT data['time']",
+            "Use to_pandas_dataframe().reset_index() for easy access to all data",
         ],
     }
     return json.dumps(template, indent=2)
@@ -903,7 +900,7 @@ def get_database_access1d_template() -> str:
     """Get template for loading Sweep1D data from QCodes database."""
     template = {
         "description": "Load Sweep1D data from QCodes database",
-        "data_structure": "data['dependent']['setpoint'] for x, data['dependent']['dependent'] for y",
+        "data_structure": "DataFrame with setpoint as first column, then time + measured params",
         "code": """from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
@@ -911,22 +908,18 @@ db_path = "path/to/database.db"
 initialise_or_create_database_at(db_path)
 
 ds = load_by_id(RUN_ID)
-data = ds.get_parameter_data()
+df = ds.to_pandas_dataframe().reset_index()
 
-# Extract setpoint and measured values
-# Key: access setpoint via dependent param key
-dependent_name = "instr_measured"  # e.g., "lockin_x"
-setpoint_name = "instr_swept"      # e.g., "gate_voltage"
+# DataFrame columns: setpoint + time + all measured parameters
+print("Columns:", df.columns.tolist())
+print(df.head())
 
-x = data[dependent_name][setpoint_name]
-y = data[dependent_name][dependent_name]
-
-# Plot
-import matplotlib.pyplot as plt
-plt.plot(x, y)
+# Optional: Plot (uncomment to use)
+# import matplotlib.pyplot as plt
+# df.plot(x=df.columns[0], y=df.columns[2])
 """,
         "gotchas": [
-            "Use data['dependent']['setpoint'], NOT data['setpoint']['dependent']",
+            "Use to_pandas_dataframe().reset_index() for easy access to all data",
         ],
     }
     return json.dumps(template, indent=2)
@@ -940,31 +933,21 @@ def get_database_access2d_template() -> str:
         "single_run_code": """# Single run = one horizontal line at constant y
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
-import numpy as np
 
 db_path = "path/to/database.db"
 initialise_or_create_database_at(db_path)
 
 ds = load_by_id(RUN_ID)
-data = ds.get_parameter_data()
+df = ds.to_pandas_dataframe().reset_index()
 
-# Extract data - this is ONE y-line only
-dependent = "instr_z"  # measured param
-inner = "instr_x"      # fast axis (swept)
-outer = "instr_y"      # slow axis (constant for this run)
-
-x = data[dependent][inner]
-y_value = np.unique(data[outer][outer])[0]  # Single y value
-z = data[dependent][dependent]
-
-print(f"This run: y = {y_value}, {len(x)} x-points")
-# Plot as 1D line
+# DataFrame columns: x (inner setpoint) + y (outer) + measured params
+print("Columns:", df.columns.tolist())
+print(df.head())
 """,
         "parent_group_code": """# Full 2D: Combine all runs in parent group
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
-import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 
 db_path = "path/to/database.db"
 initialise_or_create_database_at(db_path)
@@ -972,25 +955,28 @@ initialise_or_create_database_at(db_path)
 # All run IDs in Sweep2D parent (same experiment)
 run_ids = [6, 7, 8, 9, 10, 11]  # Adjust to actual IDs
 
-all_x, all_y, all_z = [], [], []
+# Combine all runs into one DataFrame
+dfs = []
 for rid in run_ids:
     ds = load_by_id(rid)
-    data = ds.get_parameter_data()
-    all_x.extend(data["instr_z"]["instr_x"])
-    all_y.extend(data["instr_y"]["instr_y"])  # y is separate dependent!
-    all_z.extend(data["instr_z"]["instr_z"])
+    df = ds.to_pandas_dataframe().reset_index()
+    dfs.append(df)
 
-x, y, z = np.array(all_x), np.array(all_y), np.array(all_z)
+df = pd.concat(dfs, ignore_index=True)
 
-# Scatter handles non-uniform grids from bidirectional sweeps
-plt.scatter(x, y, c=z, s=10, cmap='viridis')
-plt.colorbar()
+print("Columns:", df.columns.tolist())
+print("Shape:", df.shape)
+
+# Optional: Scatter plot (uncomment to use)
+# import matplotlib.pyplot as plt
+# x_col, y_col, z_col = df.columns[0], df.columns[1], df.columns[2]
+# plt.scatter(df[x_col], df[y_col], c=df[z_col], s=10, cmap='viridis')
+# plt.colorbar()
 """,
         "gotchas": [
             "Single run = ONE y-line, not full 2D grid",
-            "Outer param (y) stored as SEPARATE dependent: data['y']['y']",
-            "Bidirectional sweeps have extra points; use scatter not pcolormesh",
-            "Full 2D requires combining all runs in same experiment",
+            "Use pd.concat() to combine multiple runs into full 2D data",
+            "Use to_pandas_dataframe().reset_index() for easy access",
         ],
     }
     return json.dumps(template, indent=2)
@@ -1000,7 +986,7 @@ def get_database_access_simulsweep_template() -> str:
     """Get template for loading SimulSweep data from QCodes database."""
     template = {
         "description": "Load SimulSweep data from QCodes database",
-        "data_structure": "Multiple setpoints swept simultaneously",
+        "data_structure": "DataFrame with all setpoints and measured params as columns",
         "code": """from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
@@ -1008,28 +994,18 @@ db_path = "path/to/database.db"
 initialise_or_create_database_at(db_path)
 
 ds = load_by_id(RUN_ID)
-data = ds.get_parameter_data()
+df = ds.to_pandas_dataframe().reset_index()
 
-# SimulSweep: multiple setpoints, access via first dependent
-first_dep = list(data.keys())[0]
+# DataFrame columns: setpoints (swept simultaneously) + measured params
+print("Columns:", df.columns.tolist())
+print(df.head())
 
-# Setpoints (all swept simultaneously)
-x1 = data[first_dep]["instr1_param"]
-x2 = data[first_dep]["instr2_param"]
-
-# Measured values - each is its own dependent
-z1 = data["instr1_measured"]["instr1_measured"]
-z2 = data["instr2_measured"]["instr2_measured"]
-
-# Plot
-import matplotlib.pyplot as plt
-fig, axes = plt.subplots(1, 2)
-axes[0].plot(x1, z1)
-axes[1].plot(x2, z2)
+# Optional: Plot (uncomment to use)
+# import matplotlib.pyplot as plt
+# df.plot(x=df.columns[0], y=df.columns[1])
 """,
         "gotchas": [
-            "Setpoints accessed via data['dependent']['setpoint']",
-            "Each dependent param is its own outer key",
+            "Use to_pandas_dataframe().reset_index() for easy access to all data",
         ],
     }
     return json.dumps(template, indent=2)

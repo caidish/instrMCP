@@ -18,36 +18,65 @@ logger = logging.getLogger(__name__)
 class DatabaseToolRegistrar:
     """Registers database integration tools with the MCP server."""
 
-    def __init__(self, mcp_server, db_integration):
+    def __init__(
+        self,
+        mcp_server,
+        db_integration,
+        tools=None,
+        safe_mode=True,
+    ):
         """
         Initialize the database tool registrar.
 
         Args:
             mcp_server: FastMCP server instance
             db_integration: Database integration module
+            tools: QCodesReadOnlyTools instance (for cell operations in unsafe mode)
+            safe_mode: Whether server is in safe mode (read-only)
         """
         self.mcp = mcp_server
         self.db = db_integration
+        self.tools = tools
+        self.safe_mode = safe_mode
 
     # ===== Concise mode helpers =====
+
+    def _format_run_ids_concise(self, run_ids: list) -> str:
+        """Format run_ids list concisely.
+
+        For small lists (<=5): show all, e.g., "1, 2, 3"
+        For larger lists: show range, e.g., "1-1000 (1000 runs)"
+        """
+        if not run_ids:
+            return ""
+        if len(run_ids) <= 5:
+            return ", ".join(str(r) for r in run_ids)
+        return f"{min(run_ids)}-{max(run_ids)} ({len(run_ids)} runs)"
 
     def _to_concise_list_experiments(self, data: dict) -> dict:
         """Convert full experiments list to concise format.
 
-        Concise: database_path, experiment names, and sweep groups summary.
+        Concise: database_path, experiments with run_ids summary, and sweep groups.
         Preserves error field if present.
         """
         experiments = data.get("experiments", [])
         result = {
             "database_path": data.get("database_path"),
-            "experiments": [exp.get("name", "") for exp in experiments],
+            "experiments": [
+                {
+                    "name": exp.get("name", ""),
+                    "run_ids": self._format_run_ids_concise(exp.get("run_ids", [])),
+                }
+                for exp in experiments
+            ],
             "count": len(experiments),
         }
-        # Include concise sweep groups: "type: run_ids"
+        # Include concise sweep groups: "type: run_ids_summary"
         sweep_groups = data.get("sweep_groups", [])
         if sweep_groups:
             result["sweep_groups"] = [
-                f"{g['type']}: {g['run_ids']}" for g in sweep_groups
+                f"{g['type']}: {self._format_run_ids_concise(g['run_ids'])}"
+                for g in sweep_groups
             ]
         if "error" in data:
             result["error"] = data["error"]
@@ -213,7 +242,7 @@ d = ds.get_parameter_data()
                 # Add hint for data loading code
                 result["hint"] = (
                     "For dataset loading code, use database_get_dataset_info "
-                    "with code_suggestion=True"
+                    "with code_suggestion=True. For groups, only one run_id is needed."
                 )
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
@@ -241,7 +270,7 @@ d = ds.get_parameter_data()
             id: int,
             database_path: Optional[str] = None,
             detailed: bool = False,
-            code_suggestion: bool = False,
+            code_suggestion: bool = True,
         ) -> List[TextContent]:
             """Get detailed information about a specific dataset.
 
@@ -250,7 +279,9 @@ d = ds.get_parameter_data()
                 database_path: Path to database file. If None, uses MeasureIt
                     default or QCodes config.
                 detailed: If False (default), return concise summary; if True, return full info
-                code_suggestion: If True, include Python code example for loading the dataset
+                code_suggestion: If True, include Python code example for loading the dataset.
+                    In unsafe/dangerous mode, the code is automatically added to a new cell
+                    and executed. In safe mode, the code is returned as a suggestion.
             """
             try:
                 result_str = self.db.get_dataset_info(
@@ -258,17 +289,29 @@ d = ds.get_parameter_data()
                 )
                 result = json.loads(result_str)
 
-                # Add code suggestion if requested
+                # Generate code suggestion if requested
                 if code_suggestion:
-                    result["code_suggestion"] = self._generate_code_suggestion(result)
+                    code = self._generate_code_suggestion(result)
 
-                # Apply concise mode filtering
-                if not detailed:
-                    concise = self._to_concise_dataset_info(result)
-                    # Preserve code_suggestion in concise mode if it was requested
-                    if code_suggestion:
-                        concise["code_suggestion"] = result["code_suggestion"]
-                    result = concise
+                    # In unsafe mode with tools available: auto-execute
+                    if not self.safe_mode and self.tools is not None:
+                        exec_result = await self._auto_execute_code(code)
+                        # Apply concise mode filtering first
+                        if not detailed:
+                            result = self._to_concise_dataset_info(result)
+                        # Replace code_suggestion with execution result
+                        result["code_executed"] = exec_result
+                    else:
+                        # Safe mode: just return code suggestion
+                        result["code_suggestion"] = code
+                        if not detailed:
+                            concise = self._to_concise_dataset_info(result)
+                            concise["code_suggestion"] = code
+                            result = concise
+                else:
+                    # No code suggestion requested
+                    if not detailed:
+                        result = self._to_concise_dataset_info(result)
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             except Exception as e:
@@ -278,6 +321,114 @@ d = ds.get_parameter_data()
                         type="text", text=json.dumps({"error": str(e)}, indent=2)
                     )
                 ]
+
+    async def _auto_execute_code(self, code: str) -> dict:
+        """Add code to a new cell and execute it.
+
+        Args:
+            code: Python code to execute
+
+        Returns:
+            Dictionary with execution status and output
+        """
+        try:
+            # 1. Add new cell with the code
+            add_result = await self.tools.add_new_cell(
+                cell_type="code", position="below", content=code
+            )
+
+            if not add_result.get("success"):
+                return {
+                    "success": False,
+                    "error": "Failed to add cell",
+                    "details": add_result,
+                }
+
+            # 2. Execute the cell
+            exec_result = await self.tools.execute_editing_cell(timeout=30.0)
+
+            # 3. Extract output from various possible fields
+            cell_output = self._extract_cell_output(exec_result)
+
+            if exec_result.get("status") == "completed":
+                return {
+                    "success": True,
+                    "message": "Code added to notebook cell and executed successfully",
+                    "cell_content": code,
+                    "cell_output": cell_output,
+                    "has_error": exec_result.get("has_error", False),
+                }
+            elif exec_result.get("status") == "error":
+                return {
+                    "success": False,
+                    "message": "Code added but execution encountered an error",
+                    "cell_content": code,
+                    "cell_output": cell_output,
+                    "error_type": exec_result.get("error_type", ""),
+                    "error_message": exec_result.get("error_message", ""),
+                    "suggestion": "Please check the cell and fix the error",
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Code added but execution failed or timed out",
+                    "cell_content": code,
+                    "error": exec_result.get("error", exec_result.get("message", "")),
+                    "suggestion": "Please check the cell and revise the code if needed",
+                }
+
+        except Exception as e:
+            logger.error(f"Error in _auto_execute_code: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "cell_content": code,
+                "suggestion": "Auto-execution failed. Please add the code manually.",
+            }
+
+    def _extract_cell_output(self, exec_result: dict) -> str:
+        """Extract text output from execution result.
+
+        Args:
+            exec_result: Result from execute_editing_cell
+
+        Returns:
+            String representation of output
+        """
+        # Check for direct output string (from Out cache)
+        if exec_result.get("output"):
+            return str(exec_result["output"])
+
+        # Check for outputs array (from frontend)
+        outputs = exec_result.get("outputs", [])
+        if not outputs:
+            return ""
+
+        # Extract text from outputs
+        text_parts = []
+        for output in outputs:
+            output_type = output.get("type", "")
+
+            if output_type == "stream":
+                # stdout/stderr
+                text_parts.append(output.get("text", ""))
+            elif output_type == "execute_result":
+                # Expression result
+                data = output.get("data", {})
+                if "text/plain" in data:
+                    text_parts.append(data["text/plain"])
+            elif output_type == "display_data":
+                # Display output
+                data = output.get("data", {})
+                if "text/plain" in data:
+                    text_parts.append(data["text/plain"])
+            elif output_type == "error":
+                # Error output
+                text_parts.append(
+                    f"{output.get('ename', 'Error')}: {output.get('evalue', '')}"
+                )
+
+        return "\n".join(text_parts)
 
     def _register_get_database_stats(self):
         """Register the database/get_database_stats tool."""

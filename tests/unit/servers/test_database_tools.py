@@ -97,7 +97,11 @@ class TestDatabaseToolRegistrar:
         assert isinstance(result, list)
         assert len(result) == 1
         assert isinstance(result[0], TextContent)
-        assert result[0].text == mock_experiments
+        # Check key fields are present (hint is added by the tool)
+        response_data = json.loads(result[0].text)
+        assert len(response_data["experiments"]) == 1
+        assert response_data["experiments"][0]["name"] == "test_exp"
+        assert "hint" in response_data
         mock_db_integration.list_experiments.assert_called_once_with(database_path=None)
 
     @pytest.mark.asyncio
@@ -158,9 +162,15 @@ class TestDatabaseToolRegistrar:
 
         registrar.register_all()
         get_dataset_func = mock_mcp_server._tools["database_get_dataset_info"]
-        result = await get_dataset_func(id=1, database_path=None, detailed=True)
+        # Use code_suggestion=False to avoid code generation side effects
+        result = await get_dataset_func(
+            id=1, database_path=None, detailed=True, code_suggestion=False
+        )
 
-        assert result[0].text == mock_dataset
+        # Check key fields are present
+        response_data = json.loads(result[0].text)
+        assert response_data["run_id"] == 1
+        assert response_data["name"] == "measurement_1"
         mock_db_integration.get_dataset_info.assert_called_once_with(
             id=1, database_path=None
         )

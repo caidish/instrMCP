@@ -145,7 +145,12 @@ class JupyterMCPServer:
 
         # Optional: Database tools
         if DATABASE_AVAILABLE and "database" in self.enabled_options:
-            database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
+            database_registrar = DatabaseToolRegistrar(
+                self.mcp,
+                db_integration,
+                tools=self.tools,
+                safe_mode=self.safe_mode,
+            )
             database_registrar.register_all()
 
         # Dynamic tool creation (meta-tools)
