@@ -127,6 +127,7 @@ instrmcp --help    # Show all commands
 - **[Architecture](docs/ARCHITECTURE.md)** - Technical architecture, package structure, MCP tools and resources
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[Development Guide](docs/DEVELOPMENT.md)** - Development setup, testing, code quality, contributing
+  - Includes **Threading Architecture & Qt Integration** - How IPython kernel, Qt event loop, and MCP server thread interact; what cross-thread communication approaches work and don't work with MeasureIt
 
 ## Configuration Example
 
