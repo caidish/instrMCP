@@ -14,8 +14,13 @@ from typing import Dict, List, Any, Optional, Union
 try:
     from measureit.sweep.base_sweep import BaseSweep
     from measureit.sweep.progress import SweepState
+
+    SWEEP_STATE_ERROR = SweepState.ERROR.value  # "error"
+    SWEEP_STATE_RUNNING = (SweepState.RAMPING.value, SweepState.RUNNING.value)
 except ImportError:  # pragma: no cover - MeasureIt optional
     BaseSweep = None  # type: ignore[assignment]
+    SWEEP_STATE_ERROR = "error"
+    SWEEP_STATE_RUNNING = ("ramping", "running")
 
 try:
     from .cache import ReadCache, RateLimiter, ParameterPoller
@@ -994,7 +999,7 @@ class QCodesReadOnlyTools:
 
         outputs = frontend_output.get("outputs", [])
 
-        # Check if outputs contain an error
+        # Check if outputs contain an error (Jupyter output type, not sweep state)
         for output in outputs:
             if output.get("type") == "error":
                 return {
@@ -1226,7 +1231,7 @@ class QCodesReadOnlyTools:
                 if has_error:
                     combined_result["has_error"] = True
                     combined_result["status"] = "error"
-                    # Extract error details from outputs
+                    # Extract error details from outputs (Jupyter output type)
                     for out in outputs:
                         if out.get("type") == "error":
                             combined_result["error_type"] = out.get(
@@ -1545,9 +1550,19 @@ class QCodesReadOnlyTools:
     #     return {"status": "cache_cleared"}
 
     async def wait_for_all_sweeps(self, timeout: float | None = None) -> Dict[str, Any]:
-        """Wait until all running measureit sweeps finish.
+        """Wait until all running measureit sweeps finish and kill them to release resources.
 
-        Waits until all currently running sweeps have stopped running and returns information about them.
+        Waits until all currently running sweeps have stopped running, kills them to release
+        hardware resources, and returns information about them.
+
+        Sweeps are killed in the following cases:
+        - If already in error state when called: killed immediately (but waiting continues)
+        - If already finished (done state) when called: killed immediately
+        - If they enter error state while waiting: killed immediately (but waiting continues)
+        - When they finish successfully: killed to release hardware resources
+
+        Note: If timeout is reached, sweeps are NOT killed (still running);
+        a kill_suggestion is provided for the user to decide.
 
         Args:
             timeout: Maximum time to wait in seconds. If None, wait indefinitely.
@@ -1559,6 +1574,8 @@ class QCodesReadOnlyTools:
                 timed_out: bool (True if timeout was reached)
                 sweep_error: bool (True if any sweep ended with error state)
                 errored_sweeps: list of sweep names that had errors (if any)
+                killed: bool (True if sweeps were killed successfully)
+                kill_results: Dict mapping sweep names to kill results
         """
         try:
             status = await self.get_measureit_status()
@@ -1570,26 +1587,120 @@ class QCodesReadOnlyTools:
             return {"sweeps": None, "error": status["error"]}
 
         sweeps = status["sweeps"]
+
+        # Track all sweeps we'll monitor and their final results
+        all_kill_results = {}
+        error_messages = []
+        errored_sweeps = []
+
+        # Kill sweeps already in error state (but continue waiting for running ones)
+        already_errored = {
+            k: v for k, v in sweeps.items() if v["state"] == SWEEP_STATE_ERROR
+        }
+        for name, sweep_info in already_errored.items():
+            error_msg = sweep_info.get(
+                "error_message", f"Sweep '{name}' is already in error state"
+            )
+            error_messages.append(f"{name}: {error_msg}")
+            errored_sweeps.append(name)
+            logger.warning(
+                "Sweep '%s' already in error state: %s. Killing sweep.",
+                name,
+                error_msg,
+            )
+            all_kill_results[name] = await self.kill_sweep(name)
+
+        # Kill sweeps already in done state (to release resources)
+        already_done = {
+            k: v
+            for k, v in sweeps.items()
+            if v["state"] not in SWEEP_STATE_RUNNING and v["state"] != SWEEP_STATE_ERROR
+        }
+        for name in already_done.keys():
+            logger.info("Sweep '%s' already done. Killing to release resources.", name)
+            all_kill_results[name] = await self.kill_sweep(name)
+
         initial_running = {
-            k: v for k, v in sweeps.items() if v["state"] in ("ramping", "running")
+            k: v for k, v in sweeps.items() if v["state"] in SWEEP_STATE_RUNNING
         }
 
+        # If no running sweeps, return results from already-handled sweeps
         if not initial_running:
-            return {"sweeps": None}
+            if not already_errored and not already_done:
+                return {"sweeps": None}
+            # Return combined results
+            all_sweeps = {**already_errored, **already_done}
+            all_killed = bool(all_kill_results) and all(
+                r.get("success", False) for r in all_kill_results.values()
+            )
+            result = {
+                "sweeps": all_sweeps,
+                "killed": all_killed,
+                "kill_results": all_kill_results,
+            }
+            if errored_sweeps:
+                result["error"] = "; ".join(error_messages)
+                result["sweep_error"] = True
+                result["errored_sweeps"] = errored_sweeps
+            return result
 
         start_time = time.time()
         while True:
             await asyncio.sleep(WAIT_DELAY)
 
-            # Check timeout
+            # Refresh status FIRST, then check timeout (so we have accurate state)
+            status = await self.get_measureit_status()
+
+            if status.get("error"):
+                return {"sweeps": initial_running, "error": status["error"]}
+
+            current_sweeps = status["sweeps"]
+            still_running = False
+            loop_errored = []
+
+            # Update initial_running with latest state and detect errors
+            for k in initial_running.keys():
+                if k in current_sweeps:
+                    initial_running[k] = current_sweeps[k]
+                    state = current_sweeps[k]["state"]
+
+                    if state in SWEEP_STATE_RUNNING:
+                        still_running = True
+                    elif state == SWEEP_STATE_ERROR:
+                        loop_errored.append(k)
+
+            # Kill any errored sweeps (do this BEFORE timeout check so we don't miss them)
+            if loop_errored:
+                for name in loop_errored:
+                    if name not in errored_sweeps:  # Don't double-kill
+                        sweep_info = initial_running.get(name, {})
+                        msg = sweep_info.get(
+                            "error_message", f"Sweep '{name}' ended with error"
+                        )
+                        error_messages.append(f"{name}: {msg}")
+                        errored_sweeps.append(name)
+                        logger.warning(
+                            "Sweep '%s' entered error state: %s. Killing sweep.",
+                            name,
+                            msg,
+                        )
+                        all_kill_results[name] = await self.kill_sweep(name)
+
+            # Check timeout AFTER processing errors (so errored sweeps get killed)
             if timeout is not None and (time.time() - start_time) > timeout:
                 running_names = [
                     k
                     for k, v in initial_running.items()
-                    if v["state"] in ("ramping", "running")
+                    if v["state"] in SWEEP_STATE_RUNNING
                 ]
-                return {
-                    "sweeps": initial_running,
+
+                # Combine all sweeps and include already-killed results
+                all_sweeps = {**already_errored, **already_done, **initial_running}
+                all_killed = bool(all_kill_results) and all(
+                    r.get("success", False) for r in all_kill_results.values()
+                )
+                result = {
+                    "sweeps": all_sweeps,
                     "error": f"Timeout after {timeout}s waiting for sweeps to complete",
                     "timed_out": True,
                     "kill_suggestion": (
@@ -1600,57 +1711,59 @@ class QCodesReadOnlyTools:
                         else None
                     ),
                 }
-
-            status = await self.get_measureit_status()
-
-            if status.get("error"):
-                return {"sweeps": initial_running, "error": status["error"]}
-
-            current_sweeps = status["sweeps"]
-            still_running = False
-            errored_sweeps = []
-
-            for k in initial_running.keys():
-                if k in current_sweeps:
-                    initial_running[k] = current_sweeps[k]
-                    state = current_sweeps[k]["state"]
-
-                    if state in ("ramping", "running"):
-                        still_running = True
-                    elif state == "error":
-                        errored_sweeps.append(k)
-
-            # If any sweep has errored, return immediately with error info
-            if errored_sweeps:
-                error_messages = []
-                for name in errored_sweeps:
-                    sweep_info = initial_running.get(name, {})
-                    msg = sweep_info.get(
-                        "error_message", f"Sweep '{name}' ended with error"
+                if all_kill_results:
+                    result["kill_results"] = all_kill_results
+                    result["killed"] = all_killed
+                if errored_sweeps:
+                    result["sweep_error"] = True
+                    result["errored_sweeps"] = errored_sweeps
+                    result["error"] = f"Timeout after {timeout}s; errors: " + "; ".join(
+                        error_messages
                     )
-                    error_messages.append(msg)
-
-                return {
-                    "sweeps": initial_running,
-                    "error": "; ".join(error_messages),
-                    "sweep_error": True,
-                    "errored_sweeps": errored_sweeps,
-                    "kill_suggestion": ", ".join(
-                        [f"measureit_kill_sweep('{n}')" for n in errored_sweeps]
-                    ),
-                }
+                return result
 
             if not still_running:
                 break
 
-        return {"sweeps": initial_running}
+        # Kill all finished sweeps to release hardware resources
+        for name in initial_running.keys():
+            if name not in all_kill_results:  # Don't double-kill errored ones
+                all_kill_results[name] = await self.kill_sweep(name)
+
+        # Combine all results
+        all_sweeps = {**already_errored, **already_done, **initial_running}
+        all_killed = bool(all_kill_results) and all(
+            r.get("success", False) for r in all_kill_results.values()
+        )
+
+        result = {
+            "sweeps": all_sweeps,
+            "killed": all_killed,
+            "kill_results": all_kill_results,
+        }
+        if errored_sweeps:
+            result["error"] = "; ".join(error_messages)
+            result["sweep_error"] = True
+            result["errored_sweeps"] = errored_sweeps
+
+        return result
 
     async def wait_for_sweep(
         self, var_name: str, timeout: float | None = None
     ) -> Dict[str, Any]:
-        """Wait for a measureit sweep with a given variable name to finish.
+        """Wait for a measureit sweep with a given variable name to finish and kill it.
 
-        Waits for the sweep with the given name to stop running and returns information about it.
+        Waits for the sweep with the given name to stop running, kills it to release
+        hardware resources, and returns information about it.
+
+        Sweeps are killed in the following cases:
+        - If already in error state when called: killed immediately
+        - If already finished (done state) when called: killed immediately
+        - If it enters error state while waiting: killed immediately
+        - When it finishes successfully: killed to release hardware resources
+
+        Note: If timeout is reached, the sweep is NOT killed (still running);
+        a kill_suggestion is provided for the user to decide.
 
         Args:
             var_name: Name of the sweep variable to wait for.
@@ -1663,20 +1776,87 @@ class QCodesReadOnlyTools:
                 error: str (if any error occurred, including timeout or sweep error)
                 timed_out: bool (True if timeout was reached)
                 sweep_error: bool (True if sweep ended with error state)
+                killed: bool (True if sweep was killed successfully)
+                kill_result: Dict with result of killing the sweep
         """
         status = await self.get_measureit_status()
         if status.get("error"):
             return {"sweep": None, "error": status["error"]}
         target = status["sweeps"].get(var_name)
 
-        if not target or target["state"] not in ("ramping", "running"):
+        if not target:
             return {"sweep": None}
+
+        # Check if sweep is already in error state - kill it and return error info
+        if target["state"] == SWEEP_STATE_ERROR:
+            error_msg = target.get(
+                "error_message", f"Sweep '{var_name}' is already in error state"
+            )
+            logger.warning(
+                "Sweep '%s' already in error state: %s. Killing sweep.",
+                var_name,
+                error_msg,
+            )
+
+            # Kill the errored sweep (kill_sweep handles timeout internally)
+            kill_result = await self.kill_sweep(var_name)
+
+            return {
+                "sweep": target,
+                "error": error_msg,
+                "sweep_error": True,
+                "killed": kill_result.get("success", False),
+                "kill_result": kill_result,
+            }
+
+        # If sweep is already done (not running, not error), kill to release resources
+        if target["state"] not in SWEEP_STATE_RUNNING:
+            logger.info(
+                "Sweep '%s' already done (state: %s). Killing to release resources.",
+                var_name,
+                target["state"],
+            )
+            kill_result = await self.kill_sweep(var_name)
+            return {
+                "sweep": target,
+                "killed": kill_result.get("success", False),
+                "kill_result": kill_result,
+            }
 
         start_time = time.time()
         while True:
             await asyncio.sleep(WAIT_DELAY)
 
-            # Check timeout
+            # Refresh status FIRST, then check timeout (so we have accurate state)
+            status = await self.get_measureit_status()
+            if status.get("error"):
+                return {"sweep": target, "error": status["error"]}
+
+            # Update target with latest state (None if sweep disappeared)
+            target = status["sweeps"].get(var_name)
+
+            if not target:
+                # Sweep no longer in namespace
+                return {"sweep": None}
+
+            # Check for error state FIRST - kill before returning timeout
+            if target["state"] == SWEEP_STATE_ERROR:
+                error_msg = target.get("error_message", "Sweep ended with error")
+                logger.warning(
+                    "Sweep '%s' entered error state: %s. Killing sweep.",
+                    var_name,
+                    error_msg,
+                )
+                kill_result = await self.kill_sweep(var_name)
+                return {
+                    "sweep": target,
+                    "error": error_msg,
+                    "sweep_error": True,
+                    "killed": kill_result.get("success", False),
+                    "kill_result": kill_result,
+                }
+
+            # Check timeout AFTER error handling
             if timeout is not None and (time.time() - start_time) > timeout:
                 return {
                     "sweep": target,
@@ -1685,28 +1865,17 @@ class QCodesReadOnlyTools:
                     "kill_suggestion": f"Use measureit_kill_sweep('{var_name}') to stop the sweep and release resources",
                 }
 
-            status = await self.get_measureit_status()
-            if status.get("error"):
-                return {"sweep": target, "error": status["error"]}
-            target = status["sweeps"].get(var_name)
-
-            if not target:
+            if target["state"] not in SWEEP_STATE_RUNNING:
                 break
 
-            # Check for error state - return early with error message
-            if target["state"] == "error":
-                error_msg = target.get("error_message", "Sweep ended with error")
-                return {
-                    "sweep": target,
-                    "error": error_msg,
-                    "sweep_error": True,
-                    "kill_suggestion": f"Use measureit_kill_sweep('{var_name}') to release resources after error",
-                }
+        # Sweep finished successfully - kill to release hardware resources
+        kill_result = await self.kill_sweep(var_name)
 
-            if target["state"] not in ["ramping", "running"]:
-                break
-
-        return {"sweep": target}
+        return {
+            "sweep": target,
+            "killed": kill_result.get("success", False),
+            "kill_result": kill_result,
+        }
 
     async def get_measureit_status(self) -> Dict[str, Any]:
         """Check if any measureit sweep is currently running.
@@ -1746,7 +1915,7 @@ class QCodesReadOnlyTools:
                     progress_state = var_value.progressState
                     sweep_info["state"] = progress_state.state.value
                     result["active"] = result["active"] or (
-                        sweep_info["state"] in ("ramping", "running")
+                        sweep_info["state"] in SWEEP_STATE_RUNNING
                     )
                     sweep_info["progress"] = progress_state.progress
                     sweep_info["time_elapsed"] = progress_state.time_elapsed
@@ -1811,8 +1980,45 @@ class QCodesReadOnlyTools:
             # Get state before kill
             previous_state = sweep.progressState.state.value
 
-            # Kill the sweep
-            await asyncio.to_thread(sweep.kill)
+            # Execute sweep.kill() via Qt's thread-safe mechanism
+            #
+            # The MCP server runs in a separate thread from the sweep's Qt thread.
+            # We use QMetaObject.invokeMethod with QueuedConnection to queue the
+            # kill directly on the sweep's Qt thread - the same mechanism MeasureIt
+            # uses internally. This bypasses Tornado/asyncio entirely.
+            try:
+                from PyQt5.QtCore import QObject, QMetaObject, Qt, pyqtSlot
+
+                QueuedConnection = Qt.QueuedConnection
+            except ImportError:
+                from PyQt6.QtCore import QObject, QMetaObject, Qt, pyqtSlot
+
+                # PyQt6 moved ConnectionType to an enum
+                QueuedConnection = Qt.ConnectionType.QueuedConnection
+
+            # Create or reuse a kill proxy that lives on the sweep's thread
+            proxy = getattr(sweep, "_mcp_kill_proxy", None)
+            if proxy is None:
+
+                class _KillProxy(QObject):
+                    def __init__(self, target_sweep):
+                        super().__init__()
+                        self._sweep = target_sweep
+
+                    @pyqtSlot()
+                    def do_kill(self):
+                        self._sweep.kill()
+
+                proxy = _KillProxy(sweep)
+                proxy.moveToThread(sweep.thread())
+                sweep._mcp_kill_proxy = proxy
+
+            # Queue the kill on the sweep's Qt thread
+            QMetaObject.invokeMethod(proxy, "do_kill", QueuedConnection)
+
+            # Wait briefly for the kill to take effect
+            # The kill is queued and will execute when Qt processes events
+            await asyncio.sleep(0.5)
 
             # Verify the sweep was killed
             new_state = sweep.progressState.state.value
