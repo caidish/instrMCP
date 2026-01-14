@@ -334,8 +334,9 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["count"] == 2
+        # When include_output=False, has_output field is not included
         for cell in response_data["cells"]:
-            assert cell["has_output"] is False
+            assert "has_output" not in cell
 
     @pytest.mark.asyncio
     async def test_move_cursor_success(self, registrar, mock_tools, mock_mcp_server):
@@ -761,7 +762,7 @@ class TestUnsafeToolRegistrarUpdateCell:
         new_content = "# Updated code\nx = 10"
         old_content = "# Original code\nx = 5"
         mock_tools.get_editing_cell.return_value = {
-            "text": old_content,
+            "cell_content": old_content,
             "cell_type": "code",
             "index": 0,
         }
@@ -798,7 +799,7 @@ class TestUnsafeToolRegistrarUpdateCell:
 
         new_content = "# Updated code\nx = 10"
         mock_tools.get_editing_cell.return_value = {
-            "text": "# Original",
+            "cell_content": "# Original",
             "cell_type": "code",
             "index": 0,
         }
@@ -829,7 +830,7 @@ class TestUnsafeToolRegistrarUpdateCell:
 
         new_content = "# Updated code\nx = 10"
         mock_tools.get_editing_cell.return_value = {
-            "text": "# Original",
+            "cell_content": "# Original",
             "cell_type": "code",
             "index": 0,
         }
@@ -860,7 +861,7 @@ class TestUnsafeToolRegistrarUpdateCell:
         new_content = "x = 100"  # 7 chars
         old_content = "x = 5"  # 5 chars
         mock_tools.get_editing_cell.return_value = {
-            "text": old_content,
+            "cell_content": old_content,
             "cell_type": "code",
             "index": 0,
         }

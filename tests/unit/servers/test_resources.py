@@ -387,8 +387,8 @@ class TestResourceRegistrar:
             # Count all registered resources
             resource_count = len(mock_mcp_server._resources)
 
-            # Core: 2, MeasureIt: 7, Database: 2 = 11 total
-            assert resource_count == 11
+            # Core: 2, MeasureIt: 7, Database: 7 (2 base + 5 access templates) = 16 total
+            assert resource_count == 16
 
     @pytest.mark.asyncio
     async def test_resources_have_correct_structure(
@@ -598,8 +598,8 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 7 MeasureIt = 9 resources
-        assert guide["total_resources"] == 9
+        # Should have 2 core + 12 MeasureIt (7 templates + 5 database access) = 14 resources
+        assert guide["total_resources"] == 14
 
         # Check all URIs match
         listed_uris = {r["uri"] for r in guide["resources"]}
@@ -629,7 +629,7 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 2 database = 4 resources
+        # Should have 2 core + 2 database = 4 resources (database access templates are under measureit)
         assert guide["total_resources"] == 4
 
         # Check all URIs match
@@ -670,8 +670,8 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 7 MeasureIt + 2 database = 11 resources
-        assert guide["total_resources"] == 11
+        # Should have 2 core + 7 MeasureIt + 7 database (2 base + 5 access templates) = 16 resources
+        assert guide["total_resources"] == 16
 
         # All listed URIs must match registered resources
         listed_uris = {r["uri"] for r in guide["resources"]}

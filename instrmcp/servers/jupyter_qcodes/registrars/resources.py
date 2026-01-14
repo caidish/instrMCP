@@ -152,6 +152,42 @@ class ResourceRegistrar:
                             "use_when": "Need comprehensive reference for all measurement types",
                             "example": "Single source for all MeasureIt code patterns",
                         },
+                        # Database access templates (for loading saved data)
+                        {
+                            "uri": "resource://database_access0d_template",
+                            "name": "Database Access Sweep0D",
+                            "description": "Load Sweep0D time-based data from QCodes database",
+                            "use_when": "Need to reload saved Sweep0D data for analysis",
+                            "example": "Load and plot time-series measurements",
+                        },
+                        {
+                            "uri": "resource://database_access1d_template",
+                            "name": "Database Access Sweep1D",
+                            "description": "Load Sweep1D data from QCodes database",
+                            "use_when": "Need to reload saved Sweep1D data for analysis",
+                            "example": "Load and analyze single parameter sweep data",
+                        },
+                        {
+                            "uri": "resource://database_access2d_template",
+                            "name": "Database Access Sweep2D",
+                            "description": "Load Sweep2D data from QCodes database (single run or parent group)",
+                            "use_when": "Need to reload saved 2D map data for analysis",
+                            "example": "Load and visualize 2D measurement maps",
+                        },
+                        {
+                            "uri": "resource://database_access_simulsweep_template",
+                            "name": "Database Access SimulSweep",
+                            "description": "Load SimulSweep data from QCodes database",
+                            "use_when": "Need to reload saved SimulSweep data for analysis",
+                            "example": "Load coordinated multi-parameter sweep data",
+                        },
+                        {
+                            "uri": "resource://database_access_sweepqueue_template",
+                            "name": "Database Access SweepQueue",
+                            "description": "Load SweepQueue batch data from QCodes database",
+                            "use_when": "Need to reload saved SweepQueue batch data for analysis",
+                            "example": "Load sequential measurement batch data",
+                        },
                     ]
                 )
 

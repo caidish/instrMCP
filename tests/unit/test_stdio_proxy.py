@@ -720,5 +720,6 @@ class TestCreateStdioProxyServer:
 
             # Verify all tools are created
             tools = await mcp.get_tools()
-            # 21 original tools + 6 dynamic tool meta-tools + 2 resource tools + 1 database_list_available = 30
-            assert len(tools) == 30
+            # 21 original tools + 6 dynamic tool meta-tools + 2 resource tools
+            # + 1 database_list_available + 2 measureit tools (kill, wait_all) = 32
+            assert len(tools) == 32

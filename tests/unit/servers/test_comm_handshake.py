@@ -423,8 +423,9 @@ class TestActiveCellBridge:
             with bridge._STATE_LOCK:
                 assert 1 in bridge._CELL_OUTPUTS_CACHE
                 assert 2 in bridge._CELL_OUTPUTS_CACHE
-                assert bridge._CELL_OUTPUTS_CACHE[1]["output_type"] == "execute_result"
-                assert bridge._CELL_OUTPUTS_CACHE[2]["output_type"] == "stream"
+                # Cache structure: {"data": output_data, "timestamp": ..., "kernel_id": ...}
+                assert bridge._CELL_OUTPUTS_CACHE[1]["data"]["output_type"] == "execute_result"
+                assert bridge._CELL_OUTPUTS_CACHE[2]["data"]["output_type"] == "stream"
 
     def test_multiple_kernels_lifecycle(
         self, fake_ipython, cleanup_active_cell_globals
