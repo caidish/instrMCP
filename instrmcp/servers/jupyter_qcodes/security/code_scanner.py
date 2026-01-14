@@ -643,6 +643,161 @@ class PersistenceVisitor(BaseSecurityVisitor):
         return False
 
 
+class ThreadingVisitor(BaseSecurityVisitor):
+    """Detect Python threading usage which crashes Qt/MeasureIt.
+
+    MeasureIt uses Qt internally. Qt objects cannot be safely used across
+    Python threads created with threading.Thread, threading.Timer, or
+    concurrent.futures.ThreadPoolExecutor. This causes Qt threading
+    violations that crash the Jupyter kernel.
+
+    CORRECT usage:
+        sweep.start()  # Already non-blocking, runs in Qt's thread internally
+        # Then use measureit_wait_for_sweep() to monitor completion
+
+    WRONG usage (crashes kernel):
+        t = threading.Thread(target=sweep.start)
+        t.start()
+
+        # Also wrong:
+        timer = threading.Timer(1.0, sweep.start)
+        executor = ThreadPoolExecutor(); executor.submit(sweep.start)
+    """
+
+    # Thread-creating classes that crash Qt/MeasureIt
+    THREAD_CREATORS = {"Thread", "Timer"}  # threading module
+    EXECUTOR_CLASSES = {"ThreadPoolExecutor"}  # concurrent.futures
+
+    def visit_Call(self, node: ast.Call):
+        """Detect thread-creating class instantiation."""
+        obj, method = self.get_call_name(node)
+
+        # Detect threading.Thread(...) or threading.Timer(...)
+        if method in self.THREAD_CREATORS:
+            is_threading = False
+
+            # threading.Thread() or threading.Timer() - resolve aliases first
+            if obj:
+                resolved_obj = self.alias_tracker.resolve(obj)
+                if "threading" in resolved_obj:
+                    is_threading = True
+            # from threading import Thread/Timer; Thread()/Timer()
+            else:
+                resolved = self.alias_tracker.resolve(method)
+                if "threading" in resolved:
+                    is_threading = True
+
+            if is_threading:
+                self.add_issue(
+                    "THREAD001",
+                    f"threading.{method}() usage detected - crashes Qt/MeasureIt",
+                    RiskLevel.CRITICAL,
+                    node,
+                    f"NEVER use threading.{method} with MeasureIt. "
+                    "sweep.start() is already non-blocking. "
+                    "Use measureit_wait_for_sweep() to monitor completion.",
+                )
+
+        # Detect concurrent.futures.ThreadPoolExecutor(...)
+        if method in self.EXECUTOR_CLASSES:
+            is_executor = False
+
+            # concurrent.futures.ThreadPoolExecutor() - resolve aliases first
+            if obj:
+                resolved_obj = self.alias_tracker.resolve(obj)
+                if "concurrent" in resolved_obj or "futures" in resolved_obj:
+                    is_executor = True
+            # from concurrent.futures import ThreadPoolExecutor; ThreadPoolExecutor()
+            else:
+                resolved = self.alias_tracker.resolve(method)
+                if "concurrent" in resolved or "futures" in resolved:
+                    is_executor = True
+
+            if is_executor:
+                self.add_issue(
+                    "THREAD004",
+                    "ThreadPoolExecutor usage detected - crashes Qt/MeasureIt",
+                    RiskLevel.CRITICAL,
+                    node,
+                    "NEVER use ThreadPoolExecutor with MeasureIt. "
+                    "sweep.start() is already non-blocking. "
+                    "Use measureit_wait_for_sweep() to monitor completion.",
+                )
+
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import):
+        """Warn on threading and concurrent.futures imports."""
+        for alias in node.names:
+            if alias.name == "threading":
+                self.add_issue(
+                    "THREAD002",
+                    "threading module imported - may crash Qt/MeasureIt if misused",
+                    RiskLevel.HIGH,
+                    node,
+                    "Do NOT use threading.Thread/Timer with MeasureIt sweeps. "
+                    "sweep.start() is already non-blocking.",
+                )
+            # Also warn on concurrent.futures import
+            elif alias.name in ("concurrent.futures", "concurrent"):
+                self.add_issue(
+                    "THREAD006",
+                    "concurrent.futures module imported - may crash Qt/MeasureIt",
+                    RiskLevel.HIGH,
+                    node,
+                    "Do NOT use ThreadPoolExecutor with MeasureIt sweeps. "
+                    "sweep.start() is already non-blocking.",
+                )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        """Warn on from threading/concurrent.futures import dangerous classes."""
+        if node.module == "threading":
+            for alias in node.names:
+                # Handle star import: from threading import *
+                if alias.name == "*":
+                    self.add_issue(
+                        "THREAD007",
+                        "Star import from threading - crashes Qt/MeasureIt",
+                        RiskLevel.HIGH,
+                        node,
+                        "Do NOT use 'from threading import *'. "
+                        "This imports Thread/Timer which crash with MeasureIt.",
+                    )
+                elif alias.name in self.THREAD_CREATORS:
+                    self.add_issue(
+                        "THREAD003",
+                        f"{alias.name} imported from threading - crashes Qt/MeasureIt",
+                        RiskLevel.HIGH,
+                        node,
+                        f"Do NOT use {alias.name} with MeasureIt sweeps. "
+                        "sweep.start() is already non-blocking.",
+                    )
+        # concurrent.futures.ThreadPoolExecutor
+        if node.module == "concurrent.futures":
+            for alias in node.names:
+                # Handle star import: from concurrent.futures import *
+                if alias.name == "*":
+                    self.add_issue(
+                        "THREAD008",
+                        "Star import from concurrent.futures - crashes Qt/MeasureIt",
+                        RiskLevel.HIGH,
+                        node,
+                        "Do NOT use 'from concurrent.futures import *'. "
+                        "This imports ThreadPoolExecutor which crashes with MeasureIt.",
+                    )
+                elif alias.name in self.EXECUTOR_CLASSES:
+                    self.add_issue(
+                        "THREAD005",
+                        "ThreadPoolExecutor imported - crashes Qt/MeasureIt",
+                        RiskLevel.HIGH,
+                        node,
+                        "Do NOT use ThreadPoolExecutor with MeasureIt sweeps. "
+                        "sweep.start() is already non-blocking.",
+                    )
+        self.generic_visit(node)
+
+
 class PickleVisitor(BaseSecurityVisitor):
     """Detect pickle deserialization (arbitrary code execution risk)."""
 
@@ -783,6 +938,7 @@ class CodeScanner:
             DangerousFileOpsVisitor(alias_tracker),
             PersistenceVisitor(alias_tracker),
             PickleVisitor(alias_tracker),
+            ThreadingVisitor(alias_tracker),
         ]
 
         for visitor in visitors:

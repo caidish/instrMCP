@@ -3,14 +3,21 @@ Comprehensive code suggestion generation for QCodes datasets.
 
 Provides intelligent code generation based on sweep type with automatic
 grouping of related sweeps (Sweep2D parent runs, SweepQueue batches).
+
+Thread Safety Fix:
+    This module uses the canonical thread_safe_db_connection from
+    query_tools to avoid "SQLite objects created in a thread can only be
+    used in that same thread" errors.
 """
 
 import json
-import sqlite3
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
+
+# Import the canonical thread-safe connection helper
+from instrmcp.extensions.database.query_tools import thread_safe_db_connection
 
 
 class SweepType(Enum):
@@ -74,85 +81,96 @@ def _parse_sweep_type(measureit_metadata: Optional[dict]) -> SweepType:
 
 
 def _get_all_runs_info(database_path: str) -> list[SweepInfo]:
-    """Extract sweep information for all runs in the database."""
-    conn = sqlite3.connect(database_path)
-    cursor = conn.cursor()
+    """Extract sweep information for all runs in the database.
 
-    # Get all runs with their metadata
-    cursor.execute(
-        """
-        SELECT r.run_id, r.exp_id, r.run_description, r.measureit,
-               e.name as exp_name, e.sample_name
-        FROM runs r
-        JOIN experiments e ON r.exp_id = e.exp_id
-        ORDER BY r.run_id
+    Uses thread_safe_db_connection to ensure the MCP server can safely
+    access the database from a different thread than the Jupyter kernel.
     """
-    )
-
     sweeps = []
-    for row in cursor.fetchall():
-        run_id, exp_id, run_desc, measureit, exp_name, sample_name = row
 
-        # Parse run description for parameters
-        setpoints = []
-        dependents = []
-        if run_desc:
-            try:
-                desc_data = json.loads(run_desc)
-                interdeps = desc_data.get("interdependencies", {})
-                paramspecs = interdeps.get("paramspecs", [])
-                for p in paramspecs:
-                    if not p.get("depends_on"):
-                        setpoints.append(p["name"])
-                    else:
-                        dependents.append(p["name"])
-            except json.JSONDecodeError:
-                pass
+    with thread_safe_db_connection(database_path) as conn:
+        cursor = conn.cursor()
 
-        # Parse MeasureIt metadata
-        measureit_metadata = None
-        launched_by = None
-        inner_sweep = None
-        outer_sweep = None
-        set_param = None
-        set_params = None
-        follow_params = None
-
-        if measureit:
-            try:
-                measureit_metadata = json.loads(measureit)
-                attrs = measureit_metadata.get("attributes", {})
-                launched_by = attrs.get("launched_by")
-                inner_sweep = measureit_metadata.get("inner_sweep")
-                outer_sweep = measureit_metadata.get("outer_sweep")
-                set_param = measureit_metadata.get("set_param")
-                set_params = measureit_metadata.get("set_params")
-                follow_params = measureit_metadata.get("follow_params")
-            except json.JSONDecodeError:
-                pass
-
-        sweep_type = _parse_sweep_type(measureit_metadata)
-
-        sweeps.append(
-            SweepInfo(
-                run_id=run_id,
-                exp_id=exp_id,
-                exp_name=exp_name,
-                sample_name=sample_name,
-                sweep_type=sweep_type,
-                measureit_metadata=measureit_metadata,
-                setpoints=setpoints,
-                dependents=dependents,
-                launched_by=launched_by,
-                inner_sweep=inner_sweep,
-                outer_sweep=outer_sweep,
-                set_param=set_param,
-                set_params=set_params,
-                follow_params=follow_params,
-            )
+        # Get all runs with their metadata
+        cursor.execute(
+            """
+            SELECT r.run_id, r.exp_id, r.run_description, r.measureit,
+                   e.name as exp_name, e.sample_name
+            FROM runs r
+            JOIN experiments e ON r.exp_id = e.exp_id
+            ORDER BY r.run_id
+        """
         )
 
-    conn.close()
+        for row in cursor.fetchall():
+            # Access by column name thanks to Row factory
+            row_dict = dict(row)
+            run_id = row_dict["run_id"]
+            exp_id = row_dict["exp_id"]
+            run_desc = row_dict["run_description"]
+            measureit = row_dict["measureit"]
+            exp_name = row_dict["exp_name"]
+            sample_name = row_dict["sample_name"]
+
+            # Parse run description for parameters
+            setpoints = []
+            dependents = []
+            if run_desc:
+                try:
+                    desc_data = json.loads(run_desc)
+                    interdeps = desc_data.get("interdependencies", {})
+                    paramspecs = interdeps.get("paramspecs", [])
+                    for p in paramspecs:
+                        if not p.get("depends_on"):
+                            setpoints.append(p["name"])
+                        else:
+                            dependents.append(p["name"])
+                except json.JSONDecodeError:
+                    pass
+
+            # Parse MeasureIt metadata
+            measureit_metadata = None
+            launched_by = None
+            inner_sweep = None
+            outer_sweep = None
+            set_param = None
+            set_params = None
+            follow_params = None
+
+            if measureit:
+                try:
+                    measureit_metadata = json.loads(measureit)
+                    attrs = measureit_metadata.get("attributes", {})
+                    launched_by = attrs.get("launched_by")
+                    inner_sweep = measureit_metadata.get("inner_sweep")
+                    outer_sweep = measureit_metadata.get("outer_sweep")
+                    set_param = measureit_metadata.get("set_param")
+                    set_params = measureit_metadata.get("set_params")
+                    follow_params = measureit_metadata.get("follow_params")
+                except json.JSONDecodeError:
+                    pass
+
+            sweep_type = _parse_sweep_type(measureit_metadata)
+
+            sweeps.append(
+                SweepInfo(
+                    run_id=run_id,
+                    exp_id=exp_id,
+                    exp_name=exp_name,
+                    sample_name=sample_name,
+                    sweep_type=sweep_type,
+                    measureit_metadata=measureit_metadata,
+                    setpoints=setpoints,
+                    dependents=dependents,
+                    launched_by=launched_by,
+                    inner_sweep=inner_sweep,
+                    outer_sweep=outer_sweep,
+                    set_param=set_param,
+                    set_params=set_params,
+                    follow_params=follow_params,
+                )
+            )
+
     return sweeps
 
 

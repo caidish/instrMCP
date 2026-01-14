@@ -37,7 +37,7 @@ _VALID_TABLE_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_-]*$"
 
 
 @contextmanager
-def _thread_safe_db_connection(db_path: str):
+def thread_safe_db_connection(db_path: str):
     """
     Create a fresh SQLite connection for the current thread.
 
@@ -45,11 +45,15 @@ def _thread_safe_db_connection(db_path: str):
     in that same thread" error by creating a new connection each time
     instead of reusing QCoDeS's cached connections.
 
+    This is the canonical thread-safe database connection helper for all
+    MCP server database operations. Import this from other modules instead
+    of creating ad-hoc connections.
+
     Args:
         db_path: Path to the SQLite database file
 
     Yields:
-        sqlite3.Connection object
+        sqlite3.Connection object with Row factory enabled for dict-like access
     """
     # check_same_thread=False is safe here because:
     # 1. Each connection is created and closed within the same context manager call
@@ -61,6 +65,10 @@ def _thread_safe_db_connection(db_path: str):
         yield conn
     finally:
         conn.close()
+
+
+# Backward compatibility alias (deprecated, use thread_safe_db_connection)
+_thread_safe_db_connection = thread_safe_db_connection
 
 
 def _query_experiments_direct(db_path: str) -> List[Dict[str, Any]]:
@@ -197,7 +205,8 @@ def _query_dataset_info_direct(db_path: str, run_id: int) -> Optional[Dict[str, 
                     result["number_of_results"] = None
                 else:
                     # Safe to use - name validated against pattern
-                    cursor.execute(f"SELECT COUNT(*) FROM '{result_table}'")
+                    # Use double quotes for SQL identifiers (table names)
+                    cursor.execute(f'SELECT COUNT(*) FROM "{result_table}"')
                     result["number_of_results"] = cursor.fetchone()[0]
             except Exception:
                 result["number_of_results"] = None

