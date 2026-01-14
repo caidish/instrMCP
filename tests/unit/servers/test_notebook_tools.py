@@ -892,3 +892,81 @@ class TestUnsafeToolRegistrarUpdateCell:
         description = call_args.kwargs["details"]["description"]
         assert "5 chars" in description
         assert "7 chars" in description
+
+    @pytest.mark.asyncio
+    async def test_update_editing_cell_blocked_by_scanner(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test update_editing_cell is blocked by unsafe code scanner."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
+        result = await update_cell_func(content="eval('1')", detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["success"] is False
+        assert response_data["blocked"] is True
+        assert "security_scan" in response_data
+        mock_consent_manager.request_consent.assert_not_called()
+        mock_tools.update_editing_cell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_execute_cell_blocked_by_scanner(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test execute_editing_cell is blocked by unsafe code scanner."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        mock_tools.get_editing_cell.return_value = {
+            "cell_content": "eval('1')",
+            "cell_type": "code",
+        }
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        execute_cell_func = mock_mcp_server._tools["notebook_execute_cell"]
+        result = await execute_cell_func(timeout=1.0, detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert response_data["success"] is False
+        assert response_data["blocked"] is True
+        assert "security_scan" in response_data
+        mock_consent_manager.request_consent.assert_not_called()
+        mock_tools.execute_editing_cell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_add_new_cell_blocked_by_scanner(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Test add_new_cell is blocked by unsafe code scanner."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        add_cell_func = mock_mcp_server._tools["notebook_add_cell"]
+        result = await add_cell_func(
+            cell_type="code", position="below", content="eval('1')", detailed=True
+        )
+
+        response_data = json.loads(result[0].text)
+        assert response_data["success"] is False
+        assert response_data["blocked"] is True
+        assert "security_scan" in response_data
+        mock_tools.add_new_cell.assert_not_called()

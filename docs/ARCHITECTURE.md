@@ -70,7 +70,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### QCodes Instrument Tools (`qcodes/*`)
 
-- `qcodes/instrument_info(name, with_values, detailed)` - Get instrument details and parameter values
+- `qcodes/instrument_info(name, with_values, detailed)` - Get instrument details; values included when `with_values=true`
 - `qcodes/get_parameter_info(instrument, parameter, detailed)` - Get metadata for a specific parameter (name, label, unit, vals/limits, gettable/settable; with detailed=True also includes scale, offset, cache)
 - `qcodes/get_parameter_values(queries, detailed)` - Read parameter values (supports both single and batch queries)
 
@@ -118,7 +118,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 ### QCodes Resources
 
 - `available_instruments` - JSON list of available QCodes instruments with hierarchical parameter structure
-- `station_state` - Current QCodes station snapshot without parameter values
+- `station_state` - Station metadata summary (use `available_instruments` for instrument details)
 
 ### Jupyter Resources
 

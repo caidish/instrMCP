@@ -1153,7 +1153,7 @@ def create_stdio_proxy_server(
         return Resource(
             uri="resource://station_state",
             name="QCodes Station State",
-            description="Current QCodes station snapshot without parameter values",
+            description="Station metadata summary (no instrument details)",
             mimeType="application/json",
             contents=[
                 TextResourceContents(

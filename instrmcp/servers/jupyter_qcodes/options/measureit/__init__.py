@@ -21,6 +21,7 @@ from .templates import (
     get_database_access_sweepqueue_template,
 )
 from .tools import MeasureItToolRegistrar
+from .backend import MeasureItBackend
 
 __all__ = [
     # Templates
@@ -38,4 +39,6 @@ __all__ = [
     "get_database_access_sweepqueue_template",
     # Tool registrar
     "MeasureItToolRegistrar",
+    # Backend
+    "MeasureItBackend",
 ]

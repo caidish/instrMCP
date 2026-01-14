@@ -145,7 +145,7 @@ MCP resources provide context to LLMs:
 **QCodes Resources** (Always available):
 
 - ``available_instruments`` - Instrument hierarchy with all parameters
-- ``station_state`` - Current station snapshot
+- ``station_state`` - Station metadata summary (use ``available_instruments`` for instrument details)
 
 **Jupyter Resources** (Always available):
 

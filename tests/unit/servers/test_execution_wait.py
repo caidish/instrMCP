@@ -460,9 +460,7 @@ class TestAsyncGetCellOutput:
     @pytest.mark.asyncio
     async def test_get_cell_output_uses_async_sleep(self, tools):
         """Test _get_cell_output uses await asyncio.sleep, not time.sleep."""
-        with patch(
-            "instrmcp.servers.jupyter_qcodes.tools.active_cell_bridge"
-        ) as mock_bridge:
+        with patch("instrmcp.servers.jupyter_qcodes.active_cell_bridge") as mock_bridge:
             mock_bridge.get_cached_cell_output.return_value = None
             mock_bridge.get_cell_outputs.return_value = {"success": True}
 

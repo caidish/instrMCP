@@ -303,8 +303,8 @@ class TestGetSingleParameterValueRateLimiting:
         # Create tools instance
         tools = QCodesReadOnlyTools(mock_ipython, min_interval_s=0.1)
 
-        # Mock the _read_parameter_live method
-        tools._read_parameter_live = AsyncMock(return_value=42.0)
+        # Mock the _read_parameter_live method on the qcodes backend
+        tools._qcodes._read_parameter_live = AsyncMock(return_value=42.0)
 
         return tools
 
@@ -341,7 +341,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert result["stale"] is False
 
         # _read_parameter_live should have been called
-        mock_tools._read_parameter_live.assert_called_once_with(
+        mock_tools._qcodes._read_parameter_live.assert_called_once_with(
             instrument_name, parameter_name
         )
 
@@ -387,7 +387,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert result["age_seconds"] == pytest.approx(5.0, abs=0.1)
 
         # _read_parameter_live should NOT have been called
-        mock_tools._read_parameter_live.assert_not_called()
+        mock_tools._qcodes._read_parameter_live.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fresh_true_no_cache_honors_rate_limiting(self, mock_tools):
@@ -427,7 +427,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert result["stale"] is False
 
         # _read_parameter_live should have been called
-        mock_tools._read_parameter_live.assert_called_once()
+        mock_tools._qcodes._read_parameter_live.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_rate_limited_no_cache_waits_for_live_read(self, mock_tools):
@@ -467,7 +467,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert result["stale"] is False
 
         # _read_parameter_live should have been called
-        mock_tools._read_parameter_live.assert_called_once()
+        mock_tools._qcodes._read_parameter_live.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_no_rate_limit_with_cache_uses_cache(self, mock_tools):
@@ -502,7 +502,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert "rate_limited" not in result
 
         # _read_parameter_live should NOT have been called
-        mock_tools._read_parameter_live.assert_not_called()
+        mock_tools._qcodes._read_parameter_live.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_rate_limit_no_cache_immediate_live_read(self, mock_tools):
@@ -539,7 +539,7 @@ class TestGetSingleParameterValueRateLimiting:
         assert result["stale"] is False
 
         # _read_parameter_live should have been called
-        mock_tools._read_parameter_live.assert_called_once()
+        mock_tools._qcodes._read_parameter_live.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_cache_key_generation(self, mock_tools):

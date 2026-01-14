@@ -17,7 +17,7 @@ List variables in the Jupyter namespace.
 
 - ``type_filter`` (str, optional): Filter by type (e.g., "array", "dict", "instrument")
 
-**Returns**: JSON list of variables with names, types, and basic information
+**Returns**: JSON list of variables with names and types only. Use ``get_variable_info`` for details.
 
 **Example usage via Claude**:
 
@@ -129,9 +129,10 @@ Get detailed information about a QCodes instrument.
 **Parameters**:
 
 - ``name`` (str): Instrument name
-- ``with_values`` (bool, optional): Include current parameter values. Default False.
+- ``with_values`` (bool, optional): Include parameter values in the detailed response. Default False.
 
-**Returns**: JSON with instrument details, parameters, current values (if requested)
+**Returns**: JSON with instrument details and parameters. Values are included when
+``detailed=true`` and ``with_values=true``.
 
 **Example usage via Claude**:
 

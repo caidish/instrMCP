@@ -7,6 +7,7 @@ Registers all MCP resources (core, MeasureIt templates, and database resources).
 import asyncio
 import json
 import logging
+from typing import Any, Dict
 
 from mcp.types import Resource, TextResourceContents
 
@@ -92,9 +93,9 @@ class ResourceRegistrar:
                     {
                         "uri": "resource://station_state",
                         "name": "QCodes Station State",
-                        "description": "Complete station snapshot without parameter values",
-                        "use_when": "Need overview of entire station configuration",
-                        "example": "Get station structure without fetching live data from instruments",
+                        "description": "Station metadata summary (no instrument details)",
+                        "use_when": "Need station metadata; use available_instruments for instrument lists",
+                        "example": "Get station metadata, then fetch instruments from resource://available_instruments",
                     },
                 ]
             )
@@ -348,10 +349,54 @@ class ResourceRegistrar:
         """Get station state resource content."""
         try:
             snapshot = await self.tools.get_station_snapshot()
-            return json.dumps(snapshot, indent=2, default=str)
+            summary = self._summarize_station_snapshot(snapshot)
+            return json.dumps(summary, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error getting station state: {e}")
             return json.dumps({"error": str(e), "status": "error"}, indent=2)
+
+    def _summarize_station_snapshot(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Trim station snapshot to metadata and reference available instruments."""
+        summary: Dict[str, Any] = {
+            "station_metadata": {},
+            "component_names": [],
+            "component_count": 0,
+            "station_present": True,
+            "instruments_resource": "resource://available_instruments",
+            "note": "Use resource://available_instruments for instrument details.",
+        }
+
+        if not isinstance(snapshot, dict):
+            summary["station_metadata"] = None
+            summary["station_present"] = False
+            summary["message"] = "Station snapshot unavailable"
+            return summary
+
+        if "station" in snapshot:
+            summary["station_present"] = snapshot.get("station") is not None
+
+        if snapshot.get("station") is None and snapshot.get("message"):
+            summary["station_metadata"] = None
+            summary["message"] = snapshot.get("message")
+            return summary
+
+        components = snapshot.get("components")
+        if isinstance(components, dict):
+            summary["component_names"] = sorted(components.keys())
+            summary["component_count"] = len(components)
+
+        station_metadata: Dict[str, Any] = {}
+        for key, value in snapshot.items():
+            if key in {"instruments", "components", "parameters"}:
+                continue
+            if isinstance(value, (str, int, float, bool, type(None))):
+                station_metadata[key] = value
+
+        summary["station_metadata"] = station_metadata
+        if not station_metadata and not summary["component_names"]:
+            summary["snapshot_keys"] = sorted(snapshot.keys())
+
+        return summary
 
     def _register_core_resources(self):
         """Register core QCodes and notebook resources."""
@@ -400,12 +445,13 @@ class ResourceRegistrar:
             """Resource providing current QCodes station snapshot."""
             try:
                 snapshot = await self.tools.get_station_snapshot()
-                content = json.dumps(snapshot, indent=2, default=str)
+                summary = self._summarize_station_snapshot(snapshot)
+                content = json.dumps(summary, indent=2, default=str)
 
                 return Resource(
                     uri="resource://station_state",
                     name="QCodes Station State",
-                    description="Current QCodes station snapshot without parameter values",
+                    description="Station metadata summary (no instrument details)",
                     mimeType="application/json",
                     contents=[
                         TextResourceContents(

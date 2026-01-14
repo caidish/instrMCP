@@ -236,7 +236,15 @@ class TestResourceRegistrar:
         assert resource.mimeType == "application/json"
 
         content = json.loads(resource.contents[0].text)
-        assert content == mock_snapshot
+        assert content == {
+            "station_metadata": {},
+            "component_names": [],
+            "component_count": 0,
+            "station_present": True,
+            "instruments_resource": "resource://available_instruments",
+            "note": "Use resource://available_instruments for instrument details.",
+            "snapshot_keys": ["instruments"],
+        }
 
     @pytest.mark.asyncio
     async def test_station_state_error(self, registrar, mock_tools, mock_mcp_server):
@@ -770,7 +778,15 @@ class TestResourceDiscoveryTools:
 
         result = await get_resource_func("resource://station_state")
         content = json.loads(result[0].text)
-        assert content == mock_snapshot
+        assert content == {
+            "station_metadata": {},
+            "component_names": [],
+            "component_count": 0,
+            "station_present": True,
+            "instruments_resource": "resource://available_instruments",
+            "note": "Use resource://available_instruments for instrument details.",
+            "snapshot_keys": ["instruments"],
+        }
 
     @pytest.mark.asyncio
     async def test_get_resource_with_measureit(

@@ -114,7 +114,7 @@ class QCodesToolRegistrar:
 
             Args:
                 name: Instrument name, or "*" to list all instruments
-                with_values: Include cached parameter values (only for specific instruments, not with "*")
+                with_values: Include parameter values in the response (only for specific instruments, not with "*")
                 detailed: If False (default), return concise summary; if True, return full response
 
             Note:
