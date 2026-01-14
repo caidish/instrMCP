@@ -12,7 +12,7 @@ __email__ = "jiaqic@mit.edu"
 __license__ = "MIT"
 
 # Lazy imports to avoid loading heavy dependencies at import time
-# Use: from instrmcp import servers, tools, config when needed
+# Use: from instrmcp import servers, tools when needed
 
 # Version info accessible as instrmcp.version_info
 version_info = tuple(int(x) for x in __version__.split("."))

@@ -108,15 +108,9 @@ In a Jupyter notebook cell:
 %mcp_restart
 ```
 
-#### CLI Server Management
+#### CLI Utilities
 
 ```bash
-# Start standalone servers
-instrmcp jupyter --port 3000                # Jupyter MCP server
-instrmcp jupyter --port 3000 --unsafe       # With unsafe mode
-instrmcp qcodes --port 3001                 # QCodes station server
-
-# Configuration and info
 instrmcp config    # Show configuration paths
 instrmcp version   # Show version
 instrmcp --help    # Show all commands
@@ -129,28 +123,12 @@ instrmcp --help    # Show all commands
 - **[Development Guide](docs/DEVELOPMENT.md)** - Development setup, testing, code quality, contributing
   - Includes **Threading Architecture & Qt Integration** - How IPython kernel, Qt event loop, and MCP server thread interact; what cross-thread communication approaches work and don't work with MeasureIt
 
-## Configuration Example
+## Configuration
 
-Station configuration uses standard YAML format:
-
-```yaml
-# instrmcp/config/data/default_station.yaml
-instruments:
-  mock_dac:
-    driver: qcodes.instrument_drivers.mock.MockDAC
-    name: mock_dac_1
-    enable: true
-```
-
-Configuration is automatic! The system auto-detects installation paths. For custom setups:
+View current configuration:
 
 ```bash
-# View current configuration
 instrmcp config
-
-# Custom config file (optional)
-mkdir -p ~/.instrmcp
-echo "custom_setting: value" > ~/.instrmcp/config.yaml
 ```
 
 ## Claude Desktop Integration

@@ -686,8 +686,11 @@ class TestCreateStdioProxyServer:
         tools = await mcp.get_tools()
 
         expected_tools = [
+            # QCodes tools
             "qcodes_instrument_info",
             "qcodes_get_parameter_values",
+            "qcodes_get_parameter_info",
+            # Notebook tools
             "notebook_list_variables",
             "notebook_get_variable_info",
             "notebook_get_editing_cell",
@@ -701,10 +704,26 @@ class TestCreateStdioProxyServer:
             "notebook_delete_cells",
             "notebook_apply_patch",
             "notebook_move_cursor",
+            # MCP resource tools
+            "mcp_list_resources",
+            "mcp_get_resource",
+            # MeasureIt tools
             "measureit_get_status",
+            "measureit_wait_for_all_sweeps",
+            "measureit_wait_for_sweep",
+            "measureit_kill_sweep",
+            # Database tools
             "database_list_experiments",
             "database_get_dataset_info",
             "database_get_database_stats",
+            "database_list_available",
+            # Dynamic tools
+            "dynamic_register_tool",
+            "dynamic_update_tool",
+            "dynamic_revoke_tool",
+            "dynamic_list_tools",
+            "dynamic_inspect_tool",
+            "dynamic_registry_stats",
         ]
 
         for expected_tool in expected_tools:

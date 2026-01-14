@@ -36,12 +36,10 @@ pytest -k "test_cache_initialization"               # Single test by name
 pytest tests/unit/test_cache.py::TestReadCache::test_cache_initialization  # Specific test
 ```
 
-**Server Management:**
+**CLI Utilities:**
 ```bash
-instrmcp jupyter --port 3000              # Start Jupyter MCP server
-instrmcp jupyter --port 3000 --unsafe     # With code execution
-instrmcp qcodes --port 3001               # QCodes station server
 instrmcp config                           # Show configuration
+instrmcp version                          # Show version
 ```
 
 **Version Management:**
@@ -133,17 +131,17 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
+- [ ] Update ``tests/unit/test_stdio_proxy.py`` with new tool tests (expected_tool list)
 
 ## Version Management
 
 The project uses a unified version management script at `tools/version.py`. The canonical source of truth is `instrmcp/__init__.py`.
 
-**Version locations managed (8 files):**
+**Version locations managed (7 files):**
 
 - `pyproject.toml` - Package metadata
 - `instrmcp/__init__.py` - Main package (canonical source)
 - `instrmcp/servers/__init__.py` - Servers subpackage
-- `instrmcp/servers/qcodes/__init__.py` - QCodes server
 - `instrmcp/servers/jupyter_qcodes/__init__.py` - Jupyter QCodes server
 - `instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/__init__.py` - JupyterLab Python extension
 - `instrmcp/extensions/jupyterlab/package.json` - JupyterLab Node.js extension

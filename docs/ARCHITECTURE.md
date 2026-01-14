@@ -236,30 +236,15 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 
 ## Configuration
 
-### Station Configuration
-
-Station configuration uses standard YAML format:
-
-```yaml
-# instrmcp/config/data/default_station.yaml
-instruments:
-  mock_dac:
-    driver: qcodes.instrument_drivers.mock.MockDAC
-    name: mock_dac_1
-    enable: true
-```
-
 ### Environment Variables
 
-- `instrMCP_PATH`: Must be set to the instrMCP installation directory
+- `instrMCP_PATH`: Optional path override for instrMCP installation
 - `JUPYTER_MCP_HOST`: MCP server host (default: 127.0.0.1)
 - `JUPYTER_MCP_PORT`: MCP server port (default: 8123)
 
-### Configuration Files
+### Configuration
 
-- System config: `instrmcp/config/data/`
-- User config: `~/.instrmcp/config.yaml` (optional)
-- Auto-detection via: `instrmcp config`
+View configuration via: `instrmcp config`
 
 ## Integration Patterns
 

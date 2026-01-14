@@ -228,9 +228,8 @@ The package includes a JupyterLab extension for active cell bridging:
 
 ### Configuration
 
-- Station configuration: YAML files in `instrmcp/config/data/`
-- Environment variable: `instrMCP_PATH` must be set for proper operation
-- Auto-detection of installation paths via `instrmcp config`
+- Environment variable: `instrMCP_PATH` can be set for custom paths
+- View configuration: `instrmcp config`
 
 ## Contributing
 

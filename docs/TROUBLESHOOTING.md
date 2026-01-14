@@ -103,15 +103,10 @@ instrmcp-setup
 # Check configuration paths
 instrmcp config
 
-# Custom config (optional)
-mkdir -p ~/.instrmcp
-echo "custom_setting: value" > ~/.instrmcp/config.yaml
-
-# Verify environment variable
+# Verify environment variable (if needed)
 echo $instrMCP_PATH
-# Should show: /path/to/your/instrMCP
 
-# If not set:
+# If not set and needed:
 export instrMCP_PATH="$(pwd)"
 echo 'export instrMCP_PATH="'$(pwd)'"' >> ~/.zshrc
 source ~/.zshrc
@@ -130,10 +125,7 @@ from qcodes import Station
 station = Station.default
 print(station.components)
 
-# Check YAML configuration
-cat instrmcp/config/data/default_station.yaml
-
-# Verify instrument is enabled
+# Verify instrument is enabled in your station config
 instruments:
   mock_dac:
     driver: qcodes.instrument_drivers.mock.MockDAC

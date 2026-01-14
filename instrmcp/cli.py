@@ -1,42 +1,11 @@
 """InstrMCP Command Line Interface
 
-Main CLI entry point for InstrMCP server management.
+Main CLI entry point for InstrMCP utilities.
 """
 
 import argparse
 import sys
-
-from .config import config
-from .servers import QCodesStationServer
-
-
-async def run_jupyter_server(port: int = 3000, safe_mode: bool = True):
-    """Run the Jupyter QCodes MCP server in standalone mode.
-
-    Note: This is a standalone server that runs without Jupyter integration.
-    For full Jupyter integration, use the magic commands in a Jupyter notebook.
-    """
-    print("=" * 60)
-    print("⚠️  STANDALONE MODE")
-    print("=" * 60)
-    print("This server runs WITHOUT Jupyter integration.")
-    print("For full features, use the Jupyter extension instead:")
-    print("  1. Start Jupyter: jupyter lab")
-    print("  2. Load extension: %load_ext instrmcp.extensions")
-    print("  3. Start server: %mcp_start")
-    print("=" * 60)
-    print()
-    print("❌ Error: Standalone mode is not fully implemented yet.")
-    print("Please use the Jupyter extension for now.")
-    sys.exit(1)
-
-
-def run_qcodes_server(port: int = 3001):
-    """Run the QCodes station MCP server."""
-    server = QCodesStationServer(port=port)
-    print(f"Starting QCodes station MCP server on port {port}")
-    # QCodesStationServer uses .start() not .run()
-    server.start()
+from pathlib import Path
 
 
 def main():
@@ -48,27 +17,6 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Jupyter server command
-    jupyter_parser = subparsers.add_parser(
-        "jupyter", help="Run Jupyter QCodes MCP server"
-    )
-    jupyter_parser.add_argument(
-        "--port", type=int, default=3000, help="Server port (default: 3000)"
-    )
-    jupyter_parser.add_argument(
-        "--unsafe",
-        action="store_true",
-        help="Enable unsafe mode (allows code execution)",
-    )
-
-    # QCodes server command
-    qcodes_parser = subparsers.add_parser(
-        "qcodes", help="Run QCodes station MCP server"
-    )
-    qcodes_parser.add_argument(
-        "--port", type=int, default=3001, help="Server port (default: 3001)"
-    )
-
     # Config command
     subparsers.add_parser("config", help="Show configuration information")
 
@@ -77,18 +25,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "jupyter":
-        import asyncio
+    if args.command == "config":
+        from . import __version__
 
-        safe_mode = not args.unsafe
-        asyncio.run(run_jupyter_server(port=args.port, safe_mode=safe_mode))
-    elif args.command == "qcodes":
-        run_qcodes_server(port=args.port)
-    elif args.command == "config":
+        package_path = Path(__file__).parent
         print("InstrMCP Configuration:")
-        print(f"Package path: {config.get_package_path()}")
-        print(f"Config file: {config.get_config_file()}")
-        print(f"User config directory: {config.get_user_config_dir()}")
+        print(f"Version: {__version__}")
+        print(f"Package path: {package_path}")
         print()
 
         # Check for optional dependencies
