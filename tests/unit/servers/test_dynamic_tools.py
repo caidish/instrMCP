@@ -6,14 +6,17 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from instrmcp.tools.dynamic.tool_spec import (
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool.spec import (
     ToolSpec,
     ToolParameter,
     validate_tool_spec,
     create_tool_spec,
     ValidationError,
 )
-from instrmcp.tools.dynamic.tool_registry import ToolRegistry, RegistryError
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry import (
+    ToolRegistry,
+    RegistryError,
+)
 from instrmcp.servers.jupyter_qcodes.security.audit import AuditLogger
 
 

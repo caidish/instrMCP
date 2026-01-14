@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock
 from mcp.types import TextContent
 
-from instrmcp.servers.jupyter_qcodes.registrars.database_tools import (
+from instrmcp.servers.jupyter_qcodes.options.database.tools import (
     DatabaseToolRegistrar,
 )
 

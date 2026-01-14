@@ -7,7 +7,7 @@ This section contains the API documentation for InstrMCP modules.
    :maxdepth: 2
 
    servers
-   tools
+   utils
    extensions
    cli
 
@@ -19,21 +19,20 @@ InstrMCP is organized into several main modules:
 Servers
 ~~~~~~~
 
-The server modules implement MCP servers for different use cases:
+The server modules implement MCP servers:
 
 - ``instrmcp.servers.jupyter_qcodes``: Main Jupyter+QCodes MCP server
-- ``instrmcp.servers.qcodes``: Standalone QCodes station server
 
 See :doc:`servers` for detailed API documentation.
 
-Tools
+Utils
 ~~~~~
 
-The tools module provides utilities and helper functions:
+The utils module provides internal utilities and helper functions:
 
-- ``instrmcp.tools.stdio_proxy``: STDIO↔HTTP proxy for MCP clients
+- ``instrmcp.utils.stdio_proxy``: STDIO↔HTTP proxy for MCP clients
 
-See :doc:`tools` for detailed API documentation.
+See :doc:`utils` for detailed API documentation.
 
 Extensions
 ~~~~~~~~~~
@@ -64,7 +63,7 @@ Commonly Used Classes and Functions
 **Server Classes**:
 
 - :py:class:`instrmcp.servers.jupyter_qcodes.mcp_server.JupyterQCodesMCPServer`
-- :py:class:`instrmcp.tools.stdio_proxy.HttpMCPProxy`
+- :py:class:`instrmcp.utils.stdio_proxy.HttpMCPProxy`
 
 **Tool Functions**:
 
@@ -73,8 +72,8 @@ Commonly Used Classes and Functions
 
 **Registrars**:
 
-- :py:class:`instrmcp.servers.jupyter_qcodes.registrars.QCodesToolRegistrar`
-- :py:class:`instrmcp.servers.jupyter_qcodes.registrars.NotebookToolRegistrar`
+- :py:class:`instrmcp.servers.jupyter_qcodes.core.QCodesToolRegistrar`
+- :py:class:`instrmcp.servers.jupyter_qcodes.core.NotebookToolRegistrar`
 
 **Extension Functions**:
 

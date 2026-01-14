@@ -14,33 +14,43 @@ from typing import Dict, Any, Optional
 from fastmcp import FastMCP
 
 from .tools import QCodesReadOnlyTools
-from .tools_unsafe import UnsafeToolRegistrar
-from .registrars import (
+from .core.notebook_unsafe_tools import UnsafeToolRegistrar
+from .core import (
     QCodesToolRegistrar,
     NotebookToolRegistrar,
-    MeasureItToolRegistrar,
-    DatabaseToolRegistrar,
     ResourceRegistrar,
 )
-from .dynamic_registrar import DynamicToolRegistrar
-from instrmcp.tools.logging_config import get_logger
+
+# Dynamic tool integration (optional, requires dangerous mode + dynamictool option)
+try:
+    from .options.dynamic_tool import DynamicToolRegistrar
+
+    DYNAMICTOOL_AVAILABLE = True
+except ImportError:
+    DynamicToolRegistrar = None
+    DYNAMICTOOL_AVAILABLE = False
+from instrmcp.utils.logging_config import get_logger
 
 # MeasureIt integration (optional)
 try:
-    from ...extensions import measureit as measureit_module
+    from .options import measureit as measureit_module
+    from .options.measureit import MeasureItToolRegistrar
 
     MEASUREIT_AVAILABLE = True
 except ImportError:
     measureit_module = None
+    MeasureItToolRegistrar = None
     MEASUREIT_AVAILABLE = False
 
 # Database integration (optional)
 try:
-    from ...extensions import database as db_integration
+    from .options import database as db_integration
+    from .options.database import DatabaseToolRegistrar
 
     DATABASE_AVAILABLE = True
 except ImportError:
     db_integration = None
+    DatabaseToolRegistrar = None
     DATABASE_AVAILABLE = False
 
 logger = get_logger("server")
@@ -105,7 +115,7 @@ class JupyterMCPServer:
         resource_registrar.register_all()
 
     def _register_tools(self):
-        """Register all MCP tools using registrars."""
+        """Register all MCP tools using core."""
 
         # QCodes instrument tools
         qcodes_registrar = QCodesToolRegistrar(self.mcp, self.tools)

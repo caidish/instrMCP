@@ -15,9 +15,9 @@ from typing import List, Optional
 
 from mcp.types import TextContent
 
-from instrmcp.tools.logging_config import get_logger
-from .tool_logger import log_tool_call
-from .security import CodeScanner, get_default_scanner
+from instrmcp.utils.logging_config import get_logger
+from instrmcp.utils.mcptool_logger import log_tool_call
+from ..security import CodeScanner, get_default_scanner
 
 logger = get_logger("tools.unsafe")
 

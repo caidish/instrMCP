@@ -252,7 +252,7 @@ The package includes a JupyterLab extension for active cell bridging:
 - Remember to update stdio_proxy.py whenever we change the tools for mcp server
 - Check requirements.txt when new python file is created
 - Don't forget to update pyproject.toml
-- Whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.tools.stdio_proxy
+- Whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.utils.stdio_proxy
 - When removing features, update README.md
 
 See [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md) for detailed contribution guidelines.

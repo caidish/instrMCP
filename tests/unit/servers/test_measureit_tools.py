@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock, AsyncMock
 from mcp.types import TextContent
 
-from instrmcp.servers.jupyter_qcodes.registrars.measureit_tools import (
+from instrmcp.servers.jupyter_qcodes.options.measureit.tools import (
     MeasureItToolRegistrar,
 )
 

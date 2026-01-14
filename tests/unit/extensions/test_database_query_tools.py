@@ -15,7 +15,7 @@ import sqlite3
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
-from instrmcp.extensions.database.query_tools import (
+from instrmcp.servers.jupyter_qcodes.options.database.query_tools import (
     list_experiments,
     get_dataset_info,
     get_database_stats,
@@ -301,7 +301,9 @@ class TestResolveDatabasePath:
         qcodes_db.touch()
 
         with patch("measureit.get_path", side_effect=ImportError):
-            with patch("instrmcp.extensions.database.query_tools.qc") as mock_qc:
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
+            ) as mock_qc:
                 mock_qc.config.core.db_location = str(qcodes_db)
                 resolved_path, resolution_info = _resolve_database_path(None)
                 assert resolved_path == str(qcodes_db)
@@ -410,7 +412,10 @@ class TestListExperiments:
 
     def test_list_experiments_without_qcodes(self):
         """Test list_experiments returns error when QCodes unavailable."""
-        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.query_tools.QCODES_AVAILABLE",
+            False,
+        ):
             result = json.loads(list_experiments())
             assert "error" in result
             assert "QCodes not available" in result["error"]
@@ -535,7 +540,10 @@ class TestGetDatasetInfo:
 
     def test_get_dataset_info_without_qcodes(self):
         """Test get_dataset_info returns error when QCodes unavailable."""
-        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.query_tools.QCODES_AVAILABLE",
+            False,
+        ):
             result = json.loads(get_dataset_info(1))
             assert "error" in result
             assert "QCodes not available" in result["error"]
@@ -631,7 +639,10 @@ class TestGetDatabaseStats:
 
     def test_get_database_stats_without_qcodes(self):
         """Test get_database_stats returns error when QCodes unavailable."""
-        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.query_tools.QCODES_AVAILABLE",
+            False,
+        ):
             result = json.loads(get_database_stats())
             assert "error" in result
             assert "QCodes not available" in result["error"]
@@ -680,7 +691,10 @@ class TestQueryToolsIntegration:
 
     def test_all_tools_without_qcodes_consistent(self):
         """Test all tools handle missing QCodes consistently."""
-        with patch("instrmcp.extensions.database.query_tools.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.query_tools.QCODES_AVAILABLE",
+            False,
+        ):
             experiments = json.loads(list_experiments())
             dataset_info = json.loads(get_dataset_info(1))
             stats = json.loads(get_database_stats())

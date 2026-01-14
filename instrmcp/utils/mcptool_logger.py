@@ -15,7 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from instrmcp.tools.logging_config import LOG_DIR, is_tool_logging_enabled
+from instrmcp.utils.logging_config import LOG_DIR, is_tool_logging_enabled
 
 # Type variable for generic async functions
 F = TypeVar("F", bound=Callable[..., Any])
@@ -42,7 +42,7 @@ class ToolCallLogger:
         self.log_path = log_path or TOOL_CALLS_LOG
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.logger = logging.getLogger("instrmcp.tools.calls")
+        self.logger = logging.getLogger("instrmcp.utils.calls")
         self.logger.setLevel(logging.INFO)
         self._file_handler: Optional[logging.FileHandler] = None
         self._setup_handler()

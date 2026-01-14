@@ -16,7 +16,7 @@ from unittest.mock import patch
 from datetime import datetime
 from pathlib import Path
 
-from instrmcp.extensions.database.db_resources import (
+from instrmcp.servers.jupyter_qcodes.options.database.resources import (
     get_current_database_config,
     get_recent_measurements,
     _resolve_database_path,
@@ -221,7 +221,9 @@ class TestResolveDatabasePath:
         # Clear MeasureItHome
         monkeypatch.delenv("MeasureItHome", raising=False)
 
-        with patch("instrmcp.extensions.database.db_resources.qc") as mock_qc:
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.resources.qc"
+        ) as mock_qc:
             mock_qc.config.core.db_location = "/qcodes/default.db"
             result = _resolve_database_path(None)
             assert result == "/qcodes/default.db"
@@ -317,7 +319,10 @@ class TestDatabaseConfig:
 
     def test_config_without_qcodes(self):
         """Test config returns error when QCodes unavailable."""
-        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.resources.QCODES_AVAILABLE",
+            False,
+        ):
             config = json.loads(get_current_database_config())
             assert "error" in config
             assert "QCodes not available" in config["error"]
@@ -439,7 +444,10 @@ class TestRecentMeasurements:
 
     def test_recent_measurements_without_qcodes(self):
         """Test recent measurements returns error when QCodes unavailable."""
-        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.resources.QCODES_AVAILABLE",
+            False,
+        ):
             result = json.loads(get_recent_measurements())
             assert "error" in result
             assert "QCodes not available" in result["error"]
@@ -547,7 +555,10 @@ class TestResourceIntegration:
 
     def test_resources_without_qcodes_consistent(self):
         """Test both resources handle missing QCodes consistently."""
-        with patch("instrmcp.extensions.database.db_resources.QCODES_AVAILABLE", False):
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.database.resources.QCODES_AVAILABLE",
+            False,
+        ):
             config = json.loads(get_current_database_config())
             measurements = json.loads(get_recent_measurements())
 

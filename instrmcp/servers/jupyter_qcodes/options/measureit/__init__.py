@@ -1,12 +1,11 @@
 """
-DEPRECATED: MeasureIt integration has moved.
+MeasureIt integration for the Jupyter MCP server.
 
-This module is kept for backward compatibility.
-New location: instrmcp.servers.jupyter_qcodes.options.measureit
+Provides sweep monitoring, control tools, and code templates.
+Enable with: %mcp_option add measureit
 """
 
-# Re-export from new location for backward compatibility
-from instrmcp.servers.jupyter_qcodes.options.measureit import (
+from .templates import (
     get_sweep0d_template,
     get_sweep1d_template,
     get_sweep2d_template,
@@ -14,14 +13,17 @@ from instrmcp.servers.jupyter_qcodes.options.measureit import (
     get_sweepqueue_template,
     get_common_patterns_template,
     get_measureit_code_examples,
+    # Data access templates (for loading saved data)
     get_database_access0d_template,
     get_database_access1d_template,
     get_database_access2d_template,
     get_database_access_simulsweep_template,
     get_database_access_sweepqueue_template,
 )
+from .tools import MeasureItToolRegistrar
 
 __all__ = [
+    # Templates
     "get_sweep0d_template",
     "get_sweep1d_template",
     "get_sweep2d_template",
@@ -34,4 +36,6 @@ __all__ = [
     "get_database_access2d_template",
     "get_database_access_simulsweep_template",
     "get_database_access_sweepqueue_template",
+    # Tool registrar
+    "MeasureItToolRegistrar",
 ]

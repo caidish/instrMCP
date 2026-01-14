@@ -1,7 +1,7 @@
 Codex CLI Setup for InstrMCP (STDIO proxy)
 
 This folder contains a Codex-focused STDIO launcher that proxies to your HTTP MCP server at `http://127.0.0.1:8123/mcp`.
-The launcher uses the shared proxy implementation in `instrmcp.tools.stdio_proxy`.
+The launcher uses the shared proxy implementation in `instrmcp.utils.stdio_proxy`.
 
 Usage
 - Ensure your HTTP MCP server (instr_mcp) is running and reachable at the host/port you set (defaults: `127.0.0.1:8123`).

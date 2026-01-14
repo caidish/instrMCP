@@ -10,8 +10,8 @@ from typing import List
 
 from mcp.types import TextContent
 
-from instrmcp.tools.logging_config import get_logger
-from ..tool_logger import log_tool_call
+from instrmcp.utils.logging_config import get_logger
+from instrmcp.utils.mcptool_logger import log_tool_call
 import time
 
 logger = get_logger("tools.qcodes")

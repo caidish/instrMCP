@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 # Import the canonical thread-safe connection helper
-from instrmcp.extensions.database.query_tools import thread_safe_db_connection
+from ..query_tools import thread_safe_db_connection
 
 
 class SweepType(Enum):

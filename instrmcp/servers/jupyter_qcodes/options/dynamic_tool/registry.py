@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from .tool_spec import ToolSpec
+from .spec import ToolSpec
 
 
 class RegistryError(Exception):

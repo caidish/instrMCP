@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock, AsyncMock, patch
 from mcp.types import Resource, TextResourceContents
 
-from instrmcp.servers.jupyter_qcodes.registrars.resources import ResourceRegistrar
+from instrmcp.servers.jupyter_qcodes.core.resources import ResourceRegistrar
 
 
 class TestResourceRegistrar:
@@ -108,13 +108,27 @@ class TestResourceRegistrar:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 
@@ -336,15 +350,27 @@ class TestResourceRegistrar:
 
         with (
             patch(
-                "instrmcp.extensions.measureit.get_sweep0d_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template",
                 return_value=mock_template,
             ),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
             sweep0d_func = mock_mcp_server._resources[
@@ -374,13 +400,27 @@ class TestResourceRegistrar:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 
@@ -584,13 +624,27 @@ class TestResourceDiscoveryTools:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 
@@ -656,13 +710,27 @@ class TestResourceDiscoveryTools:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 
@@ -716,31 +784,31 @@ class TestResourceDiscoveryTools:
         # Patch at the point where get_resource imports the functions
         with (
             patch(
-                "instrmcp.extensions.measureit.get_sweep0d_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_sweep1d_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_sweep2d_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_simulsweep_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_sweepqueue_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_common_patterns_template",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template",
                 return_value=mock_template,
             ),
             patch(
-                "instrmcp.extensions.measureit.get_measureit_code_examples",
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples",
                 return_value=mock_template,
             ),
         ):
@@ -824,13 +892,27 @@ class TestResourceDiscoveryTools:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 
@@ -863,13 +945,27 @@ class TestResourceDiscoveryTools:
         )
 
         with (
-            patch("instrmcp.extensions.measureit.get_sweep0d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep1d_template"),
-            patch("instrmcp.extensions.measureit.get_sweep2d_template"),
-            patch("instrmcp.extensions.measureit.get_simulsweep_template"),
-            patch("instrmcp.extensions.measureit.get_sweepqueue_template"),
-            patch("instrmcp.extensions.measureit.get_common_patterns_template"),
-            patch("instrmcp.extensions.measureit.get_measureit_code_examples"),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep0d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep1d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweep2d_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_simulsweep_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_sweepqueue_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_common_patterns_template"
+            ),
+            patch(
+                "instrmcp.servers.jupyter_qcodes.options.measureit.get_measureit_code_examples"
+            ),
         ):
             registrar.register_all()
 

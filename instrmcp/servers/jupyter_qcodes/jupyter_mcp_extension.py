@@ -13,7 +13,7 @@ from IPython.core.magic import Magics, line_magic, magics_class
 
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
-from instrmcp.tools.logging_config import setup_logging, get_logger
+from instrmcp.utils.logging_config import setup_logging, get_logger
 
 # Initialize unified logging system
 setup_logging()

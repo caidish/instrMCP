@@ -10,17 +10,16 @@ import logging
 
 from fastmcp import FastMCP, Context
 
-from instrmcp.tools.dynamic import ToolSpec, ToolRegistry, create_tool_spec
-from instrmcp.tools.dynamic.tool_spec import ValidationError
-from instrmcp.tools.dynamic.tool_registry import RegistryError
-from instrmcp.servers.jupyter_qcodes.security.audit import (
+from .spec import ToolSpec, create_tool_spec, ValidationError
+from .registry import ToolRegistry, RegistryError
+from ...security.audit import (
     log_tool_registration,
     log_tool_update,
     log_tool_revocation,
     log_tool_error,
 )
-from instrmcp.servers.jupyter_qcodes.security.consent import ConsentManager
-from .dynamic_runtime import DynamicToolRuntime
+from ...security.consent import ConsentManager
+from .runtime import DynamicToolRuntime
 
 logger = logging.getLogger(__name__)
 

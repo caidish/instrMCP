@@ -6,7 +6,7 @@ SweepQueue, common patterns, and comprehensive code examples.
 """
 
 import json
-from instrmcp.extensions.measureit.measureit_templates import (
+from instrmcp.servers.jupyter_qcodes.options.measureit.templates import (
     get_sweep0d_template,
     get_sweep1d_template,
     get_sweep2d_template,

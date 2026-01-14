@@ -1,12 +1,12 @@
-Tools
+Utils
 =====
 
-This module contains utility tools and helpers.
+This module contains internal utilities and helpers.
 
 STDIO Proxy
 -----------
 
-.. automodule:: instrmcp.tools.stdio_proxy
+.. automodule:: instrmcp.utils.stdio_proxy
    :members:
    :undoc-members:
    :show-inheritance:
@@ -17,7 +17,7 @@ Key Classes
 HttpMCPProxy
 ^^^^^^^^^^^^
 
-.. autoclass:: instrmcp.tools.stdio_proxy.HttpMCPProxy
+.. autoclass:: instrmcp.utils.stdio_proxy.HttpMCPProxy
    :members:
    :undoc-members:
    :show-inheritance:
@@ -38,12 +38,12 @@ Key Functions
 check_http_mcp_server
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: instrmcp.tools.stdio_proxy.check_http_mcp_server
+.. autofunction:: instrmcp.utils.stdio_proxy.check_http_mcp_server
 
 create_stdio_proxy_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autofunction:: instrmcp.tools.stdio_proxy.create_stdio_proxy_server
+.. autofunction:: instrmcp.utils.stdio_proxy.create_stdio_proxy_server
 
    Creates a FastMCP server that proxies STDIO to HTTP.
 

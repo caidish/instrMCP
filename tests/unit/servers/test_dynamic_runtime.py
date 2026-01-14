@@ -3,8 +3,10 @@
 import pytest
 from unittest.mock import Mock
 
-from instrmcp.servers.jupyter_qcodes.dynamic_runtime import DynamicToolRuntime
-from instrmcp.tools.dynamic import create_tool_spec
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool.runtime import (
+    DynamicToolRuntime,
+)
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool import create_tool_spec
 
 
 class TestDynamicToolRuntime:

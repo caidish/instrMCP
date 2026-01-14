@@ -62,18 +62,20 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 
 ### Key Directories
 - `instrmcp/servers/jupyter_qcodes/` - Main MCP server with QCodes + Jupyter integration
-- `instrmcp/servers/jupyter_qcodes/registrars/` - Tool registrars (qcodes, notebook, database, measureit)
-- `instrmcp/tools/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
-- `instrmcp/extensions/` - Jupyter extensions, MeasureIt templates, database resources
+- `instrmcp/servers/jupyter_qcodes/core/` - Always-available tools (qcodes, notebook, resources)
+- `instrmcp/servers/jupyter_qcodes/options/` - Optional features (measureit, database, dynamic_tool)
+- `instrmcp/utils/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
+- `instrmcp/extensions/jupyterlab/` - JupyterLab frontend extension
 - `instrmcp/cli.py` - Command-line interface
 - `tools/version.py` - Unified version management script
 
 ### Key Files for Tool Changes
 When adding/removing MCP tools, update ALL of these:
-1. `instrmcp/servers/jupyter_qcodes/registrars/` - Add tool implementation
-2. `instrmcp/tools/stdio_proxy.py` - Add/remove tool proxy
-3. `docs/ARCHITECTURE.md` - Update tool documentation
-4. `README.md` - Update feature documentation
+1. `instrmcp/servers/jupyter_qcodes/core/` - Core tool implementation
+2. `instrmcp/servers/jupyter_qcodes/options/` - Optional feature tools
+3. `instrmcp/utils/stdio_proxy.py` - Add/remove tool proxy
+4. `docs/ARCHITECTURE.md` - Update tool documentation
+5. `README.md` - Update feature documentation
 
 ### Safe vs Unsafe vs Dangerous Mode
 - **Safe Mode**: Read-only access to instruments and notebooks (default)
@@ -125,13 +127,13 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 
 ## Checklist When Modifying Tools
 
-- [ ] Update tool implementation in `registrars/`
-- [ ] Update `stdio_proxy.py` with tool proxy
+- [ ] Update tool implementation in `core/` or `options/`
+- [ ] Update `utils/stdio_proxy.py` with tool proxy
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
-- [ ] Update ``tests/unit/test_stdio_proxy.py`` with new tool tests (expected_tool list)
+- [ ] Update `tests/unit/test_stdio_proxy.py` with new tool tests (expected_tool list)
 
 ## Version Management
 

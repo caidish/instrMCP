@@ -87,14 +87,6 @@ Jupyter QCodes CLI
    :undoc-members:
    :show-inheritance:
 
-Standalone Runner
-~~~~~~~~~~~~~~~~~
-
-.. automodule:: instrmcp.servers.jupyter_qcodes.run_standalone
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Environment Variables
 ---------------------
 

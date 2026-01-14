@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from mcp.types import TextContent
 
-from .database_internal import generate_code_suggestion, analyze_sweep_groups
+from .internal import generate_code_suggestion, analyze_sweep_groups
 
 logger = logging.getLogger(__name__)
 

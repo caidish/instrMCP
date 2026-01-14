@@ -7,7 +7,7 @@ for the STDIO↔HTTP MCP proxy functionality.
 
 import pytest
 from unittest.mock import AsyncMock, patch, Mock
-from instrmcp.tools.stdio_proxy import (
+from instrmcp.utils.stdio_proxy import (
     HttpMCPProxy,
     check_http_mcp_server,
     create_stdio_proxy_server,
@@ -352,7 +352,7 @@ class TestCheckHttpMcpServer:
         )
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -381,7 +381,7 @@ class TestCheckHttpMcpServer:
         )
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -409,7 +409,7 @@ class TestCheckHttpMcpServer:
         )
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server(host="localhost", port=9000)
@@ -428,7 +428,7 @@ class TestCheckHttpMcpServer:
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -445,7 +445,7 @@ class TestCheckHttpMcpServer:
         mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -471,7 +471,7 @@ class TestCheckHttpMcpServer:
         )
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -484,7 +484,7 @@ class TestCheckHttpMcpServer:
         mock_httpx_client.post = AsyncMock(side_effect=Exception("Network error"))
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()
@@ -512,7 +512,7 @@ class TestCheckHttpMcpServer:
         )
 
         with patch(
-            "instrmcp.tools.stdio_proxy.httpx.AsyncClient",
+            "instrmcp.utils.stdio_proxy.httpx.AsyncClient",
             return_value=mock_httpx_client,
         ):
             result = await check_http_mcp_server()

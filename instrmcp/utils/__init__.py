@@ -1,6 +1,6 @@
-"""InstrMCP Tools
+"""InstrMCP Utils
 
-Helper utilities and tools shared across launchers and servers.
+Internal utilities shared across launchers and servers.
 """
 
 from .stdio_proxy import (

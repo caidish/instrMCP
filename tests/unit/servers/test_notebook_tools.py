@@ -9,7 +9,7 @@ import json
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from instrmcp.servers.jupyter_qcodes.registrars.notebook_tools import (
+from instrmcp.servers.jupyter_qcodes.core.notebook_tools import (
     NotebookToolRegistrar,
 )
 
@@ -536,7 +536,7 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
@@ -585,7 +585,7 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
@@ -671,7 +671,7 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
@@ -720,7 +720,9 @@ class TestUnsafeToolRegistrarUpdateCell:
     @pytest.fixture
     def mock_tools(self):
         """Create a mock QCodesReadOnlyTools instance."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         tools = MagicMock()
         tools.get_editing_cell = AsyncMock()
@@ -743,7 +745,9 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test update_editing_cell is registered in UnsafeToolRegistrar."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         registrar = UnsafeToolRegistrar(
             mock_mcp_server, mock_tools, mock_consent_manager
@@ -757,7 +761,9 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test update_editing_cell with consent approved."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         new_content = "# Updated code\nx = 10"
         old_content = "# Original code\nx = 5"
@@ -795,7 +801,9 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test update_editing_cell with consent declined."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         new_content = "# Updated code\nx = 10"
         mock_tools.get_editing_cell.return_value = {
@@ -826,7 +834,9 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test update_editing_cell with consent timeout."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         new_content = "# Updated code\nx = 10"
         mock_tools.get_editing_cell.return_value = {
@@ -856,7 +866,9 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test consent dialog shows character count in description."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         new_content = "x = 100"  # 7 chars
         old_content = "x = 5"  # 5 chars
