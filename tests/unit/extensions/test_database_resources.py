@@ -33,7 +33,8 @@ def qcodes_test_database(tmp_path):
     cursor = conn.cursor()
 
     # Create experiments table (QCoDeS schema)
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -42,10 +43,12 @@ def qcodes_test_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """)
+    """
+    )
 
     # Create runs table (QCoDeS schema)
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -60,47 +63,87 @@ def qcodes_test_database(tmp_path):
             measureit TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """)
+    """
+    )
 
     # Insert test experiment
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO experiments (exp_id, name, sample_name, format_string, start_time)
         VALUES (1, 'test_experiment', 'test_sample', '{name}', 1234567890.0)
-    """)
+    """
+    )
 
     # Insert test runs
     test_runs = [
-        (1, 1, "run_1", "results_1", "guid-1", 1234567890.0, 1234567900.0, 1, 1,
-         '{"interdependencies": {"paramspecs": [{"name": "voltage"}, {"name": "current", "depends_on": ["voltage"]}]}}',
-         '{"class": "Sweep1D", "module": "MeasureIt"}'),
-        (2, 1, "run_2", "results_2", "guid-2", 1234567950.0, 1234567960.0, 1, 2,
-         '{"interdependencies": {"paramspecs": [{"name": "time"}, {"name": "signal"}]}}',
-         '{"class": "Sweep0D", "module": "MeasureIt"}'),
-        (3, 1, "run_3", "results_3", "guid-3", 1234568000.0, None, 0, 3,
-         '{"interdependencies": {"paramspecs": []}}',
-         None),  # No measureit metadata (raw QCoDeS)
+        (
+            1,
+            1,
+            "run_1",
+            "results_1",
+            "guid-1",
+            1234567890.0,
+            1234567900.0,
+            1,
+            1,
+            '{"interdependencies": {"paramspecs": [{"name": "voltage"}, {"name": "current", "depends_on": ["voltage"]}]}}',
+            '{"class": "Sweep1D", "module": "MeasureIt"}',
+        ),
+        (
+            2,
+            1,
+            "run_2",
+            "results_2",
+            "guid-2",
+            1234567950.0,
+            1234567960.0,
+            1,
+            2,
+            '{"interdependencies": {"paramspecs": [{"name": "time"}, {"name": "signal"}]}}',
+            '{"class": "Sweep0D", "module": "MeasureIt"}',
+        ),
+        (
+            3,
+            1,
+            "run_3",
+            "results_3",
+            "guid-3",
+            1234568000.0,
+            None,
+            0,
+            3,
+            '{"interdependencies": {"paramspecs": []}}',
+            None,
+        ),  # No measureit metadata (raw QCoDeS)
     ]
 
-    cursor.executemany("""
+    cursor.executemany(
+        """
         INSERT INTO runs (run_id, exp_id, name, result_table_name, guid, run_timestamp,
                          completed_timestamp, is_completed, captured_run_id, run_description, measureit)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, test_runs)
+    """,
+        test_runs,
+    )
 
     # Create result tables for each run
     for run_id in [1, 2, 3]:
         table_name = f"results_{run_id}"
-        cursor.execute(f"""
+        cursor.execute(
+            f"""
             CREATE TABLE "{table_name}" (
                 id INTEGER PRIMARY KEY,
                 voltage REAL,
                 current REAL
             )
-        """)
+        """
+        )
         # Insert some test data
         for i in range(10):
-            cursor.execute(f'INSERT INTO "{table_name}" (voltage, current) VALUES (?, ?)',
-                          (i * 0.1, i * 0.01))
+            cursor.execute(
+                f'INSERT INTO "{table_name}" (voltage, current) VALUES (?, ?)',
+                (i * 0.1, i * 0.01),
+            )
 
     conn.commit()
     conn.close()
@@ -116,7 +159,8 @@ def empty_qcodes_database(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -125,9 +169,11 @@ def empty_qcodes_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -142,7 +188,8 @@ def empty_qcodes_database(tmp_path):
             measureit TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
@@ -307,14 +354,18 @@ class TestRecentMeasurements:
     def test_recent_measurements_respects_limit(self, qcodes_test_database):
         """Test recent measurements respects limit parameter."""
         limit = 2
-        result = json.loads(get_recent_measurements(limit=limit, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=limit, database_path=qcodes_test_database)
+        )
         assert result["limit"] == limit
         assert len(result["recent_measurements"]) <= limit
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_dataset_structure(self, qcodes_test_database):
         """Test each measurement has proper structure."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         assert len(measurements) == 3  # We inserted 3 runs
@@ -331,7 +382,9 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_includes_timestamp(self, qcodes_test_database):
         """Test measurements include timestamp information."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         assert len(measurements) > 0
@@ -345,7 +398,9 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_sorted_by_time(self, qcodes_test_database):
         """Test measurements are sorted by timestamp descending."""
-        result = json.loads(get_recent_measurements(limit=10, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=10, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         # Should be sorted by timestamp descending (most recent first)
@@ -357,21 +412,29 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_with_explicit_path(self, qcodes_test_database):
         """Test recent measurements with explicit database path."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         assert result["database_path"] == qcodes_test_database
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_includes_measureit_type(self, qcodes_test_database):
         """Test measurements include MeasureIt type if available."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         # Find the Sweep1D measurement
-        sweep1d_measurements = [m for m in measurements if m["measurement_type"] == "Sweep1D"]
+        sweep1d_measurements = [
+            m for m in measurements if m["measurement_type"] == "Sweep1D"
+        ]
         assert len(sweep1d_measurements) >= 1
 
         # Also check for qcodes type (run 3 has no measureit metadata)
-        qcodes_measurements = [m for m in measurements if m["measurement_type"] == "qcodes"]
+        qcodes_measurements = [
+            m for m in measurements if m["measurement_type"] == "qcodes"
+        ]
         assert len(qcodes_measurements) >= 1
 
     def test_recent_measurements_without_qcodes(self):
@@ -384,14 +447,18 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_handles_incomplete_data(self, empty_qcodes_database):
         """Test recent measurements handles empty database gracefully."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=empty_qcodes_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=empty_qcodes_database)
+        )
         assert "recent_measurements" in result
         assert len(result["recent_measurements"]) == 0
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_includes_total_available(self, qcodes_test_database):
         """Test result includes total available count."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         assert "total_available" in result
         assert result["total_available"] == 3  # We inserted 3 runs
 
@@ -409,7 +476,9 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_result_count(self, qcodes_test_database):
         """Test that number_of_results is correctly extracted from result tables."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         # Each result table has 10 rows
@@ -419,7 +488,9 @@ class TestRecentMeasurements:
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_recent_measurements_parameters_parsed(self, qcodes_test_database):
         """Test that parameters are parsed from run_description."""
-        result = json.loads(get_recent_measurements(limit=5, database_path=qcodes_test_database))
+        result = json.loads(
+            get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        )
         measurements = result["recent_measurements"]
 
         # Find run_1 which has voltage and current parameters
@@ -436,7 +507,9 @@ class TestResourceIntegration:
     def test_both_resources_use_same_path_resolution(self, qcodes_test_database):
         """Test config and measurements use consistent path."""
         config = json.loads(get_current_database_config(qcodes_test_database))
-        measurements = json.loads(get_recent_measurements(database_path=qcodes_test_database))
+        measurements = json.loads(
+            get_recent_measurements(database_path=qcodes_test_database)
+        )
 
         assert config["database_path"] == qcodes_test_database
         assert measurements["database_path"] == qcodes_test_database
@@ -445,7 +518,9 @@ class TestResourceIntegration:
     def test_resources_handle_same_database(self, qcodes_test_database):
         """Test both resources work with same database path."""
         config = json.loads(get_current_database_config(qcodes_test_database))
-        measurements = json.loads(get_recent_measurements(database_path=qcodes_test_database))
+        measurements = json.loads(
+            get_recent_measurements(database_path=qcodes_test_database)
+        )
 
         assert config["database_path"] == qcodes_test_database
         assert measurements["database_path"] == qcodes_test_database
@@ -460,7 +535,9 @@ class TestResourceIntegration:
     def test_resources_return_valid_json_structure(self, qcodes_test_database):
         """Test both resources return valid, parseable JSON."""
         config = get_current_database_config(qcodes_test_database)
-        measurements = get_recent_measurements(limit=5, database_path=qcodes_test_database)
+        measurements = get_recent_measurements(
+            limit=5, database_path=qcodes_test_database
+        )
 
         config_parsed = json.loads(config)
         measurements_parsed = json.loads(measurements)
