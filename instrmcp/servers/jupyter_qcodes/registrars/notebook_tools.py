@@ -15,7 +15,7 @@ from ..active_cell_bridge import (
     get_active_cell_output,
     invalidate_cell_output_cache,  # noqa: F401 - exposed for unsafe tools to clear stale state
 )
-from instrmcp.logging_config import get_logger
+from instrmcp.tools.logging_config import get_logger
 from ..tool_logger import log_tool_call
 
 logger = get_logger("tools.notebook")

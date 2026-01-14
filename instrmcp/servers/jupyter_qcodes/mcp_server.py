@@ -23,7 +23,7 @@ from .registrars import (
     ResourceRegistrar,
 )
 from .dynamic_registrar import DynamicToolRegistrar
-from instrmcp.logging_config import get_logger
+from instrmcp.tools.logging_config import get_logger
 
 # MeasureIt integration (optional)
 try:

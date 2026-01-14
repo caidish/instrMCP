@@ -15,7 +15,7 @@ from typing import List, Optional
 
 from mcp.types import TextContent
 
-from instrmcp.logging_config import get_logger
+from instrmcp.tools.logging_config import get_logger
 from .tool_logger import log_tool_call
 from .security import CodeScanner, get_default_scanner
 

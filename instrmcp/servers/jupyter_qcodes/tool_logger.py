@@ -15,7 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from instrmcp.logging_config import LOG_DIR, is_tool_logging_enabled
+from instrmcp.tools.logging_config import LOG_DIR, is_tool_logging_enabled
 
 # Type variable for generic async functions
 F = TypeVar("F", bound=Callable[..., Any])
