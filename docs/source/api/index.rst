@@ -63,7 +63,6 @@ Commonly Used Classes and Functions
 **Server Classes**:
 
 - :py:class:`instrmcp.servers.jupyter_qcodes.mcp_server.JupyterQCodesMCPServer`
-- :py:class:`instrmcp.utils.stdio_proxy.HttpMCPProxy`
 
 **Tool Functions**:
 

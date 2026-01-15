@@ -49,7 +49,8 @@ class MeasureItToolRegistrar:
         """Convert full sweep info to concise format.
 
         Concise: only sweep's state and error_message (if error state).
-        Preserves top-level error, sweep_error fields if present.
+        Preserves top-level error, sweep_error, killed, timed_out fields if present.
+        Adds kill_reason to explain why the sweep was killed.
         """
         sweep = data.get("sweep")
         if sweep is None:
@@ -67,13 +68,32 @@ class MeasureItToolRegistrar:
             result["error"] = data["error"]
         if "sweep_error" in data:
             result["sweep_error"] = data["sweep_error"]
+        if "timed_out" in data:
+            result["timed_out"] = data["timed_out"]
+        if "kill_suggestion" in data:
+            result["kill_suggestion"] = data["kill_suggestion"]
+        # Always preserve killed status; only add kill_reason when killed=True
+        if "killed" in data:
+            result["killed"] = data["killed"]
+            if data["killed"] is True:
+                # Add explanation for why the sweep was killed
+                if data.get("sweep_error"):
+                    result["kill_reason"] = "Sweep entered error state"
+                elif sweep and sweep.get("state") not in ("ramping", "running"):
+                    result["kill_reason"] = (
+                        "Sweep completed; killed to release hardware resources"
+                    )
+                else:
+                    # Fallback when sweep data unavailable
+                    result["kill_reason"] = "Killed to release hardware resources"
         return result
 
     def _to_concise_sweeps(self, data: dict) -> dict:
         """Convert full sweeps info to concise format.
 
         Concise: only sweep states and error_message (if error state).
-        Preserves top-level error, sweep_error, errored_sweeps fields if present.
+        Preserves top-level error, sweep_error, errored_sweeps, killed, timed_out fields.
+        Adds kill_reason to explain why sweeps were killed.
         """
         sweeps = data.get("sweeps")
         if sweeps is None:
@@ -93,6 +113,21 @@ class MeasureItToolRegistrar:
             result["sweep_error"] = data["sweep_error"]
         if "errored_sweeps" in data:
             result["errored_sweeps"] = data["errored_sweeps"]
+        if "timed_out" in data:
+            result["timed_out"] = data["timed_out"]
+        if "kill_suggestion" in data:
+            result["kill_suggestion"] = data["kill_suggestion"]
+        # Always preserve killed status; only add kill_reason when killed=True
+        if "killed" in data:
+            result["killed"] = data["killed"]
+            if data["killed"] is True:
+                # Add explanation for why sweeps were killed
+                if data.get("sweep_error"):
+                    result["kill_reason"] = "One or more sweeps entered error state"
+                else:
+                    result["kill_reason"] = (
+                        "Sweeps completed; killed to release hardware resources"
+                    )
         return result
 
     # ===== End concise mode helpers =====
@@ -157,7 +192,7 @@ class MeasureItToolRegistrar:
             name="measureit_wait_for_all_sweeps",
             annotations={
                 "title": "Wait for All Sweeps",
-                "readOnlyHint": True,
+                "readOnlyHint": False,  # Kills sweeps to release hardware resources
                 "idempotentHint": False,
                 "openWorldHint": False,
             },
@@ -166,6 +201,10 @@ class MeasureItToolRegistrar:
             timeout: float | None = None, detailed: bool = False
         ) -> List[TextContent]:
             """Wait until all currently running MeasureIt sweeps finish.
+
+            AUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware
+            resources when they complete (success or error). This is NOT a read-only
+            operation. If you need to poll without killing, use measureit_get_status.
 
             IMPORTANT: Calculate timeout based on sweep parameters before calling.
             Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
@@ -181,8 +220,10 @@ class MeasureItToolRegistrar:
 
             Returns JSON containing:
                 - sweeps: Dict of sweep info (or None if no sweeps were running)
+                - killed: True if sweeps were killed (always True on success/error)
+                - kill_reason: Explanation of why sweeps were killed
                 - error: Error message if timeout or other error occurred
-                - timed_out: True if the timeout was reached
+                - timed_out: True if the timeout was reached (sweeps NOT killed)
             """
             try:
                 result = await self.tools.wait_for_all_sweeps(timeout=timeout)
@@ -211,7 +252,7 @@ class MeasureItToolRegistrar:
             name="measureit_wait_for_sweep",
             annotations={
                 "title": "Wait for Sweep",
-                "readOnlyHint": True,
+                "readOnlyHint": False,  # Kills sweeps to release hardware resources
                 "idempotentHint": False,
                 "openWorldHint": False,
             },
@@ -222,6 +263,10 @@ class MeasureItToolRegistrar:
             detailed: bool = False,
         ) -> List[TextContent]:
             """Wait until the specified MeasureIt sweep finishes.
+
+            AUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware
+            resources when it completes (success or error). This is NOT a read-only
+            operation. If you need to poll without killing, use measureit_get_status.
 
             IMPORTANT: Calculate timeout based on sweep parameters before calling.
             Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
@@ -238,8 +283,10 @@ class MeasureItToolRegistrar:
 
             Returns JSON containing:
                 - sweep: Dict of sweep info (or None if no matching sweep was running)
+                - killed: True if sweep was killed (always True on success/error)
+                - kill_reason: Explanation of why sweep was killed
                 - error: Error message if timeout or other error occurred
-                - timed_out: True if the timeout was reached
+                - timed_out: True if the timeout was reached (sweep NOT killed)
             """
             try:
                 result = await self.tools.wait_for_sweep(variable_name, timeout=timeout)

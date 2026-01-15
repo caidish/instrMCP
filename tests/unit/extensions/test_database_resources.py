@@ -12,15 +12,17 @@ QCoDeS API functions.
 import pytest
 import json
 import sqlite3
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from datetime import datetime
 from pathlib import Path
 
 from instrmcp.servers.jupyter_qcodes.options.database.resources import (
     get_current_database_config,
     get_recent_measurements,
-    _resolve_database_path,
     QCODES_AVAILABLE,
+)
+from instrmcp.servers.jupyter_qcodes.options.database.query_tools import (
+    resolve_database_path,
 )
 
 
@@ -198,43 +200,70 @@ def empty_qcodes_database(tmp_path):
 
 
 class TestResolveDatabasePath:
-    """Test database path resolution logic."""
+    """Test database path resolution logic.
 
-    def test_resolve_explicit_path(self):
-        """Test explicit path takes precedence."""
-        explicit_path = "/explicit/path/to/database.db"
-        result = _resolve_database_path(explicit_path)
-        assert result == explicit_path
+    Note: resolve_database_path now returns (path, resolution_info) tuple
+    and raises FileNotFoundError for non-existent paths.
+    """
 
-    def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
-        """Test MeasureItHome environment variable is used."""
-        measureit_home = str(temp_dir)
-        monkeypatch.setenv("MeasureItHome", measureit_home)
+    def test_resolve_explicit_path_exists(self, qcodes_test_database):
+        """Test explicit path returns tuple with path and source info."""
+        # Use an existing database
+        resolved_path, resolution_info = resolve_database_path(
+            str(qcodes_test_database)
+        )
+        assert resolved_path == str(qcodes_test_database)
+        assert resolution_info["source"] == "explicit"
 
-        result = _resolve_database_path(None)
-        expected = str(temp_dir / "Databases" / "Example_database.db")
-        assert result == expected
+    def test_resolve_explicit_path_not_exists_raises(self):
+        """Test explicit path that doesn't exist raises FileNotFoundError."""
+        explicit_path = "/explicit/path/to/nonexistent_database.db"
+        with pytest.raises(FileNotFoundError) as exc_info:
+            resolve_database_path(explicit_path)
+        assert "Database not found" in str(exc_info.value)
+        assert "Available databases" in str(exc_info.value)
+
+    def test_resolve_measureit_home_path(self, monkeypatch, tmp_path):
+        """Test MeasureIt default path when database exists."""
+        # Create the expected database file
+        db_dir = tmp_path / "Databases"
+        db_dir.mkdir()
+        db_file = db_dir / "Example_database.db"
+        db_file.touch()
+
+        # Mock measureit module with get_path function
+        mock_measureit = MagicMock()
+        mock_measureit.get_path.return_value = db_dir
+        with patch.dict("sys.modules", {"measureit": mock_measureit}):
+            resolved_path, resolution_info = resolve_database_path(None)
+            assert resolved_path == str(db_file)
+            assert resolution_info["source"] == "measureit_default"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    def test_resolve_qcodes_default(self, monkeypatch):
-        """Test falls back to QCodes config."""
-        # Clear MeasureItHome
-        monkeypatch.delenv("MeasureItHome", raising=False)
+    def test_resolve_qcodes_default(self, monkeypatch, tmp_path):
+        """Test falls back to QCodes config when database exists."""
+        # Create a database file for qcodes config to point to
+        qcodes_db = tmp_path / "qcodes_default.db"
+        qcodes_db.touch()
 
-        with patch(
-            "instrmcp.servers.jupyter_qcodes.options.database.resources.qc"
-        ) as mock_qc:
-            mock_qc.config.core.db_location = "/qcodes/default.db"
-            result = _resolve_database_path(None)
-            assert result == "/qcodes/default.db"
+        # Mock measureit to not be importable so we fall through to QCodes
+        with patch.dict("sys.modules", {"measureit": None}):
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
+            ) as mock_qc:
+                mock_qc.config.core.db_location = str(qcodes_db)
+                resolved_path, resolution_info = resolve_database_path(None)
+                assert resolved_path == str(qcodes_db)
+                assert resolution_info["source"] == "qcodes_config"
 
-    def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
+    def test_resolve_priority_explicit_over_env(self, qcodes_test_database):
         """Test explicit path has priority over environment."""
-        monkeypatch.setenv("MeasureItHome", str(temp_dir))
-        explicit_path = "/explicit/database.db"
-
-        result = _resolve_database_path(explicit_path)
-        assert result == explicit_path
+        # Even with measureit mocked, explicit path should win
+        resolved_path, resolution_info = resolve_database_path(
+            str(qcodes_test_database)
+        )
+        assert resolved_path == str(qcodes_test_database)
+        assert resolution_info["source"] == "explicit"
 
 
 class TestDatabaseConfig:
@@ -273,11 +302,14 @@ class TestDatabaseConfig:
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_config_nonexistent_database(self, temp_dir):
-        """Test config with nonexistent database."""
+        """Test config returns error for nonexistent database."""
         db_path = temp_dir / "nonexistent.db"
 
         config = json.loads(get_current_database_config(str(db_path)))
-        assert config["database_exists"] is False
+        # New behavior: returns error response when database doesn't exist
+        assert "error" in config
+        assert config["error_type"] == "database_not_found"
+        assert config["status"] == "unavailable"
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_config_connection_status_connected(self, qcodes_test_database):

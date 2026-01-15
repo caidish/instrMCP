@@ -11,27 +11,6 @@ STDIO Proxy
    :undoc-members:
    :show-inheritance:
 
-Key Classes
-~~~~~~~~~~~
-
-HttpMCPProxy
-^^^^^^^^^^^^
-
-.. autoclass:: instrmcp.utils.stdio_proxy.HttpMCPProxy
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-   The HTTP MCP proxy enables STDIO-based MCP clients (like Claude Desktop)
-   to communicate with HTTP-based MCP servers.
-
-   **Example usage**:
-
-   .. code-block:: python
-
-      proxy = HttpMCPProxy("http://127.0.0.1:8123")
-      result = await proxy.call("qcodes/instrument_info", name="lockin")
-
 Key Functions
 ~~~~~~~~~~~~~
 
@@ -45,7 +24,9 @@ create_stdio_proxy_server
 
 .. autofunction:: instrmcp.utils.stdio_proxy.create_stdio_proxy_server
 
-   Creates a FastMCP server that proxies STDIO to HTTP.
+   Creates a FastMCP proxy server that forwards STDIO to an HTTP backend.
+   Uses FastMCP's built-in ``as_proxy()`` pattern for automatic tool and
+   resource mirroring with full description forwarding.
 
    **Example usage**:
 
