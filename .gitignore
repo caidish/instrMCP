@@ -148,3 +148,4 @@ config/station.yaml
 TestNotebook.ipynb
 /demo
 *.ipynb
+!tests/playwright/notebooks/*.ipynb

@@ -1,0 +1,380 @@
+{
+  "resources": {
+    "resource://available_instruments": {
+      "description": "Resource providing list of available QCodes instruments.",
+      "name": "available_instruments"
+    },
+    "resource://database_access0d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://database_access1d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://database_access2d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://database_access_simulsweep_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://database_access_sweepqueue_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://database_config": {
+      "description": "Resource providing current QCodes database configuration.",
+      "name": "database_config"
+    },
+    "resource://measureit_code_examples": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_common_patterns": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_simulsweep_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_sweep0d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_sweep1d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_sweep2d_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://measureit_sweepqueue_template": {
+      "description": null,
+      "name": "template_resource"
+    },
+    "resource://recent_measurements": {
+      "description": "Resource providing metadata for recent measurements.",
+      "name": "recent_measurements"
+    },
+    "resource://station_state": {
+      "description": "Resource providing current QCodes station snapshot.",
+      "name": "station_state"
+    }
+  },
+  "tools": {
+    "database_get_database_stats": {
+      "arguments": {
+        "database_path": {
+          "description": null
+        }
+      },
+      "description": "Get database statistics and health information.\n\nArgs:\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n\nReturns JSON containing database statistics including path, size,\nexperiment count, dataset count, and last modified time.",
+      "title": "Database Statistics"
+    },
+    "database_get_dataset_info": {
+      "arguments": {
+        "code_suggestion": {
+          "description": null
+        },
+        "database_path": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "id": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load (e.g., load_by_id(2))\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n    detailed: If False (default), return concise summary; if True, return full info\n    code_suggestion: If True, include Python code example for loading the dataset.\n        In unsafe/dangerous mode, the code is automatically added to a new cell\n        and executed. In safe mode, the code is returned as a suggestion.",
+      "title": "Get Dataset Info"
+    },
+    "database_list_available": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "List all available QCodes databases.\n\nSearches common locations including MeasureIt databases directory\nand QCodes configuration paths.\n\nArgs:\n    detailed: If False (default), return only database names and paths;\n        if True, return full info including size, source, experiment count.\n\nReturns JSON containing available databases.",
+      "title": "List Databases"
+    },
+    "database_list_experiments": {
+      "arguments": {
+        "database_path": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "List all experiments in the specified QCodes database.\n\nArgs:\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n    detailed: If False (default), return concise summary; if True, return full info\n\nReturns JSON containing experiment information including ID, name,\nsample name, and format string for each experiment.",
+      "title": "List Experiments"
+    },
+    "mcp_get_resource": {
+      "arguments": {
+        "uri": {
+          "description": null
+        }
+      },
+      "description": "Retrieve the content of a specific MCP resource by its URI.\n\nUse this tool to access resource content when you need the actual data\n(e.g., instrument list, templates, configuration). This is a fallback\nwhen direct resource access is not available.\n\nArgs:\n    uri: Resource URI (e.g., \"resource://available_instruments\")\n\nReturns:\n    Resource content as JSON or text.\n\nExamples:\n    - mcp_get_resource(\"resource://available_instruments\")\n    - mcp_get_resource(\"resource://measureit_sweep1d_template\")\n    - mcp_get_resource(\"resource://database_config\")",
+      "title": "Get MCP Resource"
+    },
+    "mcp_list_resources": {
+      "arguments": {},
+      "description": "List all available MCP resources and guide on when to use them.\n\nMCP Resources provide READ-ONLY reference data and templates,\nwhile Tools perform active operations. Use this tool to discover\nwhat context and documentation is available.\n\nReturns:\n    Comprehensive guide including all resource URIs, descriptions,\n    use cases, and guidance on resources vs tools.",
+      "title": "List MCP Resources"
+    },
+    "measureit_get_status": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Check if any MeasureIt sweep is currently running.\n\nReturns information about active MeasureIt sweeps in the notebook namespace,\nincluding sweep type, status, and basic configuration if available.\n\nArgs:\n    detailed: If False (default), return only active status and sweep names;\n        if True, return full sweep information.\n\nReturns JSON containing:\n- Concise mode: active (bool), sweep_names (list), count (int)\n- Detailed mode: active (bool), sweeps (dict with full sweep info)",
+      "title": "MeasureIt Status"
+    },
+    "measureit_kill_sweep": {
+      "arguments": {
+        "variable_name": {
+          "description": null
+        }
+      },
+      "description": "Kill a running MeasureIt sweep to release resources.\n\nUNSAFE: This tool stops a running sweep, which may leave instruments\nin an intermediate state. Use when a sweep needs to be terminated\ndue to timeout, error, or user request.\n\nAfter killing a sweep, you may need to:\n- Re-initialize instruments to a known state\n- Check instrument parameters before starting a new sweep\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\")\n\nReturns JSON containing:\n    - success: bool - whether the kill was successful\n    - sweep_name: str - name of the sweep\n    - previous_state: str - state before kill\n    - new_state: str - state after kill\n    - error: str (if any error occurred)",
+      "title": "Kill Sweep"
+    },
+    "measureit_wait_for_all_sweeps": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        }
+      },
+      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached",
+      "title": "Wait for All Sweeps"
+    },
+    "measureit_wait_for_sweep": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        },
+        "variable_name": {
+          "description": null
+        }
+      },
+      "description": "Wait until the specified MeasureIt sweep finishes.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status(detailed=True) first to check time_remaining.\n\nArgs:\n    variable_name: Name of the sweep variable to wait for.\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep state;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweep: Dict of sweep info (or None if no matching sweep was running)\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached",
+      "title": "Wait for Sweep"
+    },
+    "notebook_add_cell": {
+      "arguments": {
+        "cell_type": {
+          "description": null
+        },
+        "content": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "position": {
+          "description": null
+        }
+      },
+      "description": "Add a new cell in the notebook.\n\nUNSAFE: This tool adds new cells to the notebook. Only available in unsafe mode.\nThe cell will be created relative to the currently active cell.\n\nArgs:\n    cell_type: Type of cell to create (\"code\", \"markdown\", \"raw\") - default: \"code\"\n    position: Position relative to active cell (\"above\", \"below\") - default: \"below\"\n    content: Initial content for the new cell - default: empty string\n    detailed: If False (default), return just success; if True, return full info",
+      "title": "Add Cell"
+    },
+    "notebook_apply_patch": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "new_text": {
+          "description": null
+        },
+        "old_text": {
+          "description": null
+        }
+      },
+      "description": "Apply a patch to the current cell content.\n\nUNSAFE: This tool modifies the content of the currently active cell. Only available in unsafe mode.\nIt replaces the first occurrence of old_text with new_text in the cell content.\n\nArgs:\n    old_text: Text to find and replace (cannot be empty)\n    new_text: Text to replace with (can be empty to delete text)\n    detailed: If False (default), return just success; if True, return full info",
+      "title": "Apply Patch"
+    },
+    "notebook_delete_cell": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Delete the currently editing cell.\n\nUNSAFE: This tool deletes the currently active cell from the notebook. Only available in unsafe mode.\nUse with caution as this action cannot be undone easily. If this is the last cell in the notebook,\na new empty code cell will be created automatically.\n\nArgs:\n    detailed: If False (default), return just success; if True, return full info",
+      "title": "Delete Cell"
+    },
+    "notebook_delete_cells": {
+      "arguments": {
+        "cell_numbers": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Delete multiple cells by their execution count numbers.\n\nUNSAFE: This tool deletes cells from the notebook by their execution counts.\nOnly available in unsafe mode. Use with caution as this action cannot be undone easily.\n\nArgs:\n    cell_numbers: JSON string containing a list of execution count numbers to delete.\n                 Example: \"[1, 2, 5]\" to delete cells 1, 2, and 5\n                 Can also be a single number: \"3\"\n    detailed: If False (default), return just success; if True, return full info\n\nReturns:\n    JSON with deletion status and detailed results for each cell, including:\n    - success: Overall operation success\n    - deleted_count: Number of cells actually deleted\n    - total_requested: Number of cells requested to delete\n    - results: List with status for each cell number",
+      "title": "Delete Multiple Cells"
+    },
+    "notebook_execute_cell": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        }
+      },
+      "description": "Execute the currently editing cell and return the output.\n\nUNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.\nThe code will run in the frontend and this tool will wait for execution to complete,\nreturning the cell output in the response.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0)\n    detailed: If False (default), return concise summary; if True, return full info\n\nReturns:\n    JSON response with execution result including:\n    - signal_success: Whether the execution request was sent successfully (was 'success')\n    - status: Execution status (\"completed\", \"error\", or \"timeout\")\n    - execution_count: The IPython execution count for this cell\n    - input: The code that was executed (detailed mode only)\n    - outputs: List of cell outputs (both modes)\n    - output: Expression return value if any (both modes)\n    - output_summary: Truncated first output for quick preview (concise mode)\n    - has_output: Whether the cell produced output\n    - has_error: Whether an error occurred\n    - error_type: Error type name if execution failed\n    - error_message: Error message if execution failed\n    - traceback: Full traceback if execution failed (when available)\n    - sweep_detected: True if .start() was detected in the code\n    - suggestion: Hint to use wait tools if sweep was detected\n\nNote:\n    - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or\n      measureit_wait_for_all_sweeps() to wait for completion before proceeding.",
+      "title": "Execute Cell"
+    },
+    "notebook_get_editing_cell": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "fresh_ms": {
+          "description": null
+        },
+        "line_end": {
+          "description": null
+        },
+        "line_start": {
+          "description": null
+        },
+        "max_lines": {
+          "description": null
+        }
+      },
+      "description": "Get the currently editing cell content from JupyterLab frontend.\n\nThis captures the cell that is currently being edited in the frontend.\n\nArgs:\n    fresh_ms: Maximum age in milliseconds. If provided and cached data is older,\n             will request fresh data from frontend (default: 1000)\n    line_start: Optional starting line number (1-indexed).\n    line_end: Optional ending line number (1-indexed, inclusive).\n    max_lines: Maximum number of lines to return (default: 200).\n    detailed: If False (default), return concise summary; if True, return full info\n\nLine selection logic:\n    - If both line_start and line_end are provided: return those lines exactly\n    - Else if total_lines <= max_lines: return all lines\n    - Else if line_start is provided: return max_lines starting from line_start\n    - Else if line_end is provided: return max_lines ending at line_end\n    - Else: return first max_lines lines",
+      "title": "Get Active Cell"
+    },
+    "notebook_get_editing_cell_output": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Get the output of the currently active cell in JupyterLab.\n\nThis tool retrieves the output from the cell that is currently selected\nin JupyterLab, including any errors. If the cell hasn't been executed,\nit will indicate that status.\n\nArgs:\n    detailed: If False (default), return concise summary; if True, return full info",
+      "title": "Get Cell Output"
+    },
+    "notebook_get_notebook_cells": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "include_output": {
+          "description": null
+        },
+        "num_cells": {
+          "description": null
+        }
+      },
+      "description": "Get recent notebook cells with input, output, and error information.\n\nArgs:\n    num_cells: Number of recent cells to retrieve (default: 2 for performance)\n    include_output: Include cell outputs and errors (default: True)\n    detailed: If False (default), return concise summary; if True, return full info",
+      "title": "Get Recent Cells"
+    },
+    "notebook_get_variable_info": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "name": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a notebook variable.\n\nArgs:\n    name: Variable name\n    detailed: If False (default), return concise summary; if True, return full info",
+      "title": "Get Variable Info"
+    },
+    "notebook_list_variables": {
+      "arguments": {
+        "type_filter": {
+          "description": null
+        }
+      },
+      "description": "List variables in the Jupyter namespace.\n\nArgs:\n    type_filter: Optional type filter (e.g., \"array\", \"dict\", \"instrument\")",
+      "title": "List Notebook Variables"
+    },
+    "notebook_move_cursor": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "target": {
+          "description": null
+        }
+      },
+      "description": "Move cursor to a different cell in the notebook.\n\nChanges which cell is currently active (selected) in JupyterLab.\nThis is a SAFE operation as it only changes selection without modifying content.\n\nArgs:\n    target: Where to move the cursor:\n           - \"above\": Move to cell above current\n           - \"below\": Move to cell below current\n           - \"bottom\": Move to the last cell in the notebook (by file order)\n           - \"<number>\": Move to cell with that execution count (e.g., \"5\" for [5])\n    detailed: If False (default), return just success; if True, return full info\n\nReturns:\n    JSON with operation status, old index, and new index\n\nExample usage:\n    move_cursor(\"below\")   # Move to next cell\n    move_cursor(\"above\")   # Move to previous cell\n    move_cursor(\"bottom\")  # Move to last cell in notebook\n    move_cursor(\"5\")       # Move to cell [5]",
+      "title": "Move Cursor"
+    },
+    "notebook_server_status": {
+      "arguments": {},
+      "description": "Get server status and configuration.",
+      "title": "Server Status"
+    },
+    "notebook_update_editing_cell": {
+      "arguments": {
+        "content": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Update the content of the currently editing cell in JupyterLab frontend.\n\nUNSAFE: This tool modifies the content of the currently active cell.\nOnly available in unsafe mode. The content will replace the entire\ncurrent cell content.\n\nArgs:\n    content: New Python code content to set in the active cell\n    detailed: If False (default), return concise summary; if True, return full info",
+      "title": "Update Active Cell"
+    },
+    "qcodes_get_parameter_info": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "instrument": {
+          "description": null
+        },
+        "parameter": {
+          "description": null
+        }
+      },
+      "description": "Get metadata information about a specific QCodes parameter.\n\nArgs:\n    instrument: Instrument name in namespace\n    parameter: Parameter path (e.g., \"voltage\", \"ch01.voltage\")\n    detailed: If False (default), return core metadata (name, label,\n             unit, vals, gettable/settable); if True, return all\n             available metadata including scale, offset, cache, etc.\n\nReturns:\n    Parameter metadata including validator limits (vals).",
+      "title": "Get Parameter Info"
+    },
+    "qcodes_get_parameter_values": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "queries": {
+          "description": null
+        }
+      },
+      "description": "Get QCodes parameter values - supports both single parameter and batch queries.\n\nArgs:\n    queries: JSON string containing single query or list of queries\n             Single: {\"instrument\": \"name\", \"parameter\": \"param\", \"fresh\": false}\n             Batch: [{\"instrument\": \"name1\", \"parameter\": \"param1\"}, ...]\n    detailed: If False (default), return concise {instrument, parameter, value};\n             if True, return full response with timestamps and source info",
+      "title": "Get Parameter Values"
+    },
+    "qcodes_instrument_info": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "name": {
+          "description": null
+        },
+        "with_values": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a QCodes instrument.\n\nArgs:\n    name: Instrument name, or \"*\" to list all instruments\n    with_values: Include cached parameter values (only for specific instruments, not with \"*\")\n    detailed: If False (default), return concise summary; if True, return full response\n\nNote:\n    To get live parameter values, use qcodes_get_parameter_values with:\n    - \"{instrument}.{parameter}\" for direct parameters\n    - \"{instrument}.{channel}.{parameter}\" for multi-channel instruments\n    Example: \"lockin.X\" or \"dac.ch01.voltage\"",
+      "title": "Get Instrument Info"
+    }
+  }
+}
