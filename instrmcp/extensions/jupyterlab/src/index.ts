@@ -108,7 +108,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
         
         console.log(`MCP Active Cell Bridge: Updated cell content (${newContent.length} chars)`);
-        
+
+        // Send snapshot after successful update to keep backend in sync
+        await sendSnapshot(kernel);
+
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to update cell:', error);
         
@@ -202,7 +205,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Validate position
-        const validPositions = ['above', 'below'];
+        const validPositions = ['above', 'below', 'end'];
         if (!validPositions.includes(position)) {
           comm.send({
             type: 'add_cell_response',
@@ -216,6 +219,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Create new cell
         if (position === 'above') {
           await NotebookActions.insertAbove(panel.content);
+        } else if (position === 'end') {
+          // Move to last cell and insert below
+          const cellCount = panel.content.model?.cells.length ?? 0;
+          if (cellCount > 0) {
+            panel.content.activeCellIndex = cellCount - 1;
+          }
+          await NotebookActions.insertBelow(panel.content);
         } else {
           await NotebookActions.insertBelow(panel.content);
         }
@@ -249,6 +259,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log(`MCP Active Cell Bridge: Added ${cellType} cell ${position} with ${content.length} chars`);
+
+        // Send snapshot after successful add to keep backend in sync
+        await sendSnapshot(kernel);
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to add cell:', error);
@@ -301,6 +314,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log('MCP Active Cell Bridge: Cleared last cell content');
+
+          // Send snapshot after successful clear to keep backend in sync
+          await sendSnapshot(kernel);
         } else {
           // Delete the cell
           await NotebookActions.deleteCells(panel.content);
@@ -316,6 +332,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log('MCP Active Cell Bridge: Deleted cell');
+
+          // Send snapshot after successful delete to keep backend in sync
+          await sendSnapshot(kernel);
         }
 
       } catch (error) {
@@ -390,6 +409,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log(`MCP Active Cell Bridge: Applied patch (${oldText.length} -> ${newText.length} chars)`);
+
+          // Send snapshot after successful patch to keep backend in sync
+          await sendSnapshot(kernel);
         } else {
           // No replacement made
           comm.send({
@@ -519,6 +541,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log(`MCP Active Cell Bridge: Moved cursor from ${currentIndex} to ${targetIndex}`);
+
+        // Send snapshot after successful cursor move to keep backend in sync
+        await sendSnapshot(kernel);
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to move cursor:', error);
@@ -934,6 +959,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log(`MCP Active Cell Bridge: Deleted ${deletedCount} cells by number`);
+
+        // Send snapshot after successful delete to keep backend in sync
+        await sendSnapshot(kernel);
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to delete cells by number:', error);

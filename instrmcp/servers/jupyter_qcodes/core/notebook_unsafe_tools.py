@@ -499,7 +499,7 @@ class UnsafeToolRegistrar:
 
             Args:
                 cell_type: Type of cell to create ("code", "markdown", "raw") - default: "code"
-                position: Position relative to active cell ("above", "below") - default: "below"
+                position: Where to add cell ("above", "below", "end") - default: "below"
                 content: Initial content for the new cell - default: empty string
                 detailed: If False (default), return just success; if True, return full info
             """

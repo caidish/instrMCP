@@ -313,12 +313,15 @@ def _count_measurement_types(db_path: str) -> Dict[str, int]:
     return measurement_types
 
 
-def _resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dict]:
+def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dict]:
     """
     Resolve the database path using the following priority:
     1. Provided database_path parameter
     2. MeasureIt get_path("databases") -> Example_database.db
     3. QCodes default configuration
+
+    This is the canonical database path resolution function. Import this
+    function from other modules instead of duplicating the logic.
 
     Args:
         database_path: Explicit database path
@@ -482,7 +485,7 @@ def list_experiments(database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path, resolution_info = _resolve_database_path(database_path)
+        resolved_path, resolution_info = resolve_database_path(database_path)
     except FileNotFoundError as e:
         # Database path not found - return error with details
         return json.dumps(
@@ -546,7 +549,7 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path, resolution_info = _resolve_database_path(database_path)
+        resolved_path, resolution_info = resolve_database_path(database_path)
     except FileNotFoundError as e:
         # Database path not found - return error with details
         return json.dumps(
@@ -713,7 +716,7 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path, resolution_info = _resolve_database_path(database_path)
+        resolved_path, resolution_info = resolve_database_path(database_path)
     except FileNotFoundError as e:
         # Database path not found - return error with details
         return json.dumps(

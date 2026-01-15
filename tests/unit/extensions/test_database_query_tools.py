@@ -19,7 +19,7 @@ from instrmcp.servers.jupyter_qcodes.options.database.query_tools import (
     list_experiments,
     get_dataset_info,
     get_database_stats,
-    _resolve_database_path,
+    resolve_database_path,
     _format_file_size,
     QCODES_AVAILABLE,
 )
@@ -273,7 +273,7 @@ class TestResolveDatabasePath:
         db_file.touch()
         explicit_path = str(db_file)
 
-        resolved_path, resolution_info = _resolve_database_path(explicit_path)
+        resolved_path, resolution_info = resolve_database_path(explicit_path)
         assert resolved_path == explicit_path
         assert resolution_info["source"] == "explicit"
         assert resolution_info["tried_path"] == explicit_path
@@ -289,7 +289,7 @@ class TestResolveDatabasePath:
         with patch("measureit.get_path") as mock_get_path:
             mock_get_path.return_value = db_dir
 
-            resolved_path, resolution_info = _resolve_database_path(None)
+            resolved_path, resolution_info = resolve_database_path(None)
             expected = str(db_dir / "Example_database.db")
             assert resolved_path == expected
             assert resolution_info["source"] == "measureit_default"
@@ -305,7 +305,7 @@ class TestResolveDatabasePath:
                 "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
             ) as mock_qc:
                 mock_qc.config.core.db_location = str(qcodes_db)
-                resolved_path, resolution_info = _resolve_database_path(None)
+                resolved_path, resolution_info = resolve_database_path(None)
                 assert resolved_path == str(qcodes_db)
                 assert resolution_info["source"] == "qcodes_config"
 
@@ -322,7 +322,7 @@ class TestResolveDatabasePath:
         with patch("measureit.get_path") as mock_get_path:
             mock_get_path.return_value = db_dir
 
-            resolved_path, resolution_info = _resolve_database_path(explicit_path)
+            resolved_path, resolution_info = resolve_database_path(explicit_path)
             assert resolved_path == explicit_path
             assert resolution_info["source"] == "explicit"
 

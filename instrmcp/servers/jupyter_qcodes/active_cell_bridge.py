@@ -626,7 +626,8 @@ def add_new_cell(
 
     Args:
         cell_type: Type of cell to create ("code", "markdown", "raw")
-        position: Position relative to active cell ("above", "below")
+        position: Position relative to active cell ("above", "below", "end")
+                  "end" appends the cell at the very end of the notebook
         content: Initial content for the new cell
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
@@ -639,7 +640,7 @@ def add_new_cell(
 
     # Validate parameters
     valid_types = {"code", "markdown", "raw"}
-    valid_positions = {"above", "below"}
+    valid_positions = {"above", "below", "end"}
 
     if cell_type not in valid_types:
         return {

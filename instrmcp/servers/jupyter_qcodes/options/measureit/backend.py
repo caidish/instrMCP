@@ -112,10 +112,11 @@ class MeasureItBackend(BaseBackend):
 
         Returns:
             Dict containing:
-                success: bool - whether the kill was successful
+                success: bool - whether the kill was successful (sweep stopped)
                 sweep_name: str - name of the sweep
                 previous_state: str - state before kill
-                error: str (if any error occurred)
+                new_state: str - state after kill attempt
+                error: str (if kill failed or sweep still running)
         """
         try:
             if BaseSweep is None:
@@ -145,6 +146,17 @@ class MeasureItBackend(BaseBackend):
 
             # Get state before kill
             previous_state = sweep.progressState.state.value
+
+            # If sweep is already not running, report success immediately
+            if previous_state not in SWEEP_STATE_RUNNING:
+                return {
+                    "success": True,
+                    "sweep_name": var_name,
+                    "sweep_type": type(sweep).__name__,
+                    "previous_state": previous_state,
+                    "new_state": previous_state,
+                    "message": f"Sweep '{var_name}' was already stopped (state: {previous_state}).",
+                }
 
             # Execute sweep.kill() via Qt's thread-safe mechanism
             #
@@ -179,24 +191,63 @@ class MeasureItBackend(BaseBackend):
                 proxy.moveToThread(sweep.thread())
                 sweep._mcp_kill_proxy = proxy
 
-            # Queue the kill on the sweep's Qt thread
-            QMetaObject.invokeMethod(proxy, "do_kill", QueuedConnection)
+            # Retry kill with verification - Qt event loop may need time to process
+            max_retries = 5
+            retry_delay = 0.3  # seconds between retries
 
-            # Wait briefly for the kill to take effect
-            # The kill is queued and will execute when Qt processes events
-            await asyncio.sleep(0.5)
+            for attempt in range(max_retries):
+                # Queue the kill on the sweep's Qt thread
+                QMetaObject.invokeMethod(proxy, "do_kill", QueuedConnection)
 
-            # Verify the sweep was killed
-            new_state = sweep.progressState.state.value
+                # Wait for the kill to take effect
+                await asyncio.sleep(retry_delay)
+
+                # Check if sweep actually stopped
+                new_state = sweep.progressState.state.value
+                if new_state not in SWEEP_STATE_RUNNING:
+                    # Kill successful - sweep is no longer running
+                    return {
+                        "success": True,
+                        "sweep_name": var_name,
+                        "sweep_type": type(sweep).__name__,
+                        "previous_state": previous_state,
+                        "new_state": new_state,
+                        "message": f"Sweep '{var_name}' killed successfully. Resources released.",
+                        "warning": "UNSAFE: Sweep was terminated. Instruments may need re-initialization.",
+                    }
+
+                # Log retry attempt
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Kill attempt %d/%d for sweep '%s' - still in state '%s', retrying...",
+                        attempt + 1,
+                        max_retries,
+                        var_name,
+                        new_state,
+                    )
+
+            # All retries exhausted - sweep is still running
+            final_state = sweep.progressState.state.value
+            logger.error(
+                "Failed to kill sweep '%s' after %d attempts. State: %s -> %s",
+                var_name,
+                max_retries,
+                previous_state,
+                final_state,
+            )
 
             return {
-                "success": True,
+                "success": False,
                 "sweep_name": var_name,
                 "sweep_type": type(sweep).__name__,
                 "previous_state": previous_state,
-                "new_state": new_state,
-                "message": f"Sweep '{var_name}' killed successfully. Resources released.",
-                "warning": "UNSAFE: Sweep was terminated. Instruments may need re-initialization.",
+                "new_state": final_state,
+                "error": (
+                    f"Sweep '{var_name}' is still running after {max_retries} kill attempts. "
+                    f"State: {final_state}. The sweep may be stuck or unresponsive. "
+                    "Try restarting the Jupyter kernel to force termination."
+                ),
+                "warning": "UNSAFE: Kill command was sent but sweep did not stop.",
             }
 
         except Exception as e:

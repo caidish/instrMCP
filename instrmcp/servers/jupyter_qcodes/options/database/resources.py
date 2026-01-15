@@ -12,7 +12,6 @@ Thread Safety Fix:
 """
 
 import json
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -25,34 +24,12 @@ try:
 except ImportError:
     QCODES_AVAILABLE = False
 
-# Import the canonical thread-safe connection helper and shared constant
-from .query_tools import thread_safe_db_connection, _VALID_TABLE_NAME_PATTERN
-
-
-def _resolve_database_path(database_path: Optional[str] = None) -> str:
-    """
-    Resolve the database path using the following priority:
-    1. Provided database_path parameter
-    2. MeasureItHome environment variable (if set) -> use Example_database.db
-    3. QCodes default configuration
-
-    Args:
-        database_path: Explicit database path
-
-    Returns:
-        Resolved database path
-    """
-    if database_path:
-        return database_path
-
-    # Check if MeasureIt is available and use its default databases
-    measureit_home = os.environ.get("MeasureItHome")
-    if measureit_home:
-        # Default to Example_database.db in MeasureIt/Databases/
-        return str(Path(measureit_home) / "Databases" / "Example_database.db")
-
-    # Fall back to QCodes default
-    return str(qc.config.core.db_location)
+# Import the canonical thread-safe connection helper, path resolver, and shared constant
+from .query_tools import (
+    thread_safe_db_connection,
+    resolve_database_path,
+    _VALID_TABLE_NAME_PATTERN,
+)
 
 
 def get_current_database_config(database_path: Optional[str] = None) -> str:
@@ -75,8 +52,18 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
         )
 
     try:
-        # Resolve database path
-        resolved_path = _resolve_database_path(database_path)
+        # Resolve database path (returns tuple with resolution info)
+        try:
+            resolved_path, resolution_info = resolve_database_path(database_path)
+        except FileNotFoundError as e:
+            return json.dumps(
+                {
+                    "error": str(e),
+                    "error_type": "database_not_found",
+                    "status": "unavailable",
+                },
+                indent=2,
+            )
 
         config = {
             "database_path": resolved_path,
@@ -84,6 +71,7 @@ def get_current_database_config(database_path: Optional[str] = None) -> str:
             "connection_status": "unknown",
             "qcodes_version": qc.__version__,
             "configuration": {},
+            "resolution_source": resolution_info.get("source"),
             "last_checked": datetime.now().isoformat(),
         }
 
@@ -185,11 +173,22 @@ def get_recent_measurements(
         )
 
     try:
-        # Resolve database path
-        resolved_path = _resolve_database_path(database_path)
+        # Resolve database path (returns tuple with resolution info)
+        try:
+            resolved_path, resolution_info = resolve_database_path(database_path)
+        except FileNotFoundError as e:
+            return json.dumps(
+                {
+                    "error": str(e),
+                    "error_type": "database_not_found",
+                    "recent_measurements": [],
+                },
+                indent=2,
+            )
 
         result = {
             "database_path": resolved_path,
+            "resolution_source": resolution_info.get("source"),
             "limit": limit,
             "recent_measurements": [],
             "retrieved_at": datetime.now().isoformat(),
