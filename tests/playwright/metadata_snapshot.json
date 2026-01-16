@@ -129,6 +129,9 @@
     },
     "measureit_kill_sweep": {
       "arguments": {
+        "all": {
+          "description": null
+        },
         "detailed": {
           "description": null
         },
@@ -136,23 +139,14 @@
           "description": null
         }
       },
-      "description": "Kill a running MeasureIt sweep to release resources.\n\nUNSAFE: This tool stops a running sweep, which may leave instruments\nin an intermediate state. Use when a sweep needs to be terminated\ndue to timeout, error, or user request.\n\nAfter killing a sweep, you may need to:\n- Re-initialize instruments to a known state\n- Check instrument parameters before starting a new sweep\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\")\n\nReturns JSON containing:\n    - success: bool - whether the kill was successful\n    - sweep_name: str - name of the sweep\n    - previous_state: str - state before kill\n    - new_state: str - state after kill\n    - error: str (if any error occurred)",
+      "description": "Kill running MeasureIt sweep(s) to release resources.\n\nUNSAFE: This tool stops running sweep(s), which may leave instruments\nin an intermediate state. Use when a sweep needs to be terminated\ndue to timeout, error, or user request.\n\nAfter killing a sweep, you may need to:\n- Re-initialize instruments to a known state\n- Check instrument parameters before starting a new sweep\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\"). Required when all=False.\n    all: If True, kill all sweeps in namespace. If False (default),\n        kill only the sweep specified by variable_name.\n    detailed: If False (default), return concise result;\n        if True, return full details.\n\nReturns JSON containing:\n    For single sweep (all=False):\n    - success: bool - whether the kill was successful\n    - sweep_name: str - name of the sweep\n    - previous_state: str - state before kill\n    - new_state: str - state after kill\n    - error: str (if any error occurred)\n\n    For all sweeps (all=True):\n    - success: bool - True if all sweeps killed successfully\n    - killed_count: int - number of sweeps killed\n    - total_sweeps: int - total sweeps found\n    - results: dict - individual results per sweep\n    - errors: list - error messages if any failed",
       "title": "Kill Sweep"
-    },
-    "measureit_wait_for_all_sweeps": {
-      "arguments": {
-        "detailed": {
-          "description": null
-        },
-        "timeout": {
-          "description": null
-        }
-      },
-      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
-      "title": "Wait for All Sweeps"
     },
     "measureit_wait_for_sweep": {
       "arguments": {
+        "all": {
+          "description": null
+        },
         "detailed": {
           "description": null
         },
@@ -163,7 +157,7 @@
           "description": null
         }
       },
-      "description": "Wait until the specified MeasureIt sweep finishes.\n\nAUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware\nresources when it completes (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status(detailed=True) first to check time_remaining.\n\nArgs:\n    variable_name: Name of the sweep variable to wait for.\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep state;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweep: Dict of sweep info (or None if no matching sweep was running)\n    - killed: True if sweep was killed (always True on success/error)\n    - kill_reason: Explanation of why sweep was killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweep NOT killed)",
+      "description": "Wait until MeasureIt sweep(s) finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status(detailed=True) first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    variable_name: Name of the sweep variable to wait for.\n        Required when all=False.\n    all: If True, wait for all sweeps in namespace. If False (default),\n        wait only for the sweep specified by variable_name.\n    detailed: If False (default), return only sweep state;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    For single sweep (all=False):\n    - sweep: Dict of sweep info (or None if no matching sweep was running)\n    - killed: True if sweep was killed (always True on success/error)\n    - kill_reason: Explanation of why sweep was killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweep NOT killed)\n\n    For all sweeps (all=True):\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
       "title": "Wait for Sweep"
     },
     "notebook_add_cell": {
@@ -232,7 +226,7 @@
           "description": null
         }
       },
-      "description": "Execute the currently editing cell and return the output.\n\nUNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.\nThe code will run in the frontend and this tool will wait for execution to complete,\nreturning the cell output in the response.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0)\n    detailed: If False (default), return concise summary; if True, return full info\n\nReturns:\n    JSON response with execution result including:\n    - signal_success: Whether the execution request was sent successfully (was 'success')\n    - status: Execution status (\"completed\", \"error\", or \"timeout\")\n    - execution_count: The IPython execution count for this cell\n    - input: The code that was executed (detailed mode only)\n    - outputs: List of cell outputs (both modes)\n    - output: Expression return value if any (both modes)\n    - output_summary: Truncated first output for quick preview (concise mode)\n    - has_output: Whether the cell produced output\n    - has_error: Whether an error occurred\n    - error_type: Error type name if execution failed\n    - error_message: Error message if execution failed\n    - traceback: Full traceback if execution failed (when available)\n    - sweep_detected: True if .start() was detected in the code\n    - suggestion: Hint to use wait tools if sweep was detected\n\nNote:\n    - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or\n      measureit_wait_for_all_sweeps() to wait for completion before proceeding.",
+      "description": "Execute the currently editing cell and return the output.\n\nUNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.\nThe code will run in the frontend and this tool will wait for execution to complete,\nreturning the cell output in the response.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0)\n    detailed: If False (default), return concise summary; if True, return full info\n\nReturns:\n    JSON response with execution result including:\n    - signal_success: Whether the execution request was sent successfully (was 'success')\n    - status: Execution status (\"completed\", \"error\", or \"timeout\")\n    - execution_count: The IPython execution count for this cell\n    - input: The code that was executed (detailed mode only)\n    - outputs: List of cell outputs (both modes)\n    - output: Expression return value if any (both modes)\n    - output_summary: Truncated first output for quick preview (concise mode)\n    - has_output: Whether the cell produced output\n    - has_error: Whether an error occurred\n    - error_type: Error type name if execution failed\n    - error_message: Error message if execution failed\n    - traceback: Full traceback if execution failed (when available)\n    - sweep_detected: True if .start() was detected in the code\n    - suggestion: Hint to use wait tools if sweep was detected\n\nNote:\n    - If sweep_detected is True, use measureit_wait_for_sweep(variable_name=name, timeout=...)\n      or measureit_wait_for_sweep(all=True, timeout=...) to wait for completion before proceeding.",
       "title": "Execute Cell"
     },
     "notebook_get_editing_cell": {

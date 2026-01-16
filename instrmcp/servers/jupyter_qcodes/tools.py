@@ -236,6 +236,10 @@ class QCodesReadOnlyTools:
         """Kill a running MeasureIt sweep to release resources."""
         return await self.measureit_backend.kill_sweep(var_name)
 
+    async def kill_all_sweeps(self) -> Dict[str, Any]:
+        """Kill all MeasureIt sweeps to release resources."""
+        return await self.measureit_backend.kill_all_sweeps()
+
     # =========================================================================
     # Internal Method Delegation (for backward compatibility with tests)
     # =========================================================================

@@ -62,8 +62,8 @@ class TestMeasureItToolRegistrar:
         # Check that all MeasureIt tools were registered
         for tool_name in [
             "measureit_get_status",
-            "measureit_wait_for_all_sweeps",
             "measureit_wait_for_sweep",
+            "measureit_kill_sweep",
         ]:
             assert tool_name in mock_mcp_server._tools
             assert callable(mock_mcp_server._tools[tool_name])
@@ -132,13 +132,13 @@ class TestMeasureItToolRegistrar:
     async def test_wait_for_all_sweeps_tool(
         self, registrar, mock_tools, mock_mcp_server
     ):
-        """Test wait_for_all_sweeps tool registration and execution."""
+        """Test wait_for_sweep tool with all=True (wait for all sweeps)."""
         mock_tools.wait_for_all_sweeps.return_value = {"sweeps": []}
 
         registrar.register_all()
-        wait_tool = mock_mcp_server._tools["measureit_wait_for_all_sweeps"]
-        # Use detailed=True to get full response with sweeps list
-        result = await wait_tool(timeout=30.0, detailed=True)
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        # Use all=True and detailed=True to get full response with sweeps list
+        result = await wait_tool(timeout=30.0, all=True, detailed=True)
 
         assert isinstance(result, list)
         assert isinstance(result[0], TextContent)
@@ -148,12 +148,12 @@ class TestMeasureItToolRegistrar:
 
     @pytest.mark.asyncio
     async def test_wait_for_sweep_tool(self, registrar, mock_tools, mock_mcp_server):
-        """Test wait_for_sweep tool registration and execution."""
+        """Test wait_for_sweep tool with specific variable_name."""
         mock_tools.wait_for_sweep.return_value = {"sweep": {"variable_name": "s1"}}
 
         registrar.register_all()
         wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
-        result = await wait_tool("s1", timeout=30.0)
+        result = await wait_tool(timeout=30.0, variable_name="s1")
 
         assert isinstance(result, list)
         assert isinstance(result[0], TextContent)
@@ -379,20 +379,19 @@ class TestMeasureItToolRegistrar:
         response_data = json.loads(result[0].text)
         assert response_data["active"] is True
 
-    def test_four_tools_registered(self, registrar, mock_mcp_server):
+    def test_three_tools_registered(self, registrar, mock_mcp_server):
         """Test that all MeasureIt tools are registered."""
         registrar.register_all()
 
-        # Should have 4 MeasureIt tools
+        # Should have 3 MeasureIt tools (wait_for_sweep supports all=True for wait_for_all)
         measureit_tools = [
             name
             for name in mock_mcp_server._tools.keys()
             if name.startswith("measureit_")
         ]
-        assert len(measureit_tools) == 4
+        assert len(measureit_tools) == 3
         assert "measureit_get_status" in measureit_tools
         assert "measureit_wait_for_sweep" in measureit_tools
-        assert "measureit_wait_for_all_sweeps" in measureit_tools
         assert "measureit_kill_sweep" in measureit_tools
 
     @pytest.mark.asyncio

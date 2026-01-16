@@ -6,7 +6,7 @@ Registers tools for interacting with MeasureIt sweep objects (optional feature).
 
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
 from mcp.types import TextContent
 
@@ -135,7 +135,6 @@ class MeasureItToolRegistrar:
     def register_all(self):
         """Register all MeasureIt tools."""
         self._register_get_status()
-        self._register_wait_for_all_sweeps()
         self._register_wait_for_sweep()
         self._register_kill_sweep()
 
@@ -172,41 +171,6 @@ class MeasureItToolRegistrar:
                     )
                 ]
 
-    def _register_wait_for_all_sweeps(self):
-        """Register the measureit/wait_for_all_sweeps tool."""
-
-        @self.mcp.tool(
-            name="measureit_wait_for_all_sweeps",
-            annotations={
-                "readOnlyHint": False,  # Kills sweeps to release hardware resources
-                "idempotentHint": False,
-                "openWorldHint": False,
-            },
-        )
-        async def wait_for_all_sweeps(
-            timeout: float, detailed: bool = False
-        ) -> List[TextContent]:
-            # Description loaded from metadata_baseline.yaml
-            try:
-                result = await self.tools.wait_for_all_sweeps(timeout=timeout)
-
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_sweeps(result)
-
-                return [
-                    TextContent(
-                        type="text", text=json.dumps(result, indent=2, default=str)
-                    )
-                ]
-            except Exception as e:
-                logger.error(f"Error in measureit/wait_for_all_sweeps: {e}")
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": str(e)}, indent=2)
-                    )
-                ]
-
     def _register_wait_for_sweep(self):
         """Register the measureit/wait_for_sweep tool."""
 
@@ -219,17 +183,41 @@ class MeasureItToolRegistrar:
             },
         )
         async def wait_for_sweep(
-            variable_name: str,
             timeout: float,
+            variable_name: Optional[str] = None,
+            all: bool = False,
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
-                result = await self.tools.wait_for_sweep(variable_name, timeout=timeout)
-
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_sweep(result)
+                # If all=True, wait for all sweeps
+                if all:
+                    result = await self.tools.wait_for_all_sweeps(timeout=timeout)
+                    # Apply concise mode filtering
+                    if not detailed:
+                        result = self._to_concise_sweeps(result)
+                else:
+                    # Require variable_name when all=False
+                    if not variable_name:
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "error": "variable_name is required when all=False",
+                                        "hint": "Provide variable_name to wait for a specific sweep, "
+                                        "or set all=True to wait for all sweeps",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+                    result = await self.tools.wait_for_sweep(
+                        variable_name, timeout=timeout
+                    )
+                    # Apply concise mode filtering
+                    if not detailed:
+                        result = self._to_concise_sweep(result)
 
                 return [
                     TextContent(
@@ -257,11 +245,33 @@ class MeasureItToolRegistrar:
             },
         )
         async def kill_sweep(
-            variable_name: str, detailed: bool = False
+            variable_name: Optional[str] = None,
+            all: bool = False,
+            detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
-                result = await self.tools.kill_sweep(variable_name)
+                # If all=True, kill all sweeps
+                if all:
+                    result = await self.tools.kill_all_sweeps()
+                else:
+                    # Require variable_name when all=False
+                    if not variable_name:
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "error": "variable_name is required when all=False",
+                                        "hint": "Provide variable_name to kill a specific sweep, "
+                                        "or set all=True to kill all sweeps",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+                    result = await self.tools.kill_sweep(variable_name)
+
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)

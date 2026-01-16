@@ -258,6 +258,76 @@ class MeasureItBackend(BaseBackend):
                 "error": str(e),
             }
 
+    async def kill_all_sweeps(self) -> Dict[str, Any]:
+        """Kill all MeasureIt sweeps in the namespace to release resources.
+
+        Iterates through all sweep objects in the notebook namespace and
+        kills each one. This is useful for cleanup after errors or when
+        multiple sweeps need to be terminated.
+
+        Returns:
+            Dict containing:
+                success: bool - True if all sweeps were killed successfully
+                killed_count: int - number of sweeps that were killed
+                results: Dict mapping variable names to individual kill results
+                errors: List of error messages (if any sweeps failed to kill)
+        """
+        try:
+            if BaseSweep is None:
+                return {
+                    "success": False,
+                    "killed_count": 0,
+                    "results": {},
+                    "errors": ["MeasureIt library not available"],
+                }
+
+            # Find all sweep objects in namespace
+            sweep_vars = []
+            for var_name, var_value in self.namespace.items():
+                if var_name.startswith("_"):
+                    continue
+                if isinstance(var_value, BaseSweep):
+                    sweep_vars.append(var_name)
+
+            if not sweep_vars:
+                return {
+                    "success": True,
+                    "killed_count": 0,
+                    "results": {},
+                    "message": "No sweeps found in namespace",
+                }
+
+            # Kill each sweep
+            results = {}
+            errors = []
+            killed_count = 0
+
+            for var_name in sweep_vars:
+                result = await self.kill_sweep(var_name)
+                results[var_name] = result
+                if result.get("success"):
+                    killed_count += 1
+                else:
+                    errors.append(f"{var_name}: {result.get('error', 'Unknown error')}")
+
+            return {
+                "success": len(errors) == 0,
+                "killed_count": killed_count,
+                "total_sweeps": len(sweep_vars),
+                "results": results,
+                "errors": errors if errors else None,
+                "message": f"Killed {killed_count}/{len(sweep_vars)} sweeps",
+            }
+
+        except Exception as e:
+            logger.error(f"Error killing all sweeps: {e}")
+            return {
+                "success": False,
+                "killed_count": 0,
+                "results": {},
+                "errors": [str(e)],
+            }
+
     async def wait_for_sweep(
         self, var_name: str, timeout: Optional[float] = None
     ) -> Dict[str, Any]:

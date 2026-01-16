@@ -108,9 +108,9 @@ tools:
   measureit_kill_sweep:
     title: "Kill Sweep"
     description: |
-      Kill a running MeasureIt sweep to release resources.
+      Kill running MeasureIt sweep(s) to release resources.
 
-      UNSAFE: This tool stops a running sweep, which may leave instruments
+      UNSAFE: This tool stops running sweep(s), which may leave instruments
       in an intermediate state. Use when a sweep needs to be terminated
       due to timeout, error, or user request.
 
@@ -120,50 +120,34 @@ tools:
 
       Args:
           variable_name: Name of the sweep variable in the notebook namespace
-              (e.g., "sweep1d", "my_sweep")
+              (e.g., "sweep1d", "my_sweep"). Required when all=False.
+          all: If True, kill all sweeps in namespace. If False (default),
+              kill only the sweep specified by variable_name.
+          detailed: If False (default), return concise result;
+              if True, return full details.
 
       Returns JSON containing:
+          For single sweep (all=False):
           - success: bool - whether the kill was successful
           - sweep_name: str - name of the sweep
           - previous_state: str - state before kill
           - new_state: str - state after kill
           - error: str (if any error occurred)
 
-  measureit_wait_for_all_sweeps:
-    title: "Wait for All Sweeps"
-    description: |
-      Wait until all currently running MeasureIt sweeps finish.
-
-      AUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware
-      resources when they complete (success or error). This is NOT a read-only
-      operation. If you need to poll without killing, use measureit_get_status.
-
-      IMPORTANT: Calculate timeout based on sweep parameters before calling.
-      Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
-      Example: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.
-      If sweep duration is unknown, use a reasonable default (e.g., 300s) or
-      call measureit_get_status first to check time_remaining.
-
-      Args:
-          timeout: Maximum time to wait in seconds (REQUIRED).
-              Calculate based on sweep parameters to avoid hanging on stuck sweeps.
-          detailed: If False (default), return only sweep states;
-              if True, return full sweep information.
-
-      Returns JSON containing:
-          - sweeps: Dict of sweep info (or None if no sweeps were running)
-          - killed: True if sweeps were killed (always True on success/error)
-          - kill_reason: Explanation of why sweeps were killed
-          - error: Error message if timeout or other error occurred
-          - timed_out: True if the timeout was reached (sweeps NOT killed)
+          For all sweeps (all=True):
+          - success: bool - True if all sweeps killed successfully
+          - killed_count: int - number of sweeps killed
+          - total_sweeps: int - total sweeps found
+          - results: dict - individual results per sweep
+          - errors: list - error messages if any failed
 
   measureit_wait_for_sweep:
     title: "Wait for Sweep"
     description: |
-      Wait until the specified MeasureIt sweep finishes.
+      Wait until MeasureIt sweep(s) finish.
 
-      AUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware
-      resources when it completes (success or error). This is NOT a read-only
+      AUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware
+      resources when they complete (success or error). This is NOT a read-only
       operation. If you need to poll without killing, use measureit_get_status.
 
       IMPORTANT: Calculate timeout based on sweep parameters before calling.
@@ -173,18 +157,29 @@ tools:
       call measureit_get_status(detailed=True) first to check time_remaining.
 
       Args:
-          variable_name: Name of the sweep variable to wait for.
           timeout: Maximum time to wait in seconds (REQUIRED).
               Calculate based on sweep parameters to avoid hanging on stuck sweeps.
+          variable_name: Name of the sweep variable to wait for.
+              Required when all=False.
+          all: If True, wait for all sweeps in namespace. If False (default),
+              wait only for the sweep specified by variable_name.
           detailed: If False (default), return only sweep state;
               if True, return full sweep information.
 
       Returns JSON containing:
+          For single sweep (all=False):
           - sweep: Dict of sweep info (or None if no matching sweep was running)
           - killed: True if sweep was killed (always True on success/error)
           - kill_reason: Explanation of why sweep was killed
           - error: Error message if timeout or other error occurred
           - timed_out: True if the timeout was reached (sweep NOT killed)
+
+          For all sweeps (all=True):
+          - sweeps: Dict of sweep info (or None if no sweeps were running)
+          - killed: True if sweeps were killed (always True on success/error)
+          - kill_reason: Explanation of why sweeps were killed
+          - error: Error message if timeout or other error occurred
+          - timed_out: True if the timeout was reached (sweeps NOT killed)
 
   notebook_add_cell:
     title: "Add Cell"
@@ -278,8 +273,8 @@ tools:
           - suggestion: Hint to use wait tools if sweep was detected
 
       Note:
-          - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or
-            measureit_wait_for_all_sweeps() to wait for completion before proceeding.
+          - If sweep_detected is True, use measureit_wait_for_sweep(variable_name=name, timeout=...)
+            or measureit_wait_for_sweep(all=True, timeout=...) to wait for completion before proceeding.
 
   notebook_get_editing_cell:
     title: "Get Active Cell"

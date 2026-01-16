@@ -428,8 +428,8 @@ class NotebookUnsafeBackend(BaseBackend):
                     names = ", ".join(f"'{n}'" for n in sweep_matches)
                     combined_result["suggestion"] = (
                         f"Multiple sweeps appear to have been started ({names}). "
-                        f"Use measureit_wait_for_sweep with sweep names or "
-                        f"measureit_wait_for_all_sweeps() to wait for completion."
+                        f"Use measureit_wait_for_sweep(timeout=..., variable_name=name) or "
+                        f"measureit_wait_for_sweep(timeout=..., all=True) to wait for completion."
                     )
 
             return combined_result

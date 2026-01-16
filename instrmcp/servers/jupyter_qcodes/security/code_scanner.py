@@ -847,8 +847,8 @@ class SleepVisitor(BaseSecurityVisitor):
                 RiskLevel.CRITICAL,
                 node,
                 "NEVER use time.sleep() to wait for sweeps. "
-                "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
-                "tools to properly wait for sweep completion.",
+                "Use measureit_wait_for_sweep(timeout=..., variable_name=...) or "
+                "measureit_wait_for_sweep(timeout=..., all=True) to properly wait for sweep completion.",
             )
 
         self.generic_visit(node)
@@ -869,8 +869,8 @@ class SleepVisitor(BaseSecurityVisitor):
                         RiskLevel.HIGH,
                         node,
                         "Importing time.sleep suggests waiting for sweeps. "
-                        "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
-                        "tools instead of sleep().",
+                        "Use measureit_wait_for_sweep(timeout=..., variable_name=...) or "
+                        "measureit_wait_for_sweep(timeout=..., all=True) instead of sleep().",
                     )
                 elif alias.name == "*":
                     self.add_issue(
@@ -879,8 +879,8 @@ class SleepVisitor(BaseSecurityVisitor):
                         RiskLevel.HIGH,
                         node,
                         "Star import from time includes sleep(). "
-                        "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
-                        "tools to wait for sweep completion.",
+                        "Use measureit_wait_for_sweep(timeout=..., variable_name=...) or "
+                        "measureit_wait_for_sweep(timeout=..., all=True) to wait for sweep completion.",
                     )
         self.generic_visit(node)
 
