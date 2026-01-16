@@ -329,8 +329,38 @@ def _get_data_dir_constraint() -> Optional[Path]:
     return None
 
 
+def _safe_mtime(path: Path) -> float:
+    """Get a file's modified time, defaulting to 0 on errors."""
+    try:
+        return path.stat().st_mtime
+    except Exception:
+        return 0.0
+
+
+def _select_default_database(db_files: list[Path]) -> Optional[Path]:
+    """Choose Example_database.db if present; otherwise pick the newest file."""
+    if not db_files:
+        return None
+    example_dbs = [
+        db_file for db_file in db_files if db_file.name == "Example_database.db"
+    ]
+    if example_dbs:
+        return max(example_dbs, key=_safe_mtime)
+    return max(db_files, key=_safe_mtime)
+
+
+def _find_nested_databases(base_dir: Path) -> list[Path]:
+    """Find database files under nested Databases/ directories."""
+    try:
+        return list(base_dir.rglob("Databases/*.db"))
+    except Exception:
+        return []
+
+
 def resolve_database_path(
-    database_path: Optional[str] = None, data_dir: Optional[Path] = None
+    database_path: Optional[str] = None,
+    data_dir: Optional[Path] = None,
+    scan_nested: bool = False,
 ) -> tuple[str, dict]:
     """
     Resolve the database path using the following priority:
@@ -350,6 +380,8 @@ def resolve_database_path(
         data_dir: If set, restricts database search to this directory only
                   (no fallback to environment paths). If None, checks
                   INSTRMCP_DATA_DIR environment variable.
+        scan_nested: If True, search nested "Databases" directories when
+                     resolving a default database.
 
     Returns:
         tuple: (resolved_path, resolution_info)
@@ -383,7 +415,7 @@ def resolve_database_path(
                 abs_data_dir = data_dir.resolve()
                 if not str(abs_db_path).startswith(str(abs_data_dir)):
                     resolution_info["available_databases"] = _list_available_databases(
-                        data_dir
+                        data_dir, scan_nested=scan_nested
                     )
                     raise FileNotFoundError(
                         f"Database path '{database_path}' is outside the allowed "
@@ -402,7 +434,9 @@ def resolve_database_path(
             return str(db_path), resolution_info
         else:
             # Path doesn't exist - provide helpful error
-            resolution_info["available_databases"] = _list_available_databases(data_dir)
+            resolution_info["available_databases"] = _list_available_databases(
+                data_dir, scan_nested=scan_nested
+            )
             raise FileNotFoundError(
                 f"Database not found: {database_path}\n\n"
                 "Available databases:\n"
@@ -416,21 +450,27 @@ def resolve_database_path(
         if data_dir.exists():
             db_files = list(data_dir.glob("*.db"))
             if db_files:
-                # Use the first .db file found (or Example_database.db if present)
-                default_db = data_dir / "Example_database.db"
-                if default_db.exists():
-                    resolution_info["source"] = "data_dir_default"
-                    resolution_info["tried_path"] = str(default_db)
-                    return str(default_db), resolution_info
-                else:
-                    # Use the most recently modified .db file
-                    db_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-                    resolution_info["source"] = "data_dir_auto"
-                    resolution_info["tried_path"] = str(db_files[0])
-                    return str(db_files[0]), resolution_info
+                selected_db = _select_default_database(db_files)
+                if selected_db:
+                    if selected_db.name == "Example_database.db":
+                        resolution_info["source"] = "data_dir_default"
+                    else:
+                        resolution_info["source"] = "data_dir_auto"
+                    resolution_info["tried_path"] = str(selected_db)
+                    return str(selected_db), resolution_info
+            if scan_nested:
+                nested_db_files = _find_nested_databases(data_dir)
+                if nested_db_files:
+                    selected_db = _select_default_database(nested_db_files)
+                    if selected_db:
+                        resolution_info["source"] = "data_dir_nested"
+                        resolution_info["tried_path"] = str(selected_db)
+                        return str(selected_db), resolution_info
 
         # No database found in constrained directory
-        resolution_info["available_databases"] = _list_available_databases(data_dir)
+        resolution_info["available_databases"] = _list_available_databases(
+            data_dir, scan_nested=scan_nested
+        )
         raise FileNotFoundError(
             f"No database found yet in data directory: {data_dir}\n\n"
             "Note: Database resolution is constrained to this directory "
@@ -454,6 +494,23 @@ def resolve_database_path(
         # MeasureIt not available or get_path failed
         pass
 
+    # Optional: Scan nested Databases directories under MeasureIt data dir
+    if scan_nested:
+        try:
+            from measureit import get_data_dir
+
+            data_root = Path(get_data_dir())
+            if data_root.exists():
+                nested_db_files = _find_nested_databases(data_root)
+                if nested_db_files:
+                    selected_db = _select_default_database(nested_db_files)
+                    if selected_db:
+                        resolution_info["source"] = "measureit_nested"
+                        resolution_info["tried_path"] = str(selected_db)
+                        return str(selected_db), resolution_info
+        except Exception:
+            pass
+
     # Case 3: Fall back to QCodes config (only if not constrained)
     qcodes_db = Path(qc.config.core.db_location)
     resolution_info["tried_path"] = str(qcodes_db)
@@ -463,7 +520,9 @@ def resolve_database_path(
         return str(qcodes_db), resolution_info
 
     # No database found - provide comprehensive error
-    resolution_info["available_databases"] = _list_available_databases()
+    resolution_info["available_databases"] = _list_available_databases(
+        scan_nested=scan_nested
+    )
 
     # Build error message with tried paths
     tried_paths = []
@@ -486,7 +545,10 @@ def resolve_database_path(
     )
 
 
-def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
+def _list_available_databases(
+    data_dir: Optional[Path] = None,
+    scan_nested: bool = False,
+) -> list[dict]:
     """
     List available databases by searching common locations.
 
@@ -496,36 +558,43 @@ def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
     Args:
         data_dir: If set, restricts search to this directory only.
                   If None, uses standard MeasureIt/QCodes locations.
+        scan_nested: If True, search nested "Databases" directories.
 
     Returns:
         List of dicts with 'name', 'path', 'source', 'size_mb', 'accessible'
     """
     databases = []
+    seen_paths = set()
+
+    def add_database(db_file: Path, source: str) -> None:
+        path_str = str(db_file)
+        if path_str in seen_paths:
+            return
+        try:
+            size_mb = round(db_file.stat().st_size / 1024 / 1024, 2)
+            accessible = True
+        except Exception:
+            size_mb = 0
+            accessible = False
+        databases.append(
+            {
+                "name": db_file.name,
+                "path": path_str,
+                "source": source,
+                "size_mb": size_mb,
+                "accessible": accessible,
+            }
+        )
+        seen_paths.add(path_str)
 
     # If constrained to data_dir, only search there
     if data_dir is not None:
         if data_dir.exists():
             for db_file in data_dir.glob("*.db"):
-                try:
-                    databases.append(
-                        {
-                            "name": db_file.name,
-                            "path": str(db_file),
-                            "source": "data_dir",
-                            "size_mb": round(db_file.stat().st_size / 1024 / 1024, 2),
-                            "accessible": True,
-                        }
-                    )
-                except Exception:
-                    databases.append(
-                        {
-                            "name": db_file.name,
-                            "path": str(db_file),
-                            "source": "data_dir",
-                            "size_mb": 0,
-                            "accessible": False,
-                        }
-                    )
+                add_database(db_file, "data_dir")
+            if scan_nested:
+                for db_file in _find_nested_databases(data_dir):
+                    add_database(db_file, "data_dir_nested")
         return databases
 
     # Standard search: Check MeasureIt databases directory
@@ -536,15 +605,18 @@ def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
 
         if db_dir.exists():
             for db_file in db_dir.glob("*.db"):
-                databases.append(
-                    {
-                        "name": db_file.name,
-                        "path": str(db_file),
-                        "source": "measureit",
-                        "size_mb": round(db_file.stat().st_size / 1024 / 1024, 2),
-                        "accessible": True,
-                    }
-                )
+                add_database(db_file, "measureit")
+
+        if scan_nested:
+            try:
+                from measureit import get_data_dir
+
+                data_root = Path(get_data_dir())
+                if data_root.exists():
+                    for db_file in _find_nested_databases(data_root):
+                        add_database(db_file, "measureit_nested")
+            except Exception:
+                pass
     except (ImportError, ValueError, Exception):
         pass
 
@@ -552,15 +624,7 @@ def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
     try:
         qcodes_db = Path(qc.config.core.db_location)
         if qcodes_db.exists():
-            databases.append(
-                {
-                    "name": qcodes_db.name,
-                    "path": str(qcodes_db),
-                    "source": "qcodes_config",
-                    "size_mb": round(qcodes_db.stat().st_size / 1024 / 1024, 2),
-                    "accessible": True,
-                }
-            )
+            add_database(qcodes_db, "qcodes_config")
     except Exception:
         pass
 
@@ -594,7 +658,10 @@ def _format_run_ids_concise(run_ids: list[int]) -> str:
     return f"{run_ids_sorted[0]}-{run_ids_sorted[-1]}({len(run_ids_sorted)})"
 
 
-def list_experiments(database_path: Optional[str] = None) -> str:
+def list_experiments(
+    database_path: Optional[str] = None,
+    scan_nested: bool = False,
+) -> str:
     """
     List all experiments in the specified QCodes database.
 
@@ -604,6 +671,8 @@ def list_experiments(database_path: Optional[str] = None) -> str:
 
     Args:
         database_path: Path to database file. If None, uses MeasureIt default or QCodes config.
+        scan_nested: If True, also search nested "Databases" directories when
+            resolving the default database path.
 
     Returns:
         JSON string containing experiment information including ID, name,
@@ -616,7 +685,10 @@ def list_experiments(database_path: Optional[str] = None) -> str:
 
     try:
         # Resolve database path
-        resolved_path, resolution_info = resolve_database_path(database_path)
+        resolved_path, resolution_info = resolve_database_path(
+            database_path,
+            scan_nested=scan_nested,
+        )
     except FileNotFoundError as e:
         # Database path not found - return error with details
         return json.dumps(

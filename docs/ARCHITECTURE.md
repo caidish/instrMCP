@@ -104,12 +104,12 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### Database Integration Tools (`database/*` - requires `%mcp_option database`)
 
-- `database/list_experiments(database_path)` - List all experiments in the specified QCodes database
+- `database/list_experiments(database_path, scan_nested)` - List all experiments in the specified QCodes database
 - `database/get_dataset_info(id, database_path, code_suggestion)` - Get detailed information about a specific dataset. If `code_suggestion=True`, generates sweep-type-aware Python code for loading the data.
 - `database/get_database_stats(database_path)` - Get database statistics and health information
 - `database/list_available(detailed)` - List all available QCodes databases across common locations
 
-**Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration.
+**Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration. `database_list_experiments` also accepts `scan_nested` to search nested `Databases` subdirectories under the MeasureIt data dir.
 
 **Code Suggestion**: When `code_suggestion=True`, the `get_dataset_info` tool automatically detects MeasureIt sweep types (Sweep0D, Sweep1D, Sweep2D, SimulSweep) from metadata and generates appropriate loading code:
 - **Sweep2D parent groups**: Multiple Sweep2D runs in the same experiment are grouped together with code to load and stack all 2D data

@@ -444,7 +444,11 @@ class NotebookUnsafeBackend(BaseBackend):
             }
 
     async def add_new_cell(
-        self, cell_type: str = "code", position: str = "below", content: str = ""
+        self,
+        cell_type: str = "code",
+        position: str = "below",
+        content: str = "",
+        timeout_s: float = 2.0,
     ) -> Dict[str, Any]:
         """Add a new cell in the notebook.
 
@@ -453,15 +457,18 @@ class NotebookUnsafeBackend(BaseBackend):
 
         Args:
             cell_type: Type of cell to create ("code", "markdown", "raw")
-            position: Position relative to active cell ("above", "below")
+            position: Position relative to active cell ("above", "below", "end")
             content: Initial content for the new cell
+            timeout_s: How long to wait for frontend response (default 2.0s)
 
         Returns:
             Dictionary with creation status and response details
         """
         try:
             # Send add cell request to frontend
-            result = self.bridge.add_new_cell(cell_type, position, content)
+            result = self.bridge.add_new_cell(
+                cell_type, position, content, timeout_s=timeout_s
+            )
 
             # Add metadata
             result.update(

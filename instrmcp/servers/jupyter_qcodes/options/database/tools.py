@@ -216,10 +216,14 @@ d = ds.get_parameter_data()
         async def list_experiments(
             database_path: Optional[str] = None,
             detailed: bool = False,
+            scan_nested: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
-                result_str = self.db.list_experiments(database_path=database_path)
+                result_str = self.db.list_experiments(
+                    database_path=database_path,
+                    scan_nested=scan_nested,
+                )
                 result = json.loads(result_str)
 
                 # Detect sweep groups (Sweep2D parent, SweepQueue batches)

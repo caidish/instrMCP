@@ -189,10 +189,16 @@ class QCodesReadOnlyTools:
         return await self._notebook_unsafe.execute_editing_cell(timeout)
 
     async def add_new_cell(
-        self, cell_type: str = "code", position: str = "below", content: str = ""
+        self,
+        cell_type: str = "code",
+        position: str = "below",
+        content: str = "",
+        timeout_s: float = 2.0,
     ) -> Dict[str, Any]:
         """Add a new cell in the notebook."""
-        return await self._notebook_unsafe.add_new_cell(cell_type, position, content)
+        return await self._notebook_unsafe.add_new_cell(
+            cell_type, position, content, timeout_s
+        )
 
     async def delete_editing_cell(self) -> Dict[str, Any]:
         """Delete the currently editing cell."""

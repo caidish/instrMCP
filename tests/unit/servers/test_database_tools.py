@@ -102,7 +102,10 @@ class TestDatabaseToolRegistrar:
         assert len(response_data["experiments"]) == 1
         assert response_data["experiments"][0]["name"] == "test_exp"
         assert "hint" in response_data
-        mock_db_integration.list_experiments.assert_called_once_with(database_path=None)
+        mock_db_integration.list_experiments.assert_called_once_with(
+            database_path=None,
+            scan_nested=False,
+        )
 
     @pytest.mark.asyncio
     async def test_list_experiments_custom_path(
@@ -118,7 +121,8 @@ class TestDatabaseToolRegistrar:
         result = await list_exp_func(database_path=custom_path)
 
         mock_db_integration.list_experiments.assert_called_once_with(
-            database_path=custom_path
+            database_path=custom_path,
+            scan_nested=False,
         )
 
     @pytest.mark.asyncio

@@ -448,6 +448,7 @@ class UnsafeToolRegistrar:
             cell_type: str = "code",
             position: str = "below",
             content: str = "",
+            timeout_s: float = 2.0,
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
@@ -458,7 +459,9 @@ class UnsafeToolRegistrar:
                     return rejection
 
             try:
-                result = await self.tools.add_new_cell(cell_type, position, content)
+                result = await self.tools.add_new_cell(
+                    cell_type, position, content, timeout_s
+                )
 
                 # Apply concise mode filtering
                 if not detailed:

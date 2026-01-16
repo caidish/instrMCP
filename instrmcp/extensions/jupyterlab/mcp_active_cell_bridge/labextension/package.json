@@ -63,7 +63,7 @@
   "jupyterlab": {
     "extension": true,
     "_build": {
-      "load": "static/remoteEntry.401ef257014f461950d8.js",
+      "load": "static/remoteEntry.f86250077e2d0ff34d62.js",
       "extension": "./extension",
       "style": "./style"
     }

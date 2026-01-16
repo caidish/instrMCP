@@ -290,6 +290,23 @@ class TestResolveDatabasePath:
         assert resolution_info["source"] == "explicit"
         assert resolution_info["tried_path"] == explicit_path
 
+    def test_resolve_nested_databases_in_data_dir(self, tmp_path):
+        """Test nested Databases directories are used when scan_nested is enabled."""
+        nested_dir = tmp_path / "projectA" / "Databases"
+        nested_dir.mkdir(parents=True)
+        db_file = nested_dir / "nested.db"
+        db_file.touch()
+
+        resolved_path, resolution_info = resolve_database_path(
+            None,
+            data_dir=tmp_path,
+            scan_nested=True,
+        )
+
+        assert resolved_path == str(db_file)
+        assert resolution_info["source"] == "data_dir_nested"
+        assert resolution_info["tried_path"] == str(db_file)
+
     @pytest.mark.skipif(not MEASUREIT_AVAILABLE, reason="MeasureIt not available")
     def test_resolve_measureit_home_path(self, monkeypatch, temp_dir):
         """Test MeasureIt get_path() is used."""

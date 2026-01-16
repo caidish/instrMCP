@@ -278,6 +278,8 @@ List all experiments in the QCodes database.
 **Parameters**:
 
 - ``database_path`` (str, optional): Path to database file. Uses default if not provided.
+- ``scan_nested`` (bool, optional): If true, also search nested ``Databases`` subdirectories
+  when resolving the default database path.
 
 **Returns**: JSON array of experiments with IDs, names, sample info, timestamps
 

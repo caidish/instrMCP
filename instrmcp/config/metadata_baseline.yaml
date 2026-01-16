@@ -49,6 +49,8 @@ tools:
 
       Args:
           database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          scan_nested: If true, also scan nested Databases/ subdirectories under the MeasureIt data dir
+              (or INSTRMCP_DATA_DIR) when database_path is not provided.
           detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata
               (experiment_id, name, sample_name, start/end time, run_ids summary like "6-16(11)", (*) means total counts),
               and sweep_groups when detected.
@@ -196,6 +198,7 @@ tools:
           cell_type: Type of cell to create ("code", "markdown", "raw") - default: "code"
           position: Where to add cell ("above", "below", "end") - default: "below"
           content: Initial content for the new cell - default: empty string
+          timeout_s: How long to wait for frontend response in seconds - default: 2.0
           detailed: If False (default), return just success; if True, return full info
 
   notebook_apply_patch:

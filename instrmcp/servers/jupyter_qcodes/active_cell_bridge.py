@@ -622,7 +622,8 @@ def add_new_cell(
     """
     Add a new cell relative to the currently active cell in JupyterLab frontend.
 
-    FIX: Now sends to only the current kernel's comm instead of all comms.
+    FIX: Now sends to only the current kernel's comm instead of all comms and
+    waits for the frontend response to report actual success/failure.
 
     Args:
         cell_type: Type of cell to create ("code", "markdown", "raw")
@@ -654,13 +655,14 @@ def add_new_cell(
             "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}",
         }
 
-    result = _send_to_kernel(
+    result = _send_and_wait(
         {
             "type": "add_cell",
             "cell_type": cell_type,
             "position": position,
             "content": content,
-        }
+        },
+        timeout_s=timeout_s,
     )
 
     if result["success"]:

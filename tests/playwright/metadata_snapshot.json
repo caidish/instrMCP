@@ -93,9 +93,12 @@
         },
         "detailed": {
           "description": null
+        },
+        "scan_nested": {
+          "description": null
         }
       },
-      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
+      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    scan_nested: If true, also scan nested Databases/ subdirectories under the MeasureIt data dir\n        (or INSTRMCP_DATA_DIR) when database_path is not provided.\n    detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
       "title": "List Experiments"
     },
     "mcp_get_resource": {
@@ -170,9 +173,12 @@
         },
         "position": {
           "description": null
+        },
+        "timeout_s": {
+          "description": null
         }
       },
-      "description": "Add a new cell in the notebook.\n\nUNSAFE: This tool adds new cells to the notebook. Only available in unsafe mode.\nThe cell will be created relative to the currently active cell.\n\nArgs:\n    cell_type: Type of cell to create (\"code\", \"markdown\", \"raw\") - default: \"code\"\n    position: Where to add cell (\"above\", \"below\", \"end\") - default: \"below\"\n    content: Initial content for the new cell - default: empty string\n    detailed: If False (default), return just success; if True, return full info",
+      "description": "Add a new cell in the notebook.\n\nUNSAFE: This tool adds new cells to the notebook. Only available in unsafe mode.\nThe cell will be created relative to the currently active cell.\n\nArgs:\n    cell_type: Type of cell to create (\"code\", \"markdown\", \"raw\") - default: \"code\"\n    position: Where to add cell (\"above\", \"below\", \"end\") - default: \"below\"\n    content: Initial content for the new cell - default: empty string\n    timeout_s: How long to wait for frontend response in seconds - default: 2.0\n    detailed: If False (default), return just success; if True, return full info",
       "title": "Add Cell"
     },
     "notebook_apply_patch": {
