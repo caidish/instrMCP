@@ -798,6 +798,93 @@ class ThreadingVisitor(BaseSecurityVisitor):
         self.generic_visit(node)
 
 
+class SleepVisitor(BaseSecurityVisitor):
+    """Detect time.sleep() usage which blocks execution.
+
+    Using time.sleep() to wait for sweeps is problematic because:
+    1. It blocks the Jupyter kernel, making it unresponsive
+    2. It doesn't know when the sweep actually completes
+    3. Fixed sleep times are either too short (sweep incomplete) or too long (wasted time)
+
+    CORRECT usage:
+        sweep.start()  # Non-blocking, starts the sweep
+        # Use measureit_wait_for_sweep() tool to wait for completion
+
+    WRONG usage:
+        sweep.start()
+        time.sleep(60)  # Arbitrary wait, doesn't know actual completion
+    """
+
+    def visit_Call(self, node: ast.Call):
+        """Detect time.sleep() calls."""
+        obj, method = self.get_call_name(node)
+
+        if method is None:
+            self.generic_visit(node)
+            return
+
+        is_time_sleep = False
+
+        # Resolve method alias first to catch `from time import sleep as wait`
+        resolved_method = self.alias_tracker.resolve(method)
+
+        # Check if method is 'sleep' or resolves to 'time.sleep'
+        if method == "sleep" or resolved_method == "time.sleep":
+            if obj:
+                # time.sleep() or t.sleep() where t is aliased to time
+                resolved_obj = self.alias_tracker.resolve(obj)
+                if "time" in resolved_obj:
+                    is_time_sleep = True
+            else:
+                # Direct sleep() call - could be from time import sleep (or aliased)
+                if resolved_method == "time.sleep" or "time.sleep" in resolved_method:
+                    is_time_sleep = True
+
+        if is_time_sleep:
+            self.add_issue(
+                "SLEEP001",
+                "time.sleep() usage detected - use wait_for_sweep tool instead",
+                RiskLevel.CRITICAL,
+                node,
+                "NEVER use time.sleep() to wait for sweeps. "
+                "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
+                "tools to properly wait for sweep completion.",
+            )
+
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import):
+        """Warn on time module import when sleep is used."""
+        # We don't block the import itself, only the sleep() call
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        """Warn on from time import sleep."""
+        if node.module == "time":
+            for alias in node.names:
+                if alias.name == "sleep":
+                    self.add_issue(
+                        "SLEEP002",
+                        "sleep imported from time module - use wait_for_sweep tool instead",
+                        RiskLevel.HIGH,
+                        node,
+                        "Importing time.sleep suggests waiting for sweeps. "
+                        "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
+                        "tools instead of sleep().",
+                    )
+                elif alias.name == "*":
+                    self.add_issue(
+                        "SLEEP003",
+                        "Star import from time - may include sleep()",
+                        RiskLevel.HIGH,
+                        node,
+                        "Star import from time includes sleep(). "
+                        "Use measureit_wait_for_sweep() or measureit_wait_for_all_sweeps() "
+                        "tools to wait for sweep completion.",
+                    )
+        self.generic_visit(node)
+
+
 class PickleVisitor(BaseSecurityVisitor):
     """Detect pickle deserialization (arbitrary code execution risk)."""
 
@@ -939,6 +1026,7 @@ class CodeScanner:
             PersistenceVisitor(alias_tracker),
             PickleVisitor(alias_tracker),
             ThreadingVisitor(alias_tracker),
+            SleepVisitor(alias_tracker),
         ]
 
         for visitor in visitors:

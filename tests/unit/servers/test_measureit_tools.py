@@ -138,13 +138,13 @@ class TestMeasureItToolRegistrar:
         registrar.register_all()
         wait_tool = mock_mcp_server._tools["measureit_wait_for_all_sweeps"]
         # Use detailed=True to get full response with sweeps list
-        result = await wait_tool(detailed=True)
+        result = await wait_tool(timeout=30.0, detailed=True)
 
         assert isinstance(result, list)
         assert isinstance(result[0], TextContent)
         payload = json.loads(result[0].text)
         assert payload["sweeps"] == []
-        mock_tools.wait_for_all_sweeps.assert_called_once()
+        mock_tools.wait_for_all_sweeps.assert_called_once_with(timeout=30.0)
 
     @pytest.mark.asyncio
     async def test_wait_for_sweep_tool(self, registrar, mock_tools, mock_mcp_server):
@@ -153,13 +153,13 @@ class TestMeasureItToolRegistrar:
 
         registrar.register_all()
         wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
-        result = await wait_tool("s1")
+        result = await wait_tool("s1", timeout=30.0)
 
         assert isinstance(result, list)
         assert isinstance(result[0], TextContent)
         payload = json.loads(result[0].text)
         assert payload["sweep"]["variable_name"] == "s1"
-        mock_tools.wait_for_sweep.assert_called_once_with("s1", timeout=None)
+        mock_tools.wait_for_sweep.assert_called_once_with("s1", timeout=30.0)
 
     @pytest.mark.asyncio
     async def test_get_status_with_multiple_sweeps(

@@ -438,6 +438,7 @@ d = ds.get_parameter_data()
         )
         async def get_database_stats(
             database_path: Optional[str] = None,
+            detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:

@@ -227,6 +227,7 @@ class NotebookToolRegistrar:
         )
         async def list_variables(
             type_filter: Optional[str] = None,
+            detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
@@ -892,7 +893,7 @@ class NotebookToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def server_status() -> List[TextContent]:
+        async def server_status(detailed: bool = False) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
                 # Get list of registered tools from FastMCP

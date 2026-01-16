@@ -145,8 +145,8 @@ tools:
       call measureit_get_status first to check time_remaining.
 
       Args:
-          timeout: Maximum time to wait in seconds. If None, wait indefinitely.
-              STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
+          timeout: Maximum time to wait in seconds (REQUIRED).
+              Calculate based on sweep parameters to avoid hanging on stuck sweeps.
           detailed: If False (default), return only sweep states;
               if True, return full sweep information.
 
@@ -174,8 +174,8 @@ tools:
 
       Args:
           variable_name: Name of the sweep variable to wait for.
-          timeout: Maximum time to wait in seconds. If None, wait indefinitely.
-              STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
+          timeout: Maximum time to wait in seconds (REQUIRED).
+              Calculate based on sweep parameters to avoid hanging on stuck sweeps.
           detailed: If False (default), return only sweep state;
               if True, return full sweep information.
 

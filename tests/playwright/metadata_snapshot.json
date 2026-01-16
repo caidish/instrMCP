@@ -54,6 +54,9 @@
       "arguments": {
         "database_path": {
           "description": null
+        },
+        "detailed": {
+          "description": null
         }
       },
       "description": "Check if Database exists. Get database statistics and health information.\n\nArgs:\n    database_path: Optional path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.\n\nReturns JSON containing database statistics including full path, size,\nexperiment count, dataset count, measurement_types, last modified time.",
@@ -126,6 +129,9 @@
     },
     "measureit_kill_sweep": {
       "arguments": {
+        "detailed": {
+          "description": null
+        },
         "variable_name": {
           "description": null
         }
@@ -142,7 +148,7 @@
           "description": null
         }
       },
-      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
+      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
       "title": "Wait for All Sweeps"
     },
     "measureit_wait_for_sweep": {
@@ -157,7 +163,7 @@
           "description": null
         }
       },
-      "description": "Wait until the specified MeasureIt sweep finishes.\n\nAUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware\nresources when it completes (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status(detailed=True) first to check time_remaining.\n\nArgs:\n    variable_name: Name of the sweep variable to wait for.\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep state;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweep: Dict of sweep info (or None if no matching sweep was running)\n    - killed: True if sweep was killed (always True on success/error)\n    - kill_reason: Explanation of why sweep was killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweep NOT killed)",
+      "description": "Wait until the specified MeasureIt sweep finishes.\n\nAUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware\nresources when it completes (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status(detailed=True) first to check time_remaining.\n\nArgs:\n    variable_name: Name of the sweep variable to wait for.\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep state;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweep: Dict of sweep info (or None if no matching sweep was running)\n    - killed: True if sweep was killed (always True on success/error)\n    - kill_reason: Explanation of why sweep was killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweep NOT killed)",
       "title": "Wait for Sweep"
     },
     "notebook_add_cell": {
@@ -288,6 +294,9 @@
     },
     "notebook_list_variables": {
       "arguments": {
+        "detailed": {
+          "description": null
+        },
         "type_filter": {
           "description": null
         }
@@ -308,7 +317,11 @@
       "title": "Move Cursor"
     },
     "notebook_server_status": {
-      "arguments": {},
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
       "description": "Get server status and configuration.",
       "title": "Server Status"
     },

@@ -184,7 +184,7 @@ class MeasureItToolRegistrar:
             },
         )
         async def wait_for_all_sweeps(
-            timeout: float | None = None, detailed: bool = False
+            timeout: float, detailed: bool = False
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
@@ -220,7 +220,7 @@ class MeasureItToolRegistrar:
         )
         async def wait_for_sweep(
             variable_name: str,
-            timeout: float | None = None,
+            timeout: float,
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
@@ -256,7 +256,9 @@ class MeasureItToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def kill_sweep(variable_name: str) -> List[TextContent]:
+        async def kill_sweep(
+            variable_name: str, detailed: bool = False
+        ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.kill_sweep(variable_name)
