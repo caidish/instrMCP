@@ -432,10 +432,9 @@ def resolve_database_path(
         # No database found in constrained directory
         resolution_info["available_databases"] = _list_available_databases(data_dir)
         raise FileNotFoundError(
-            f"No database found in data directory: {data_dir}\n\n"
+            f"No database found yet in data directory: {data_dir}\n\n"
             "Note: Database resolution is constrained to this directory "
-            "(INSTRMCP_DATA_DIR is set).\n"
-            "Environment fallback paths (MeasureIt, QCodes config) are disabled.\n\n"
+            "(INSTRMCP_DATA_DIR is set).\n\n"
             "Available databases:\n"
             + _format_available_databases(resolution_info["available_databases"])
         )
@@ -479,12 +478,11 @@ def resolve_database_path(
     tried_paths.append(f"  2. QCodes config: {qcodes_db}")
 
     raise FileNotFoundError(
-        "No database found. Tried:\n"
+        "No database found yet. Searched:\n"
         + "\n".join(tried_paths)
         + "\n\n"
         + "Available databases:\n"
         + _format_available_databases(resolution_info["available_databases"])
-        + "\n\nTip: Set MeasureItHome environment variable or provide explicit path"
     )
 
 
@@ -572,7 +570,11 @@ def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
 def _format_available_databases(databases: list[dict]) -> str:
     """Format database list for error messages."""
     if not databases:
-        return "  (none found)"
+        return (
+            "  (none found yet)\n\n"
+            "  Tip: Running an experiment will automatically create a database.\n"
+            "  See the sweep code template for examples."
+        )
 
     lines = []
     for db in databases:
