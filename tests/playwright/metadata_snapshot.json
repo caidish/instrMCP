@@ -5,23 +5,23 @@
       "name": "available_instruments"
     },
     "resource://database_access0d_template": {
-      "description": "Load Sweep0D time-based data from QCodes database",
+      "description": "Code Template: Load Sweep0D time-based data from QCodes database",
       "name": "Database Access Sweep0D"
     },
     "resource://database_access1d_template": {
-      "description": "Load Sweep1D data from QCodes database",
+      "description": "Code Template: Load Sweep1D data from QCodes database",
       "name": "Database Access Sweep1D"
     },
     "resource://database_access2d_template": {
-      "description": "Load Sweep2D data from QCodes database (single run or parent group)",
+      "description": "Code Template: Load Sweep2D data from QCodes database (single run or parent group)",
       "name": "Database Access Sweep2D"
     },
     "resource://database_access_simulsweep_template": {
-      "description": "Load SimulSweep data from QCodes database",
+      "description": "Code Template: Load SimulSweep data from QCodes database",
       "name": "Database Access SimulSweep"
     },
     "resource://database_access_sweepqueue_template": {
-      "description": "Load SweepQueue batch data from QCodes database",
+      "description": "Code Template: Load SweepQueue batch data from QCodes database",
       "name": "Database Access SweepQueue"
     },
     "resource://database_config": {
@@ -29,7 +29,7 @@
       "name": "database_config"
     },
     "resource://measureit_code_examples": {
-      "description": "Complete collection of ALL MeasureIt patterns in structured format",
+      "description": "Complete collection of measureit code and resource link",
       "name": "MeasureIt Code Examples"
     },
     "resource://measureit_common_patterns": {
@@ -72,7 +72,7 @@
           "description": null
         }
       },
-      "description": "Get database statistics and health information.\n\nArgs:\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n\nReturns JSON containing database statistics including path, size,\nexperiment count, dataset count, and last modified time.",
+      "description": "Check if Database exists. Get database statistics and health information.\n\nArgs:\n    database_path: Optional path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.\n\nReturns JSON containing database statistics including full path, size,\nexperiment count, dataset count, measurement_types, last modified time.",
       "title": "Database Statistics"
     },
     "database_get_dataset_info": {
@@ -90,7 +90,7 @@
           "description": null
         }
       },
-      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load (e.g., load_by_id(2))\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n    detailed: If False (default), return concise summary; if True, return full info\n    code_suggestion: If True, include Python code example for loading the dataset.\n        In unsafe/dangerous mode, the code is automatically added to a new cell\n        and executed. In safe mode, the code is returned as a suggestion.",
+      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load (e.g., load_by_id(2))\n    database_path: Database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: If `false` (default), return concise summary; if `true`, return full info\n    code_suggestion: If true, include dataset-loading code; unsafe/dangerous mode auto-inserts+executes, safe returns a suggestion.",
       "title": "Get Dataset Info"
     },
     "database_list_available": {
@@ -99,7 +99,7 @@
           "description": null
         }
       },
-      "description": "List all available QCodes databases.\n\nSearches common locations including MeasureIt databases directory\nand QCodes configuration paths.\n\nArgs:\n    detailed: If False (default), return only database names and paths;\n        if True, return full info including size, source, experiment count.\n\nReturns JSON containing available databases.",
+      "description": "List all available QCodes databases.\n\nSearches common locations including MeasureIt databases directory\nand QCodes configuration paths.\n\nArgs:\n    detailed: If False (default), return only database names and paths;\n        if True, also return measureit sweep and qcodes default config.",
       "title": "List Databases"
     },
     "database_list_experiments": {
@@ -111,7 +111,7 @@
           "description": null
         }
       },
-      "description": "List all experiments in the specified QCodes database.\n\nArgs:\n    database_path: Path to database file. If None, uses MeasureIt\n        default or QCodes config.\n    detailed: If False (default), return concise summary; if True, return full info\n\nReturns JSON containing experiment information including ID, name,\nsample name, and format string for each experiment.",
+      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
       "title": "List Experiments"
     },
     "mcp_get_resource": {
@@ -155,7 +155,7 @@
           "description": null
         }
       },
-      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points \u00d7 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
+      "description": "Wait until all currently running MeasureIt sweeps finish.\n\nAUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware\nresources when they complete (success or error). This is NOT a read-only\noperation. If you need to poll without killing, use measureit_get_status.\n\nIMPORTANT: Calculate timeout based on sweep parameters before calling.\nFormula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin\nExample: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.\nIf sweep duration is unknown, use a reasonable default (e.g., 300s) or\ncall measureit_get_status first to check time_remaining.\n\nArgs:\n    timeout: Maximum time to wait in seconds. If None, wait indefinitely.\n        STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.\n    detailed: If False (default), return only sweep states;\n        if True, return full sweep information.\n\nReturns JSON containing:\n    - sweeps: Dict of sweep info (or None if no sweeps were running)\n    - killed: True if sweeps were killed (always True on success/error)\n    - kill_reason: Explanation of why sweeps were killed\n    - error: Error message if timeout or other error occurred\n    - timed_out: True if the timeout was reached (sweeps NOT killed)",
       "title": "Wait for All Sweeps"
     },
     "measureit_wait_for_sweep": {

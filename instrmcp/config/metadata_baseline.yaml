@@ -11,14 +11,13 @@ tools:
   database_get_database_stats:
     title: "Database Statistics"
     description: |
-      Get database statistics and health information.
+      Check if Database exists. Get database statistics and health information.
 
       Args:
-          database_path: Path to database file. If None, uses MeasureIt
-              default or QCodes config.
+          database_path: Optional path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.
 
-      Returns JSON containing database statistics including path, size,
-      experiment count, dataset count, and last modified time.
+      Returns JSON containing database statistics including full path, size,
+      experiment count, dataset count, measurement_types, last modified time.
 
   database_get_dataset_info:
     title: "Get Dataset Info"
@@ -27,12 +26,9 @@ tools:
 
       Args:
           id: Dataset run ID to load (e.g., load_by_id(2))
-          database_path: Path to database file. If None, uses MeasureIt
-              default or QCodes config.
-          detailed: If False (default), return concise summary; if True, return full info
-          code_suggestion: If True, include Python code example for loading the dataset.
-              In unsafe/dangerous mode, the code is automatically added to a new cell
-              and executed. In safe mode, the code is returned as a suggestion.
+          database_path: Database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          detailed: If `false` (default), return concise summary; if `true`, return full info
+          code_suggestion: If true, include dataset-loading code; unsafe/dangerous mode auto-inserts+executes, safe returns a suggestion.
 
   database_list_available:
     title: "List Databases"
@@ -44,22 +40,19 @@ tools:
 
       Args:
           detailed: If False (default), return only database names and paths;
-              if True, return full info including size, source, experiment count.
-
-      Returns JSON containing available databases.
+              if True, also return measureit sweep and qcodes default config.
 
   database_list_experiments:
     title: "List Experiments"
     description: |
-      List all experiments in the specified QCodes database.
+      List all experiments in the specified QCoDeS database.
 
       Args:
-          database_path: Path to database file. If None, uses MeasureIt
-              default or QCodes config.
-          detailed: If False (default), return concise summary; if True, return full info
+          database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata
+              (experiment_id, name, sample_name, start/end time, run_ids summary like "6-16(11)", (*) means total counts),
+              and sweep_groups when detected.
 
-      Returns JSON containing experiment information including ID, name,
-      sample name, and format string for each experiment.
 
   mcp_get_resource:
     title: "Get MCP Resource"
@@ -145,7 +138,7 @@ tools:
 
       IMPORTANT: Calculate timeout based on sweep parameters before calling.
       Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
-      Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
+      Example: 100 points * 0.1s delay + 10s ramp + 30s margin = 50s timeout.
       If sweep duration is unknown, use a reasonable default (e.g., 300s) or
       call measureit_get_status first to check time_remaining.
 
@@ -476,25 +469,25 @@ resource_templates:
 
   "resource://measureit_code_examples":
     name: "MeasureIt Code Examples"
-    description: "Complete collection of ALL MeasureIt patterns in structured format"
+    description: "Complete collection of measureit code and resource link"
 
   # Data access templates (for loading saved data from database)
   "resource://database_access0d_template":
     name: "Database Access Sweep0D"
-    description: "Load Sweep0D time-based data from QCodes database"
+    description: "Code Template: Load Sweep0D time-based data from QCodes database"
 
   "resource://database_access1d_template":
     name: "Database Access Sweep1D"
-    description: "Load Sweep1D data from QCodes database"
+    description: "Code Template: Load Sweep1D data from QCodes database"
 
   "resource://database_access2d_template":
     name: "Database Access Sweep2D"
-    description: "Load Sweep2D data from QCodes database (single run or parent group)"
+    description: "Code Template: Load Sweep2D data from QCodes database (single run or parent group)"
 
   "resource://database_access_simulsweep_template":
     name: "Database Access SimulSweep"
-    description: "Load SimulSweep data from QCodes database"
+    description: "Code Template: Load SimulSweep data from QCodes database"
 
   "resource://database_access_sweepqueue_template":
     name: "Database Access SweepQueue"
-    description: "Load SweepQueue batch data from QCodes database"
+    description: "Code Template: Load SweepQueue batch data from QCodes database"

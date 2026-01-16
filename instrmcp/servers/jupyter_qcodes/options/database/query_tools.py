@@ -15,22 +15,18 @@ Thread Safety Fix:
 import json
 import re
 import sqlite3
-import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any, Dict, List
 
 try:
-    from qcodes.dataset import experiments, load_by_id
+    from qcodes.dataset import experiments
     import qcodes as qc
 
     QCODES_AVAILABLE = True
 except ImportError:
     QCODES_AVAILABLE = False
-
-# Lock for thread-safe access to QCoDeS config
-_config_lock = threading.Lock()
 
 # Regex pattern for valid SQLite table names (alphanumeric and underscore only)
 _VALID_TABLE_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_-]*$"
@@ -586,6 +582,16 @@ def _format_available_databases(databases: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_run_ids_concise(run_ids: list[int]) -> str:
+    """Format run IDs as a concise string (e.g., 1,2 or 6-16(11))."""
+    if not run_ids:
+        return ""
+    run_ids_sorted = sorted(run_ids)
+    if len(run_ids_sorted) <= 5:
+        return ",".join(str(r) for r in run_ids_sorted)
+    return f"{run_ids_sorted[0]}-{run_ids_sorted[-1]}({len(run_ids_sorted)})"
+
+
 def list_experiments(database_path: Optional[str] = None) -> str:
     """
     List all experiments in the specified QCodes database.
@@ -637,9 +643,7 @@ def list_experiments(database_path: Optional[str] = None) -> str:
                 "sample_name": exp["sample_name"],
                 "start_time": exp.get("start_time"),
                 "end_time": exp.get("end_time"),
-                "run_ids": sorted(run_ids),
-                "dataset_count": len(run_ids),
-                "format_string": exp.get("format_string"),
+                "run_ids": _format_run_ids_concise(run_ids),
             }
             result["experiments"].append(exp_info)
 
@@ -656,9 +660,8 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
     """
     Get detailed information about a specific dataset.
 
-    Uses direct SQLite queries for basic info to avoid thread-safety issues.
-    Falls back to QCoDeS API (with lock) only for parameter data retrieval
-    which requires the full dataset object.
+    Uses direct SQLite queries for basic info and metadata to avoid
+    thread-safety issues.
 
     Args:
         id: Dataset run ID to load (e.g., load_by_id(2))
@@ -713,7 +716,6 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
             "parameters": {},
             "metadata": metadata,
             "measureit_info": None,
-            "parameter_data": None,
         }
 
         # Get parameter information from direct query
@@ -750,57 +752,6 @@ def get_dataset_info(id: int, database_path: Optional[str] = None) -> str:
                 }
         except (json.JSONDecodeError, KeyError, AttributeError, TypeError):
             pass
-
-        # Get actual parameter data - requires QCoDeS dataset object
-        # Use lock to protect qc.config mutation
-        try:
-            with _config_lock:
-                original_db_location = qc.config.core.db_location
-                try:
-                    qc.config.core.db_location = resolved_path
-                    dataset = load_by_id(id)
-
-                    param_data = dataset.get_parameter_data()
-                    # Limit data size - only include first/last few points for large datasets
-                    limited_data = {}
-                    for param_name, param_dict in param_data.items():
-                        limited_data[param_name] = {}
-                        for setpoint_name, values in param_dict.items():
-                            if len(values) > 20:
-                                limited_data[param_name][setpoint_name] = {
-                                    "first_10": (
-                                        values[:10].tolist()
-                                        if hasattr(values, "tolist")
-                                        else list(values[:10])
-                                    ),
-                                    "last_10": (
-                                        values[-10:].tolist()
-                                        if hasattr(values, "tolist")
-                                        else list(values[-10:])
-                                    ),
-                                    "total_points": len(values),
-                                    "data_truncated": True,
-                                }
-                            else:
-                                limited_data[param_name][setpoint_name] = {
-                                    "data": (
-                                        values.tolist()
-                                        if hasattr(values, "tolist")
-                                        else list(values)
-                                    ),
-                                    "total_points": len(values),
-                                    "data_truncated": False,
-                                }
-                    result["parameter_data"] = limited_data
-                finally:
-                    qc.config.core.db_location = original_db_location
-        except Exception as e:
-            # If QCoDeS fails (e.g., threading issue), report but don't fail
-            result["parameter_data_error"] = f"Could not load parameter data: {str(e)}"
-            result["parameter_data_note"] = (
-                "Basic dataset info retrieved via direct SQLite query. "
-                "Parameter data requires QCoDeS which may have threading limitations."
-            )
 
         # Add timestamp if available
         try:
@@ -854,13 +805,10 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
         result = {
             "database_path": str(db_path),
             "path_resolved_via": resolution_info["source"],
-            "database_exists": db_path.exists(),
-            "database_size_bytes": None,
             "database_size_readable": None,
             "last_modified": None,
             "experiment_count": 0,
             "total_dataset_count": 0,
-            "qcodes_version": qc.__version__,
             "latest_run_id": None,
             "measurement_types": {},
         }
@@ -869,7 +817,6 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
             # Get file statistics
             stat = db_path.stat()
             size_bytes = stat.st_size
-            result["database_size_bytes"] = size_bytes
             result["database_size_readable"] = _format_file_size(size_bytes)
             result["last_modified"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
 
@@ -879,20 +826,6 @@ def get_database_stats(database_path: Optional[str] = None) -> str:
                 result["experiment_count"] = counts["experiment_count"]
                 result["total_dataset_count"] = counts["total_dataset_count"]
                 result["latest_run_id"] = counts["latest_run_id"]
-
-                # Get experiment details using direct SQLite
-                exp_rows = _query_experiments_direct(resolved_path)
-                experiment_details = []
-                for exp in exp_rows:
-                    exp_detail = {
-                        "experiment_id": exp["exp_id"],
-                        "name": exp["name"],
-                        "sample_name": exp["sample_name"],
-                        "start_time": exp.get("start_time"),
-                        "end_time": exp.get("end_time"),
-                    }
-                    experiment_details.append(exp_detail)
-                result["experiment_details"] = experiment_details
 
                 # Get measurement types from metadata (direct SQLite)
                 measurement_types = _count_measurement_types(resolved_path)

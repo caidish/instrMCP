@@ -33,6 +33,18 @@ except ImportError:
     MEASUREIT_AVAILABLE = False
 
 
+def _count_run_ids(run_ids: str) -> int:
+    """Count runs from a concise run_ids string (e.g., 1,2 or 6-16(11))."""
+    if not run_ids:
+        return 0
+    if "(" in run_ids and run_ids.endswith(")"):
+        try:
+            return int(run_ids.split("(")[-1].rstrip(")"))
+        except ValueError:
+            pass
+    return len([r for r in run_ids.split(",") if r])
+
+
 @pytest.fixture
 def qcodes_test_database(tmp_path):
     """Create a SQLite database with QCoDeS schema for testing."""
@@ -402,7 +414,7 @@ class TestListExperiments:
         assert exp["name"] == "test_experiment"
         assert exp["sample_name"] == "test_sample"
         assert "run_ids" in exp
-        assert "dataset_count" in exp
+        assert isinstance(exp["run_ids"], str)
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_list_experiments_with_explicit_path(self, qcodes_test_database):
@@ -437,14 +449,11 @@ class TestListExperiments:
 
         # First experiment should have runs 1 and 2
         exp1 = next(e for e in result["experiments"] if e["experiment_id"] == 1)
-        assert 1 in exp1["run_ids"]
-        assert 2 in exp1["run_ids"]
-        assert exp1["dataset_count"] == 2
+        assert exp1["run_ids"] == "1,2"
 
         # Second experiment should have run 3
         exp2 = next(e for e in result["experiments"] if e["experiment_id"] == 2)
-        assert 3 in exp2["run_ids"]
-        assert exp2["dataset_count"] == 1
+        assert exp2["run_ids"] == "3"
 
 
 class TestGetDatasetInfo:
@@ -573,10 +582,13 @@ class TestGetDatabaseStats:
         """Test get_database_stats includes required fields."""
         result = json.loads(get_database_stats(qcodes_test_database))
         assert "database_path" in result
-        assert "database_exists" in result
+        assert "path_resolved_via" in result
+        assert "database_size_readable" in result
+        assert "last_modified" in result
         assert "experiment_count" in result
         assert "total_dataset_count" in result
-        assert "qcodes_version" in result
+        assert "latest_run_id" in result
+        assert "measurement_types" in result
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_database_stats_nonexistent_database(self, temp_dir):
@@ -593,10 +605,8 @@ class TestGetDatabaseStats:
         """Test stats for existing database."""
         result = json.loads(get_database_stats(qcodes_test_database))
 
-        assert result["database_exists"] is True
-        assert result["database_size_bytes"] > 0
-        assert "database_size_readable" in result
-        assert "last_modified" in result
+        assert result["database_size_readable"] is not None
+        assert result["last_modified"] is not None
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_database_stats_experiment_count(self, qcodes_test_database):
@@ -621,15 +631,10 @@ class TestGetDatabaseStats:
         assert types.get("Sweep0D", 0) >= 1
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
-    def test_get_database_stats_experiment_details(self, qcodes_test_database):
-        """Test stats includes experiment details."""
+    def test_get_database_stats_latest_run_id(self, qcodes_test_database):
+        """Test stats includes latest run ID."""
         result = json.loads(get_database_stats(qcodes_test_database))
-        assert "experiment_details" in result
-
-        details = result["experiment_details"]
-        assert len(details) == 2
-        exp1 = next(d for d in details if d["experiment_id"] == 1)
-        assert exp1["name"] == "test_experiment"
+        assert result["latest_run_id"] == 3
 
     @pytest.mark.skipif(not QCODES_AVAILABLE, reason="QCodes not available")
     def test_get_database_stats_with_explicit_path(self, qcodes_test_database):
@@ -717,5 +722,5 @@ class TestQueryToolsIntegration:
 
         # Counts should be consistent
         assert experiments["experiment_count"] == stats["experiment_count"]
-        total_runs = sum(e["dataset_count"] for e in experiments["experiments"])
+        total_runs = sum(_count_run_ids(e["run_ids"]) for e in experiments["experiments"])
         assert total_runs == stats["total_dataset_count"]

@@ -41,7 +41,7 @@ class DatabaseToolRegistrar:
 
     # ===== Concise mode helpers =====
 
-    def _format_run_ids_concise(self, run_ids: list) -> str:
+    def _format_run_ids_concise(self, run_ids: list | str) -> str:
         """Format run_ids list concisely.
 
         For small lists (<=5): show all, e.g., "1, 2, 3"
@@ -49,17 +49,35 @@ class DatabaseToolRegistrar:
         """
         if not run_ids:
             return ""
+        if isinstance(run_ids, str):
+            return run_ids
         if len(run_ids) <= 5:
-            return ", ".join(str(r) for r in run_ids)
-        return f"{min(run_ids)}-{max(run_ids)} ({len(run_ids)} runs)"
+            return ",".join(str(r) for r in run_ids)
+        return f"{min(run_ids)}-{max(run_ids)}({len(run_ids)})"
 
     def _to_concise_list_experiments(self, data: dict) -> dict:
         """Convert full experiments list to concise format.
 
         Concise: database_path, experiments with run_ids summary, and sweep groups.
+        If experiments exceed 10, return only sweep groups with a warning.
         Preserves error field if present.
         """
         experiments = data.get("experiments", [])
+        if len(experiments) > 10:
+            result = {}
+            sweep_groups = data.get("sweep_groups", [])
+            if sweep_groups:
+                result["sweep_groups"] = [
+                    f"{g['type']}: {self._format_run_ids_concise(g['run_ids'])}"
+                    for g in sweep_groups
+                ]
+            result["warning"] = (
+                "large number of experiment, truncated. "
+                "See code template and write code to query."
+            )
+            if "error" in data:
+                result["error"] = data["error"]
+            return result
         result = {
             "database_path": data.get("database_path"),
             "experiments": [
@@ -229,11 +247,12 @@ d = ds.get_parameter_data()
                 if not detailed:
                     result = self._to_concise_list_experiments(result)
 
-                # Add hint for data loading code
-                result["hint"] = (
-                    "For dataset loading code, use database_get_dataset_info "
-                    "with code_suggestion=True. For groups, only one run_id is needed."
-                )
+                if "warning" not in result:
+                    # Add hint for data loading code
+                    result["hint"] = (
+                        "For dataset loading code, use database_get_dataset_info "
+                        "with code_suggestion=True. For groups, only one run_id is needed."
+                    )
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             except Exception as e:
