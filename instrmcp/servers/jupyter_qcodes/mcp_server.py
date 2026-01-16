@@ -369,6 +369,43 @@ class JupyterMCPServer:
                         f"Failed to apply resource override for '{uri}': {e} (skipped)"
                     )
 
+    def _cancel_all_tasks(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Cancel all pending tasks in the event loop.
+
+        This ensures proper cleanup of FastMCP's embedded Docket worker
+        and any other background tasks before closing the loop.
+        """
+        try:
+            # Get all tasks for this loop
+            pending = asyncio.all_tasks(loop)
+            if not pending:
+                return
+
+            logger.debug(f"Cancelling {len(pending)} pending tasks")
+
+            # Cancel all tasks
+            for task in pending:
+                task.cancel()
+
+            # Wait for all tasks to complete their cancellation
+            # Use a timeout to avoid hanging forever
+            loop.run_until_complete(asyncio.wait(pending, timeout=2.0))
+
+            # Log any tasks that didn't cancel cleanly
+            for task in pending:
+                if not task.done():
+                    logger.warning(f"Task {task.get_name()} did not cancel in time")
+                elif task.cancelled():
+                    logger.debug(f"Task {task.get_name()} cancelled successfully")
+                elif task.exception():
+                    # Suppress CancelledError, log others
+                    exc = task.exception()
+                    if not isinstance(exc, asyncio.CancelledError):
+                        logger.debug(f"Task {task.get_name()} raised: {exc}")
+
+        except Exception as e:
+            logger.debug(f"Error during task cancellation: {e}")
+
     def _run_server_in_thread(self):
         """Thread target: runs uvicorn with its own event loop.
 
@@ -394,10 +431,15 @@ class JupyterMCPServer:
             logger.error(f"Server thread error: {e}")
         finally:
             self._server_started = False
-            try:
-                self._server_loop.close()
-            except Exception:
-                pass
+            # Cancel all pending tasks before closing the loop
+            # This ensures FastMCP's Docket worker and other background tasks
+            # get a chance to clean up properly
+            if self._server_loop and not self._server_loop.is_closed():
+                self._cancel_all_tasks(self._server_loop)
+                try:
+                    self._server_loop.close()
+                except Exception:
+                    pass
             self._server_loop = None
 
     async def _async_serve(self):
