@@ -64,13 +64,27 @@ def get_http_metadata(mcp_url: str = DEFAULT_MCP_URL) -> dict:
 
 def _tool_to_dict(tool: Any) -> dict:
     """Convert a FastMCP tool object to a comparable dict."""
-    # Get title from annotations (pydantic model) or direct attribute
-    title = None
-    if hasattr(tool, "annotations") and tool.annotations:
-        if hasattr(tool.annotations, "title"):
-            title = tool.annotations.title
-        elif isinstance(tool.annotations, dict):
-            title = tool.annotations.get("title")
+
+    def _annotations_to_dict(annotations: Any) -> dict:
+        if annotations is None:
+            return {}
+        if isinstance(annotations, dict):
+            return annotations
+        if hasattr(annotations, "model_dump"):
+            return annotations.model_dump()
+        if hasattr(annotations, "dict"):
+            return annotations.dict()
+        return {}
+
+    def _schema_properties(schema: Any) -> dict:
+        if isinstance(schema, dict):
+            properties = schema.get("properties")
+            if isinstance(properties, dict):
+                return properties
+        return {}
+
+    annotations = _annotations_to_dict(getattr(tool, "annotations", None))
+    title = annotations.get("title") or getattr(tool, "title", None)
 
     # Get input schema properties for arguments
     # Parameters can be a dict (proxy) or a pydantic model
@@ -79,13 +93,25 @@ def _tool_to_dict(tool: Any) -> dict:
         params = tool.parameters
         if isinstance(params, dict):
             # Proxy tool - parameters is already a dict
-            properties = params.get("properties", {})
+            properties = _schema_properties(params) or _schema_properties(
+                params.get("schema")
+            )
         elif hasattr(params, "model_json_schema"):
             # Regular tool - parameters is a pydantic model
             schema_dict = params.model_json_schema()
-            properties = schema_dict.get("properties", {})
+            properties = _schema_properties(schema_dict)
+        elif hasattr(params, "json_schema"):
+            properties = _schema_properties(params.json_schema())
+        elif hasattr(params, "schema"):
+            properties = _schema_properties(params.schema)
         else:
             properties = {}
+
+        if not properties:
+            input_schema = getattr(tool, "input_schema", None) or getattr(
+                tool, "inputSchema", None
+            )
+            properties = _schema_properties(input_schema)
 
         for arg_name, arg_spec in properties.items():
             if isinstance(arg_spec, dict):
@@ -93,7 +119,8 @@ def _tool_to_dict(tool: Any) -> dict:
 
     return {
         "title": title,
-        "description": getattr(tool, "description", None),
+        "description": getattr(tool, "description", None)
+        or annotations.get("description"),
         "arguments": args_summary,
     }
 

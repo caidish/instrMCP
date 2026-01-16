@@ -448,10 +448,10 @@ d = ds.get_parameter_data()
                 ]
 
     def _register_list_available_databases(self):
-        """Register the database_list_available tool."""
+        """Register the database_list_all_available_db tool."""
 
         @self.mcp.tool(
-            name="database_list_available",
+            name="database_list_all_available_db",
             annotations={
                 "readOnlyHint": True,
                 "idempotentHint": True,
@@ -472,7 +472,7 @@ d = ds.get_parameter_data()
 
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             except Exception as e:
-                logger.error(f"Error in database_list_available: {e}")
+                logger.error(f"Error in database_list_all_available_db: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

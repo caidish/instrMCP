@@ -1,9 +1,5 @@
 {
   "resources": {
-    "resource://available_instruments": {
-      "description": "Resource providing list of available QCodes instruments.",
-      "name": "available_instruments"
-    },
     "resource://database_access0d_template": {
       "description": "Code Template: Load Sweep0D time-based data from QCodes database",
       "name": "Database Access Sweep0D"
@@ -23,10 +19,6 @@
     "resource://database_access_sweepqueue_template": {
       "description": "Code Template: Load SweepQueue batch data from QCodes database",
       "name": "Database Access SweepQueue"
-    },
-    "resource://database_config": {
-      "description": "Resource providing current QCodes database configuration.",
-      "name": "database_config"
     },
     "resource://measureit_code_examples": {
       "description": "Complete collection of measureit code and resource link",
@@ -55,14 +47,6 @@
     "resource://measureit_sweepqueue_template": {
       "description": "SweepQueue code examples for sequential measurement workflows",
       "name": "MeasureIt SweepQueue Template"
-    },
-    "resource://recent_measurements": {
-      "description": "Resource providing metadata for recent measurements.",
-      "name": "recent_measurements"
-    },
-    "resource://station_state": {
-      "description": "Resource providing current QCodes station snapshot.",
-      "name": "station_state"
     }
   },
   "tools": {
@@ -93,7 +77,7 @@
       "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load (e.g., load_by_id(2))\n    database_path: Database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: If `false` (default), return concise summary; if `true`, return full info\n    code_suggestion: If true, include dataset-loading code; unsafe/dangerous mode auto-inserts+executes, safe returns a suggestion.",
       "title": "Get Dataset Info"
     },
-    "database_list_available": {
+    "database_list_all_available_db": {
       "arguments": {
         "detailed": {
           "description": null
@@ -120,7 +104,7 @@
           "description": null
         }
       },
-      "description": "Retrieve the content of a specific MCP resource by its URI.\n\nUse this tool to access resource content when you need the actual data\n(e.g., instrument list, templates, configuration). This is a fallback\nwhen direct resource access is not available.\n\nArgs:\n    uri: Resource URI (e.g., \"resource://available_instruments\")\n\nReturns:\n    Resource content as JSON or text.\n\nExamples:\n    - mcp_get_resource(\"resource://available_instruments\")\n    - mcp_get_resource(\"resource://measureit_sweep1d_template\")\n    - mcp_get_resource(\"resource://database_config\")",
+      "description": "Retrieve the content of a specific MCP resource by its URI.\n\nUse this tool to access resource content when you need the actual data\n(e.g., templates, configuration). This is a fallback\nwhen direct resource access is not available.\n\nArgs:\n    uri: Resource URI (e.g., \"resource://measureit_sweep1d_template\")\n\nReturns:\n    Resource content as JSON or text.\n\nExamples:\n    - mcp_get_resource(\"resource://measureit_sweep1d_template\")\n    - mcp_get_resource(\"resource://measureit_code_examples\")\n    - mcp_get_resource(\"resource://measureit_common_patterns\")",
       "title": "Get MCP Resource"
     },
     "mcp_list_resources": {

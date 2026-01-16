@@ -354,7 +354,6 @@ sample_name = "device_001"
 from measureit.tools.sweep_queue import DatabaseEntry
 db_entry = DatabaseEntry(db_path, exp_name, sample_name)
 """,
-            
         },
         "parameter_following": {
             "description": "Best practices for parameter following",
@@ -382,7 +381,6 @@ ensure_qt()
 # For 2D measurements, set heatmap parameters
 sweep2d.follow_heatmap_param([primary_signal, secondary_signal])
 """,
-
         },
         "troubleshooting": {
             "slow_measurements": "Increase plot_bin, reduce inter_delay if safe",

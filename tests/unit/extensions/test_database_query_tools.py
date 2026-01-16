@@ -722,5 +722,7 @@ class TestQueryToolsIntegration:
 
         # Counts should be consistent
         assert experiments["experiment_count"] == stats["experiment_count"]
-        total_runs = sum(_count_run_ids(e["run_ids"]) for e in experiments["experiments"])
+        total_runs = sum(
+            _count_run_ids(e["run_ids"]) for e in experiments["experiments"]
+        )
         assert total_runs == stats["total_dataset_count"]

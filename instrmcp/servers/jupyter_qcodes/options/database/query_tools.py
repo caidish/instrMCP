@@ -407,7 +407,7 @@ def resolve_database_path(
                 f"Database not found: {database_path}\n\n"
                 "Available databases:\n"
                 + _format_available_databases(resolution_info["available_databases"])
-                + "\n\nTip: Use database_list_available() to discover all databases"
+                + "\n\nTip: Use database_list_all_available_db() to discover all databases"
             )
 
     # If constrained to data_dir, only search there - NO environment fallbacks

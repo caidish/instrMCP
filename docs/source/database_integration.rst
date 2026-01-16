@@ -92,42 +92,8 @@ Get aggregate statistics about the database.
 Database Resources
 ------------------
 
-In addition to tools, the database integration provides MCP resources:
-
-database_config
-~~~~~~~~~~~~~~~
-
-Current database configuration:
-
-- Database path
-- Connection status
-- QCodes configuration
-- MeasureIt integration status
-
-**When to use**: LLMs use this to understand database location and setup
-
-recent_measurements
-~~~~~~~~~~~~~~~~~~~
-
-Metadata for recent measurements across all experiments:
-
-- Last N measurements (configurable)
-- Run IDs, names, timestamps
-- Parameter lists
-- Experiment associations
-
-**When to use**: Understanding recent experimental activity
-
-measurement_templates
-~~~~~~~~~~~~~~~~~~~~~
-
-Common measurement patterns extracted from historical data:
-
-- Frequently used parameter combinations
-- Common sweep configurations
-- Typical measurement structures
-
-**When to use**: Code generation based on past experiments
+Database resources are not exposed. Use the database tools instead, e.g.
+``database_list_experiments`` and ``database_get_dataset_info``.
 
 Default Database Location
 --------------------------
@@ -212,7 +178,7 @@ Claude can analyze past measurements and suggest similar code:
 
    User: "Generate code to measure an IV curve like I did last week"
 
-   Claude: [Queries recent_measurements resource]
+   Claude: [Calls database_list_experiments]
    Claude: [Finds IV curve pattern]
    Claude: "Based on dataset #156, here's the code:
            ```python

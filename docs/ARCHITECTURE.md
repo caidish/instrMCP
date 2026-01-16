@@ -120,8 +120,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### QCodes Resources
 
-- `available_instruments` - JSON list of available QCodes instruments with hierarchical parameter structure
-- `station_state` - Station metadata summary (use `available_instruments` for instrument details)
+None. Use `qcodes_instrument_info("*")` to list instruments, then `qcodes_instrument_info(name)` for details.
 
 ### Jupyter Resources
 
@@ -139,8 +138,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### Database Resources (Optional - requires `%mcp_option database`)
 
-- `database_config` - Current QCodes database configuration, path, and connection status
-- `recent_measurements` - Metadata for recent measurements across all experiments
+None. Use `database_list_experiments` and `database_get_dataset_info` for database metadata.
 
 ## Optional Features and Magic Commands
 
@@ -295,13 +293,6 @@ tools:
     arguments:
       name:
         description: "Instrument name or '*' for all."
-
-resources:
-  resource://available_instruments:
-    name: "Lab Instruments"
-    description: "Custom description for available instruments."
-    use_when: "Need instrument names before calling tools."
-    example: "Check this, then call qcodes_instrument_info."
 
 resource_templates:
   resource://measureit_sweep1d_template:

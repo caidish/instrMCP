@@ -30,7 +30,7 @@ tools:
           detailed: If `false` (default), return concise summary; if `true`, return full info
           code_suggestion: If true, include dataset-loading code; unsafe/dangerous mode auto-inserts+executes, safe returns a suggestion.
 
-  database_list_available:
+  database_list_all_available_db:
     title: "List Databases"
     description: |
       List all available QCodes databases.
@@ -60,19 +60,19 @@ tools:
       Retrieve the content of a specific MCP resource by its URI.
 
       Use this tool to access resource content when you need the actual data
-      (e.g., instrument list, templates, configuration). This is a fallback
+      (e.g., templates, configuration). This is a fallback
       when direct resource access is not available.
 
       Args:
-          uri: Resource URI (e.g., "resource://available_instruments")
+          uri: Resource URI (e.g., "resource://measureit_sweep1d_template")
 
       Returns:
           Resource content as JSON or text.
 
       Examples:
-          - mcp_get_resource("resource://available_instruments")
           - mcp_get_resource("resource://measureit_sweep1d_template")
-          - mcp_get_resource("resource://database_config")
+          - mcp_get_resource("resource://measureit_code_examples")
+          - mcp_get_resource("resource://measureit_common_patterns")
 
   mcp_list_resources:
     title: "List MCP Resources"
@@ -424,22 +424,7 @@ tools:
           - "{instrument}.{channel}.{parameter}" for multi-channel instruments
           Example: "lockin.X" or "dac.ch01.voltage"
 
-resources:
-  "resource://available_instruments":
-    name: "available_instruments"
-    description: "Resource providing list of available QCodes instruments."
-
-  "resource://database_config":
-    name: "database_config"
-    description: "Resource providing current QCodes database configuration."
-
-  "resource://recent_measurements":
-    name: "recent_measurements"
-    description: "Resource providing metadata for recent measurements."
-
-  "resource://station_state":
-    name: "station_state"
-    description: "Resource providing current QCodes station snapshot."
+resources: {}
 
 resource_templates:
   # Sweep templates (for running measurements)

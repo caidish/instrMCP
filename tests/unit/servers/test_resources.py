@@ -87,9 +87,8 @@ class TestResourceRegistrar:
         """Test registering only core resources."""
         registrar.register_all()
 
-        # Core resources should be registered
-        assert "resource://available_instruments" in mock_mcp_server._resources
-        assert "resource://station_state" in mock_mcp_server._resources
+        # No core resources should be registered
+        assert not mock_mcp_server._resources
 
         # Optional resources should not be registered
         assert "resource://measureit_sweep0d_template" not in mock_mcp_server._resources
@@ -132,10 +131,6 @@ class TestResourceRegistrar:
         ):
             registrar.register_all()
 
-            # Core resources
-            assert "resource://available_instruments" in mock_mcp_server._resources
-            assert "resource://station_state" in mock_mcp_server._resources
-
             # MeasureIt resources
             assert "resource://measureit_sweep0d_template" in mock_mcp_server._resources
             assert "resource://measureit_sweep1d_template" in mock_mcp_server._resources
@@ -163,186 +158,7 @@ class TestResourceRegistrar:
 
         registrar.register_all()
 
-        # Core resources
-        assert "resource://available_instruments" in mock_mcp_server._resources
-        assert "resource://station_state" in mock_mcp_server._resources
-
-        # Database resources
-        assert "resource://database_config" in mock_mcp_server._resources
-        assert "resource://recent_measurements" in mock_mcp_server._resources
-
-    @pytest.mark.asyncio
-    async def test_available_instruments_resource(
-        self, registrar, mock_tools, mock_mcp_server
-    ):
-        """Test available_instruments resource."""
-        mock_instruments = [
-            {
-                "name": "mock_dac",
-                "type": "DAC",
-                "parameters": {"ch01.voltage": {"unit": "V", "limits": [-10, 10]}},
-            }
-        ]
-        mock_tools.list_instruments.return_value = mock_instruments
-
-        registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources[
-            "resource://available_instruments"
-        ]
-        resource = await available_instruments_func()
-
-        assert isinstance(resource, Resource)
-        assert str(resource.uri) == "resource://available_instruments"
-        # Without metadata_config, uses fallback default name
-        assert resource.name == "available_instruments"
-        assert resource.mimeType == "application/json"
-        assert len(resource.contents) == 1
-        assert isinstance(resource.contents[0], TextResourceContents)
-
-        content = json.loads(resource.contents[0].text)
-        assert content == mock_instruments
-
-    @pytest.mark.asyncio
-    async def test_available_instruments_error(
-        self, registrar, mock_tools, mock_mcp_server
-    ):
-        """Test available_instruments resource with error."""
-        mock_tools.list_instruments.side_effect = Exception("QCodes error")
-
-        registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources[
-            "resource://available_instruments"
-        ]
-        resource = await available_instruments_func()
-
-        assert isinstance(resource, Resource)
-        # Without metadata_config, uses fallback default name (even on error)
-        assert resource.name == "available_instruments"
-        content = json.loads(resource.contents[0].text)
-        assert "error" in content
-        assert "QCodes error" in content["error"]
-
-    @pytest.mark.asyncio
-    async def test_station_state_resource(self, registrar, mock_tools, mock_mcp_server):
-        """Test station_state resource."""
-        mock_snapshot = {"instruments": {"mock_dac": {"type": "DAC", "parameters": {}}}}
-        mock_tools.get_station_snapshot.return_value = mock_snapshot
-
-        registrar.register_all()
-        station_state_func = mock_mcp_server._resources["resource://station_state"]
-        resource = await station_state_func()
-
-        assert isinstance(resource, Resource)
-        assert str(resource.uri) == "resource://station_state"
-        # Without metadata_config, uses fallback default name
-        assert resource.name == "station_state"
-        assert resource.mimeType == "application/json"
-
-        content = json.loads(resource.contents[0].text)
-        assert content == {
-            "station_metadata": {},
-            "component_names": [],
-            "component_count": 0,
-            "station_present": True,
-            "instruments_resource": "resource://available_instruments",
-            "note": "Use resource://available_instruments for instrument details.",
-            "snapshot_keys": ["instruments"],
-        }
-
-    @pytest.mark.asyncio
-    async def test_station_state_error(self, registrar, mock_tools, mock_mcp_server):
-        """Test station_state resource with error."""
-        mock_tools.get_station_snapshot.side_effect = Exception("Station error")
-
-        registrar.register_all()
-        station_state_func = mock_mcp_server._resources["resource://station_state"]
-        resource = await station_state_func()
-
-        # Without metadata_config, uses fallback default name (even on error)
-        assert resource.name == "station_state"
-        content = json.loads(resource.contents[0].text)
-        assert "error" in content
-        assert "Station error" in content["error"]
-
-    @pytest.mark.asyncio
-    async def test_database_config_resource(
-        self, mock_mcp_server, mock_tools, mock_db_module
-    ):
-        """Test database_config resource."""
-        enabled_options = {"database"}
-        registrar = ResourceRegistrar(
-            mock_mcp_server,
-            mock_tools,
-            enabled_options=enabled_options,
-            db_module=mock_db_module,
-        )
-
-        mock_config = json.dumps(
-            {"database_path": "/path/to/db.db", "connected": True, "version": "0.20.0"},
-            indent=2,
-        )
-        mock_db_module.get_current_database_config.return_value = mock_config
-
-        registrar.register_all()
-        db_config_func = mock_mcp_server._resources["resource://database_config"]
-        resource = await db_config_func()
-
-        assert isinstance(resource, Resource)
-        assert str(resource.uri) == "resource://database_config"
-        # Without metadata_config, uses fallback default name
-        assert resource.name == "database_config"
-        assert resource.mimeType == "application/json"
-
-        content = json.loads(resource.contents[0].text)
-        assert content["database_path"] == "/path/to/db.db"
-        assert content["connected"] is True
-
-    @pytest.mark.asyncio
-    async def test_recent_measurements_resource(
-        self, mock_mcp_server, mock_tools, mock_db_module
-    ):
-        """Test recent_measurements resource."""
-        enabled_options = {"database"}
-        registrar = ResourceRegistrar(
-            mock_mcp_server,
-            mock_tools,
-            enabled_options=enabled_options,
-            db_module=mock_db_module,
-        )
-
-        mock_measurements = json.dumps(
-            {
-                "measurements": [
-                    {
-                        "run_id": 1,
-                        "name": "measurement1",
-                        "timestamp": "2024-01-01 12:00:00",
-                    },
-                    {
-                        "run_id": 2,
-                        "name": "measurement2",
-                        "timestamp": "2024-01-01 13:00:00",
-                    },
-                ],
-                "count": 2,
-            },
-            indent=2,
-        )
-        mock_db_module.get_recent_measurements.return_value = mock_measurements
-
-        registrar.register_all()
-        recent_meas_func = mock_mcp_server._resources["resource://recent_measurements"]
-        resource = await recent_meas_func()
-
-        assert isinstance(resource, Resource)
-        assert str(resource.uri) == "resource://recent_measurements"
-        # Without metadata_config, uses fallback default name
-        assert resource.name == "recent_measurements"
-        assert resource.mimeType == "application/json"
-
-        content = json.loads(resource.contents[0].text)
-        assert content["count"] == 2
-        assert len(content["measurements"]) == 2
+        assert not mock_mcp_server._resources
 
     @pytest.mark.asyncio
     async def test_measureit_template_resource(
@@ -442,8 +258,8 @@ class TestResourceRegistrar:
             # Count all registered resources
             resource_count = len(mock_mcp_server._resources)
 
-            # Core: 2, MeasureIt: 7, Database: 7 (2 base + 5 access templates) = 16 total
-            assert resource_count == 16
+            # MeasureIt: 12 total
+            assert resource_count == 12
 
     @pytest.mark.asyncio
     async def test_resources_have_correct_structure(
@@ -451,8 +267,6 @@ class TestResourceRegistrar:
     ):
         """Test that all resources have correct structure."""
         mock_tools.list_instruments.return_value = []
-        mock_tools.get_station_snapshot.return_value = {}
-
         registrar.register_all()
 
         for uri, func in mock_mcp_server._resources.items():
@@ -494,48 +308,7 @@ class TestResourceRegistrar:
 
         registrar.register_all()
 
-        # Database resources should not be registered
-        assert "resource://database_config" not in mock_mcp_server._resources
-        assert "resource://recent_measurements" not in mock_mcp_server._resources
-
-    @pytest.mark.asyncio
-    async def test_available_instruments_with_complex_data(
-        self, registrar, mock_tools, mock_mcp_server
-    ):
-        """Test available_instruments with complex hierarchical instruments."""
-        mock_instruments = [
-            {
-                "name": "complex_dac",
-                "type": "DAC",
-                "submodules": {
-                    "ch01": {
-                        "parameters": {
-                            "voltage": {"unit": "V", "value": 0.0},
-                            "current": {"unit": "A", "value": 0.001},
-                        }
-                    },
-                    "ch02": {"parameters": {"voltage": {"unit": "V", "value": 0.5}}},
-                },
-                "metadata": {
-                    "serial": "12345",
-                    "firmware": "v1.2.3",
-                    "calibration_date": "2024-01-01",
-                },
-            }
-        ]
-        mock_tools.list_instruments.return_value = mock_instruments
-
-        registrar.register_all()
-        available_instruments_func = mock_mcp_server._resources[
-            "resource://available_instruments"
-        ]
-        resource = await available_instruments_func()
-
-        content = json.loads(resource.contents[0].text)
-        assert len(content) == 1
-        assert "submodules" in content[0]
-        assert "metadata" in content[0]
-        assert content[0]["metadata"]["serial"] == "12345"
+        assert not mock_mcp_server._resources
 
 
 class TestResourceDiscoveryTools:
@@ -626,19 +399,17 @@ class TestResourceDiscoveryTools:
         # Check structure
         assert "total_resources" in guide
         assert "resources" in guide
-        assert "guidance" in guide
 
-        # Should have 2 core resources
-        assert guide["total_resources"] == 2
+        # Should have 0 core resources
+        assert guide["total_resources"] == 0
 
         # Check resource URIs match registered resources
         listed_uris = {r["uri"] for r in guide["resources"]}
         registered_uris = set(mock_mcp_server._resources.keys())
         assert listed_uris == registered_uris
 
-        # Verify core resources are listed
-        assert "resource://available_instruments" in listed_uris
-        assert "resource://station_state" in listed_uris
+        # Verify no core resources are listed
+        assert listed_uris == set()
 
     @pytest.mark.asyncio
     async def test_list_resources_with_measureit(
@@ -682,8 +453,8 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 12 MeasureIt (7 templates + 5 database access) = 14 resources
-        assert guide["total_resources"] == 14
+        # Should have 12 MeasureIt (7 templates + 5 database access) = 12 resources
+        assert guide["total_resources"] == 12
 
         # Check all URIs match
         listed_uris = {r["uri"] for r in guide["resources"]}
@@ -713,17 +484,15 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 2 database = 4 resources (database access templates are under measureit)
-        assert guide["total_resources"] == 4
+        # Should have 0 resources
+        assert guide["total_resources"] == 0
 
         # Check all URIs match
         listed_uris = {r["uri"] for r in guide["resources"]}
         registered_uris = set(mock_mcp_server._resources.keys())
         assert listed_uris == registered_uris
 
-        # Verify database resources are listed
-        assert "resource://database_config" in listed_uris
-        assert "resource://recent_measurements" in listed_uris
+        assert listed_uris == set()
 
     @pytest.mark.asyncio
     async def test_list_resources_all_options(
@@ -768,47 +537,13 @@ class TestResourceDiscoveryTools:
         result = await list_resources_func()
         guide = json.loads(result[0].text)
 
-        # Should have 2 core + 7 MeasureIt + 7 database (2 base + 5 access templates) = 16 resources
-        assert guide["total_resources"] == 16
+        # Should have 12 MeasureIt resources
+        assert guide["total_resources"] == 12
 
         # All listed URIs must match registered resources
         listed_uris = {r["uri"] for r in guide["resources"]}
         registered_uris = set(mock_mcp_server._resources.keys())
         assert listed_uris == registered_uris
-
-    @pytest.mark.asyncio
-    async def test_get_resource_core_resources(self, mock_mcp_server, mock_tools):
-        """Test mcp_get_resource for core resources."""
-        registrar = ResourceRegistrar(mock_mcp_server, mock_tools)
-
-        mock_instruments = [{"name": "test_dac", "type": "DAC"}]
-        mock_tools.list_instruments.return_value = mock_instruments
-
-        registrar.register_all()
-
-        get_resource_func = mock_mcp_server._tools["mcp_get_resource"]
-
-        # Test available_instruments
-        result = await get_resource_func("resource://available_instruments")
-        assert len(result) == 1
-        content = json.loads(result[0].text)
-        assert content == mock_instruments
-
-        # Test station_state
-        mock_snapshot = {"instruments": {"test_dac": {}}}
-        mock_tools.get_station_snapshot.return_value = mock_snapshot
-
-        result = await get_resource_func("resource://station_state")
-        content = json.loads(result[0].text)
-        assert content == {
-            "station_metadata": {},
-            "component_names": [],
-            "component_count": 0,
-            "station_present": True,
-            "instruments_resource": "resource://available_instruments",
-            "note": "Use resource://available_instruments for instrument details.",
-            "snapshot_keys": ["instruments"],
-        }
 
     @pytest.mark.asyncio
     async def test_get_resource_with_measureit(
@@ -864,33 +599,6 @@ class TestResourceDiscoveryTools:
             result = await get_resource_func("resource://measureit_sweep0d_template")
             assert len(result) == 1
             assert result[0].text == mock_template
-
-    @pytest.mark.asyncio
-    async def test_get_resource_with_database(
-        self, mock_mcp_server, mock_tools, mock_db_module
-    ):
-        """Test mcp_get_resource for database resources."""
-        enabled_options = {"database"}
-        registrar = ResourceRegistrar(
-            mock_mcp_server,
-            mock_tools,
-            enabled_options=enabled_options,
-            db_module=mock_db_module,
-        )
-
-        registrar.register_all()
-        get_resource_func = mock_mcp_server._tools["mcp_get_resource"]
-
-        # Test database_config
-        result = await get_resource_func("resource://database_config")
-        assert len(result) == 1
-        content = json.loads(result[0].text)
-        assert "database_path" in content
-
-        # Test recent_measurements
-        result = await get_resource_func("resource://recent_measurements")
-        content = json.loads(result[0].text)
-        assert "measurements" in content
 
     @pytest.mark.asyncio
     async def test_get_resource_invalid_uri(self, mock_mcp_server, mock_tools):
@@ -1048,26 +756,3 @@ class TestResourceDiscoveryTools:
             # Fields should have meaningful content
             assert len(resource["name"]) > 0
             assert len(resource["description"]) > 0
-
-    @pytest.mark.asyncio
-    async def test_guidance_section_completeness(self, mock_mcp_server, mock_tools):
-        """Test that guidance section is complete and useful."""
-        registrar = ResourceRegistrar(mock_mcp_server, mock_tools)
-        registrar.register_all()
-
-        list_resources_func = mock_mcp_server._tools["mcp_list_resources"]
-        result = await list_resources_func()
-        guide = json.loads(result[0].text)
-
-        # Check guidance structure (simplified)
-        guidance = guide["guidance"]
-        assert "workflow" in guidance
-        assert "common_patterns" in guidance
-
-        # Check workflow is a simple string
-        assert isinstance(guidance["workflow"], str)
-        assert len(guidance["workflow"]) > 0
-
-        # Check common_patterns is populated
-        assert isinstance(guidance["common_patterns"], list)
-        assert len(guidance["common_patterns"]) > 0

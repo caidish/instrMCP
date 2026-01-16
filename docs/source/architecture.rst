@@ -144,8 +144,7 @@ MCP resources provide context to LLMs:
 
 **QCodes Resources** (Always available):
 
-- ``available_instruments`` - Instrument hierarchy with all parameters
-- ``station_state`` - Station metadata summary (use ``available_instruments`` for instrument details)
+None. Use ``qcodes_instrument_info("*")`` to list instruments, then ``qcodes_instrument_info(name)`` for details.
 
 **Jupyter Resources** (Always available):
 
@@ -153,9 +152,7 @@ MCP resources provide context to LLMs:
 
 **Database Resources** (Optional):
 
-- ``database_config`` - Database path and connection info
-- ``recent_measurements`` - Last N measurement metadata
-- ``measurement_templates`` - Common patterns from history
+None. Use ``database_list_experiments`` and ``database_get_dataset_info`` for database metadata.
 
 **MeasureIt Resources** (Optional):
 
