@@ -193,7 +193,8 @@ class TestResourceRegistrar:
 
         assert isinstance(resource, Resource)
         assert str(resource.uri) == "resource://available_instruments"
-        assert resource.name == "Available Instruments"
+        # Without metadata_config, uses fallback default name
+        assert resource.name == "available_instruments"
         assert resource.mimeType == "application/json"
         assert len(resource.contents) == 1
         assert isinstance(resource.contents[0], TextResourceContents)
@@ -215,7 +216,8 @@ class TestResourceRegistrar:
         resource = await available_instruments_func()
 
         assert isinstance(resource, Resource)
-        assert "Error" in resource.name
+        # Without metadata_config, uses fallback default name (even on error)
+        assert resource.name == "available_instruments"
         content = json.loads(resource.contents[0].text)
         assert "error" in content
         assert "QCodes error" in content["error"]
@@ -232,7 +234,8 @@ class TestResourceRegistrar:
 
         assert isinstance(resource, Resource)
         assert str(resource.uri) == "resource://station_state"
-        assert resource.name == "QCodes Station State"
+        # Without metadata_config, uses fallback default name
+        assert resource.name == "station_state"
         assert resource.mimeType == "application/json"
 
         content = json.loads(resource.contents[0].text)
@@ -255,7 +258,8 @@ class TestResourceRegistrar:
         station_state_func = mock_mcp_server._resources["resource://station_state"]
         resource = await station_state_func()
 
-        assert "Error" in resource.name
+        # Without metadata_config, uses fallback default name (even on error)
+        assert resource.name == "station_state"
         content = json.loads(resource.contents[0].text)
         assert "error" in content
         assert "Station error" in content["error"]
@@ -285,7 +289,8 @@ class TestResourceRegistrar:
 
         assert isinstance(resource, Resource)
         assert str(resource.uri) == "resource://database_config"
-        assert resource.name == "Database Configuration"
+        # Without metadata_config, uses fallback default name
+        assert resource.name == "database_config"
         assert resource.mimeType == "application/json"
 
         content = json.loads(resource.contents[0].text)
@@ -331,7 +336,8 @@ class TestResourceRegistrar:
 
         assert isinstance(resource, Resource)
         assert str(resource.uri) == "resource://recent_measurements"
-        assert resource.name == "Recent Measurements"
+        # Without metadata_config, uses fallback default name
+        assert resource.name == "recent_measurements"
         assert resource.mimeType == "application/json"
 
         content = json.loads(resource.contents[0].text)
@@ -388,7 +394,8 @@ class TestResourceRegistrar:
 
             assert isinstance(resource, Resource)
             assert str(resource.uri) == "resource://measureit_sweep0d_template"
-            assert resource.name == "MeasureIt Sweep0D Template"
+            # Without metadata_config, uses uri_suffix as fallback name
+            assert resource.name == "measureit_sweep0d_template"
             assert resource.mimeType == "application/json"
 
             content = json.loads(resource.contents[0].text)
@@ -560,6 +567,21 @@ class TestResourceDiscoveryTools:
 
         mcp.resource = resource_decorator
         mcp.tool = tool_decorator
+
+        # Mock get_resources() to return FunctionResource-like objects from _resources
+        async def mock_get_resources():
+            # Return dict mapping uri to mock resource objects
+            result = {}
+            for uri, func in mcp._resources.items():
+                mock_res = MagicMock()
+                mock_res.uri = uri
+                # Extract name from uri (e.g., "resource://foo" -> "foo")
+                mock_res.name = uri.replace("resource://", "")
+                mock_res.description = f"Description for {mock_res.name}"
+                result[uri] = mock_res
+            return result
+
+        mcp.get_resources = mock_get_resources
         return mcp
 
     @pytest.fixture
@@ -1014,12 +1036,11 @@ class TestResourceDiscoveryTools:
         guide = json.loads(result[0].text)
 
         # Check each resource has required fields
+        # Note: use_when and example are now composed into description, not separate fields
         for resource in guide["resources"]:
             assert "uri" in resource
             assert "name" in resource
             assert "description" in resource
-            assert "use_when" in resource
-            assert "example" in resource
 
             # URI should be valid format
             assert resource["uri"].startswith("resource://")
@@ -1027,7 +1048,6 @@ class TestResourceDiscoveryTools:
             # Fields should have meaningful content
             assert len(resource["name"]) > 0
             assert len(resource["description"]) > 0
-            assert len(resource["use_when"]) > 0
 
     @pytest.mark.asyncio
     async def test_guidance_section_completeness(self, mock_mcp_server, mock_tools):

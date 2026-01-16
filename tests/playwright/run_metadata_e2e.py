@@ -7,10 +7,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Iterable
@@ -39,10 +41,40 @@ DEFAULT_TOKEN = "instrmcp-playwright"
 DEFAULT_JUPYTER_PORT = 8888
 DEFAULT_MCP_URL = "http://127.0.0.1:8123"
 DEFAULT_NOTEBOOK = (
-    Path(__file__).parent / "notebooks" / "metadata_e2e.ipynb"
+    Path(__file__).parent / "notebooks" / "original" / "metadata_e2e.ipynb"
 )
 DEFAULT_SNAPSHOT = Path(__file__).parent / "metadata_snapshot.json"
+USER_SNAPSHOT = Path(__file__).parent / "metadata_snapshot_user.json"
+USER_CONFIG_PATH = Path.home() / ".instrmcp" / "metadata.yaml"
 DEFAULT_JUPYTER_LOG = Path(__file__).parent / "jupyter_lab.log"
+# Working copy directory (within repo so JupyterLab can access it)
+WORKING_NOTEBOOK_DIR = Path(__file__).parent / "notebooks" / "_working"
+
+
+def _has_user_config() -> bool:
+    """Check if user has a custom metadata config file."""
+    return USER_CONFIG_PATH.exists()
+
+
+def _get_snapshot_path(explicit_path: Path | None) -> Path:
+    """Get the appropriate snapshot path based on user config presence.
+
+    Args:
+        explicit_path: Explicitly specified path (takes precedence)
+
+    Returns:
+        Path to use for snapshot operations
+    """
+    if explicit_path and explicit_path != DEFAULT_SNAPSHOT:
+        # User explicitly specified a path
+        return explicit_path
+
+    if _has_user_config():
+        print(f"Note: User config detected at {USER_CONFIG_PATH}")
+        print(f"      Using user snapshot: {USER_SNAPSHOT}")
+        return USER_SNAPSHOT
+
+    return DEFAULT_SNAPSHOT
 
 
 def _parse_args() -> argparse.Namespace:
@@ -112,8 +144,19 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cell-wait-ms",
         type=int,
-        default=500,
+        default=1000,
         help="Wait time after running each cell in fallback mode.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Kill existing processes on Jupyter and MCP ports before starting.",
+    )
+    parser.add_argument(
+        "--mcp-port",
+        type=int,
+        default=8123,
+        help="MCP server port (used for cleanup).",
     )
     return parser.parse_args()
 
@@ -164,6 +207,56 @@ def _start_jupyter_server(
     )
     log_file.close()
     return process, log_path
+
+
+def _prepare_working_notebook(original_notebook: Path) -> Path:
+    """Copy notebook to working directory for isolated execution.
+
+    The working directory is within the repo so JupyterLab can access it.
+
+    Returns:
+        Path to the working copy of the notebook
+    """
+    # Clean up any existing working directory
+    if WORKING_NOTEBOOK_DIR.exists():
+        shutil.rmtree(WORKING_NOTEBOOK_DIR)
+
+    # Create working directory
+    WORKING_NOTEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Copy notebook to working directory
+    working_notebook = WORKING_NOTEBOOK_DIR / original_notebook.name
+    shutil.copy2(original_notebook, working_notebook)
+
+    return working_notebook
+
+
+def _cleanup_working_notebook() -> None:
+    """Clean up working notebook directory."""
+    if WORKING_NOTEBOOK_DIR.exists():
+        shutil.rmtree(WORKING_NOTEBOOK_DIR, ignore_errors=True)
+
+
+def _kill_port(port: int) -> bool:
+    """Kill any process listening on the given port. Returns True if killed."""
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True,
+            text=True,
+        )
+        pids = result.stdout.strip().split()
+        if not pids or not pids[0]:
+            return False
+        for pid in pids:
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass
+        time.sleep(0.5)  # Give OS time to release the port
+        return True
+    except Exception:
+        return False
 
 
 def _is_port_free(port: int) -> bool:
@@ -241,9 +334,7 @@ def _run_notebook_playwright(
 
 
 def _append_cells(page, cells: list[str]) -> None:
-    locator = page.locator(
-        ".jp-NotebookPanel:not(.lm-mod-hidden) .jp-Cell"
-    )
+    locator = page.locator(".jp-NotebookPanel:not(.lm-mod-hidden) .jp-Cell")
     if locator.count() == 0:
         raise RuntimeError("No notebook cells found to append to.")
 
@@ -261,6 +352,7 @@ def _append_cells(page, cells: list[str]) -> None:
 
 def _run_all_cells(page, cell_wait_ms: int) -> None:
     ran = False
+    # Method 1: Try JavaScript command execution
     try:
         ran = page.evaluate(
             """
@@ -286,28 +378,49 @@ def _run_all_cells(page, cell_wait_ms: int) -> None:
     if not ran:
         try:
             page.get_by_role("menuitem", name="Run").click(timeout=5000)
-            page.get_by_role("menuitem", name="Run All Cells").click(timeout=5000)
+            page.get_by_role("menuitem", name="Run All Cells", exact=True).click(
+                timeout=5000
+            )
             ran = True
         except Exception:
             ran = False
 
+    # Method 3: Fallback to Shift+Enter for each cell
     if not ran:
         locator = page.locator(".jp-Cell")
         count = locator.count()
         if count == 0:
             raise RuntimeError("No notebook cells found to run.")
-        locator = page.locator(
-            ".jp-NotebookPanel:not(.lm-mod-hidden) .jp-Cell"
-        )
+        locator = page.locator(".jp-NotebookPanel:not(.lm-mod-hidden) .jp-Cell")
         count = locator.count()
         if count == 0:
             raise RuntimeError("No visible notebook cells found to run.")
+
+        # Wait for notebook to be fully loaded
+        page.wait_for_timeout(2000)
+
+        # Click first cell and ensure we're in command mode
         locator.first.scroll_into_view_if_needed()
         locator.first.click()
+        page.wait_for_timeout(500)
+        page.keyboard.press("Escape")  # Enter command mode
+        page.wait_for_timeout(200)
+
+        # Go to first cell with Ctrl+Home
+        page.keyboard.press("Control+Home")
+        page.wait_for_timeout(200)
+
         for _ in range(count):
             page.keyboard.press("Shift+Enter")
             if cell_wait_ms:
                 page.wait_for_timeout(cell_wait_ms)
+
+    # Wait for cells to finish executing (important for all methods)
+    if ran:
+        # If we used JS or menu, wait for execution to complete
+        total_wait = cell_wait_ms * 7  # 7 cells in the notebook
+        print(f"  Waiting {total_wait}ms for cell execution to complete...")
+        page.wait_for_timeout(total_wait)
 
 
 def _wait_for_mcp(base_url: str, timeout_s: int = 60) -> bool:
@@ -337,28 +450,40 @@ def main() -> int:
     args = _parse_args()
     repo_root = Path(__file__).resolve().parents[2]
 
-    notebook_path = args.notebook.resolve()
-    if not notebook_path.exists():
-        print(f"Notebook not found: {notebook_path}")
-        return 2
+    # Determine snapshot path based on user config presence
+    snapshot_path = _get_snapshot_path(args.snapshot)
 
-    try:
-        notebook_rel = notebook_path.relative_to(repo_root).as_posix()
-    except ValueError:
-        print("Notebook must be under the repository root.")
+    original_notebook = args.notebook.resolve()
+    if not original_notebook.exists():
+        print(f"Notebook not found: {original_notebook}")
         return 2
 
     jupyter_port = args.jupyter_port
     jupyter_base_url = f"http://127.0.0.1:{jupyter_port}"
     jupyter_proc = None
+    mcp_port = args.mcp_port
+    working_notebook = None
+
+    # Clean up existing processes if requested
+    if args.clean:
+        if _kill_port(mcp_port):
+            print(f"Killed existing process on MCP port {mcp_port}.")
+        if _kill_port(jupyter_port):
+            print(f"Killed existing process on Jupyter port {jupyter_port}.")
+        _cleanup_working_notebook()
 
     try:
+        # Copy notebook to working directory to avoid modifying original
+        working_notebook = _prepare_working_notebook(original_notebook)
+        try:
+            notebook_rel = working_notebook.relative_to(repo_root).as_posix()
+        except ValueError:
+            print("Notebook must be under the repository root.")
+            return 2
         if not args.skip_jupyter:
             if not _is_port_free(jupyter_port):
                 new_port = _find_free_port()
-                print(
-                    f"Port {jupyter_port} is in use; switching to {new_port}."
-                )
+                print(f"Port {jupyter_port} is in use; switching to {new_port}.")
                 jupyter_port = new_port
                 jupyter_base_url = f"http://127.0.0.1:{jupyter_port}"
             jupyter_proc, _log_path = _start_jupyter_server(
@@ -385,16 +510,20 @@ def main() -> int:
 
         snapshot = _snapshot_metadata(args.mcp_url)
         if args.mode == "snapshot":
-            save_snapshot(snapshot, args.snapshot)
-            print(f"Saved metadata snapshot to {args.snapshot}")
+            save_snapshot(snapshot, snapshot_path)
+            print(f"Saved metadata snapshot to {snapshot_path}")
             return 0
 
-        if not args.snapshot.exists():
-            print(f"Snapshot not found: {args.snapshot}")
+        if not snapshot_path.exists():
+            print(f"Snapshot not found: {snapshot_path}")
             print("Run with --mode snapshot to create it.")
+            if _has_user_config():
+                print(
+                    f"Note: User config detected. Create user snapshot with --mode snapshot"
+                )
             return 2
 
-        expected = load_snapshot(args.snapshot)
+        expected = load_snapshot(snapshot_path)
         errors = compare_metadata(expected, snapshot)
         if errors:
             print("Metadata mismatches detected:")
@@ -407,6 +536,11 @@ def main() -> int:
     finally:
         if jupyter_proc and not args.keep_jupyter:
             _stop_process(jupyter_proc)
+            # Also clean up MCP server that was started by the notebook
+            _kill_port(mcp_port)
+        # Always clean up working notebook to avoid leaving modified copies
+        if not args.keep_jupyter:
+            _cleanup_working_notebook()
 
 
 if __name__ == "__main__":

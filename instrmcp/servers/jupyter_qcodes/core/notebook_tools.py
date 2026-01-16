@@ -220,7 +220,6 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_list_variables",
             annotations={
-                "title": "List Notebook Variables",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -229,11 +228,7 @@ class NotebookToolRegistrar:
         async def list_variables(
             type_filter: Optional[str] = None,
         ) -> List[TextContent]:
-            """List variables in the Jupyter namespace.
-
-            Args:
-                type_filter: Optional type filter (e.g., "array", "dict", "instrument")
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             try:
                 variables = await self.tools.list_variables(type_filter)
@@ -267,7 +262,6 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_get_variable_info",
             annotations={
-                "title": "Get Variable Info",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -276,12 +270,7 @@ class NotebookToolRegistrar:
         async def get_variable_info(
             name: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Get detailed information about a notebook variable.
-
-            Args:
-                name: Variable name
-                detailed: If False (default), return concise summary; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             try:
                 info = await self.tools.get_variable_info(name)
@@ -320,7 +309,6 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_get_editing_cell",
             annotations={
-                "title": "Get Active Cell",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -333,25 +321,7 @@ class NotebookToolRegistrar:
             max_lines: int = 200,
             detailed: bool = False,
         ) -> List[TextContent]:
-            """Get the currently editing cell content from JupyterLab frontend.
-
-            This captures the cell that is currently being edited in the frontend.
-
-            Args:
-                fresh_ms: Maximum age in milliseconds. If provided and cached data is older,
-                         will request fresh data from frontend (default: 1000)
-                line_start: Optional starting line number (1-indexed).
-                line_end: Optional ending line number (1-indexed, inclusive).
-                max_lines: Maximum number of lines to return (default: 200).
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Line selection logic:
-                - If both line_start and line_end are provided: return those lines exactly
-                - Else if total_lines <= max_lines: return all lines
-                - Else if line_start is provided: return max_lines starting from line_start
-                - Else if line_end is provided: return max_lines ending at line_end
-                - Else: return first max_lines lines
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             args = {
                 "fresh_ms": fresh_ms,
@@ -397,22 +367,13 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_get_editing_cell_output",
             annotations={
-                "title": "Get Cell Output",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def get_editing_cell_output(detailed: bool = False) -> List[TextContent]:
-            """Get the output of the currently active cell in JupyterLab.
-
-            This tool retrieves the output from the cell that is currently selected
-            in JupyterLab, including any errors. If the cell hasn't been executed,
-            it will indicate that status.
-
-            Args:
-                detailed: If False (default), return concise summary; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
 
             def format_response(info: dict) -> List[TextContent]:
                 """Helper to format response with optional concise filtering."""
@@ -521,7 +482,7 @@ class NotebookToolRegistrar:
                 ]
 
     async def _get_output_from_ipython_history(self, format_response):
-        """Fallback: Get output from IPython In/Out history when frontend is unavailable."""
+        # Description loaded from metadata_baseline.yaml
         import sys
         import traceback
 
@@ -633,7 +594,6 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_get_notebook_cells",
             annotations={
-                "title": "Get Recent Cells",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -642,13 +602,7 @@ class NotebookToolRegistrar:
         async def get_notebook_cells(
             num_cells: int = 2, include_output: bool = True, detailed: bool = False
         ) -> List[TextContent]:
-            """Get recent notebook cells with input, output, and error information.
-
-            Args:
-                num_cells: Number of recent cells to retrieve (default: 2 for performance)
-                include_output: Include cell outputs and errors (default: True)
-                detailed: If False (default), return concise summary; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 import sys
                 import traceback
@@ -899,7 +853,6 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_move_cursor",
             annotations={
-                "title": "Move Cursor",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": True,
@@ -907,28 +860,7 @@ class NotebookToolRegistrar:
             },
         )
         async def move_cursor(target: str, detailed: bool = False) -> List[TextContent]:
-            """Move cursor to a different cell in the notebook.
-
-            Changes which cell is currently active (selected) in JupyterLab.
-            This is a SAFE operation as it only changes selection without modifying content.
-
-            Args:
-                target: Where to move the cursor:
-                       - "above": Move to cell above current
-                       - "below": Move to cell below current
-                       - "bottom": Move to the last cell in the notebook (by file order)
-                       - "<number>": Move to cell with that execution count (e.g., "5" for [5])
-                detailed: If False (default), return just success; if True, return full info
-
-            Returns:
-                JSON with operation status, old index, and new index
-
-            Example usage:
-                move_cursor("below")   # Move to next cell
-                move_cursor("above")   # Move to previous cell
-                move_cursor("bottom")  # Move to last cell in notebook
-                move_cursor("5")       # Move to cell [5]
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.move_cursor(target)
 
@@ -955,14 +887,13 @@ class NotebookToolRegistrar:
         @self.mcp.tool(
             name="notebook_server_status",
             annotations={
-                "title": "Server Status",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def server_status() -> List[TextContent]:
-            """Get server status and configuration."""
+            # Description loaded from metadata_baseline.yaml
             try:
                 # Get list of registered tools from FastMCP
                 registered_tools = []

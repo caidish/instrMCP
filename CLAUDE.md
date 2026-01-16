@@ -73,9 +73,35 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 When adding/removing MCP tools, update ALL of these:
 1. `instrmcp/servers/jupyter_qcodes/core/` - Core tool implementation
 2. `instrmcp/servers/jupyter_qcodes/options/` - Optional feature tools
-3. `instrmcp/utils/stdio_proxy.py` - Add/remove tool proxy
-4. `docs/ARCHITECTURE.md` - Update tool documentation
-5. `README.md` - Update feature documentation
+3. `instrmcp/config/metadata_baseline.yaml` - Add tool/resource descriptions
+4. `instrmcp/utils/stdio_proxy.py` - Add/remove tool proxy
+5. `docs/ARCHITECTURE.md` - Update tool documentation
+6. `README.md` - Update feature documentation
+
+### Metadata Configuration
+Tool and resource descriptions are stored in YAML, not hardcoded in Python:
+- **Baseline**: `instrmcp/config/metadata_baseline.yaml` (single source of truth)
+- **User overrides**: `~/.instrmcp/metadata.yaml` (optional customizations)
+- **Config loader**: `instrmcp/utils/metadata_config.py`
+- **STDIO client**: `instrmcp/utils/stdio_proxy.py` - `StdioMCPClient` for validation
+
+When adding a new tool, add its description to `metadata_baseline.yaml`:
+```yaml
+tools:
+  my_new_tool:
+    title: "My Tool"
+    description: |
+      Tool description here.
+      Args:
+          param1: Description of param1
+```
+
+**CLI commands**: `instrmcp metadata init|edit|list|show|path|validate`
+
+**Validation** (`instrmcp metadata validate`) tests the full STDIO proxy path:
+```
+CLI → STDIO → stdio_proxy → HTTP → MCP Server (8123)
+```
 
 ### Safe vs Unsafe vs Dangerous Mode
 - **Safe Mode**: Read-only access to instruments and notebooks (default)
@@ -128,12 +154,14 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 ## Checklist When Modifying Tools
 
 - [ ] Update tool implementation in `core/` or `options/`
+- [ ] Add tool description to `instrmcp/config/metadata_baseline.yaml`
 - [ ] Update `utils/stdio_proxy.py` with tool proxy
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
 - [ ] Update `tests/unit/test_stdio_proxy.py` with new tool tests (expected_tool list)
+- [ ] Run metadata e2e test: `python tests/playwright/run_metadata_e2e.py --mode snapshot` to update snapshot
 
 ## Version Management
 

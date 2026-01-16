@@ -101,7 +101,6 @@ class QCodesToolRegistrar:
         @self.mcp.tool(
             name="qcodes_instrument_info",
             annotations={
-                "title": "Get Instrument Info",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -110,19 +109,7 @@ class QCodesToolRegistrar:
         async def instrument_info(
             name: str, with_values: bool = False, detailed: bool = False
         ) -> List[TextContent]:
-            """Get detailed information about a QCodes instrument.
-
-            Args:
-                name: Instrument name, or "*" to list all instruments
-                with_values: Include parameter values in the response (only for specific instruments, not with "*")
-                detailed: If False (default), return concise summary; if True, return full response
-
-            Note:
-                To get live parameter values, use qcodes_get_parameter_values with:
-                - "{instrument}.{parameter}" for direct parameters
-                - "{instrument}.{channel}.{parameter}" for multi-channel instruments
-                Example: "lockin.X" or "dac.ch01.voltage"
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             try:
                 info = await self.tools.instrument_info(name, with_values)
@@ -165,7 +152,6 @@ class QCodesToolRegistrar:
         @self.mcp.tool(
             name="qcodes_get_parameter_info",
             annotations={
-                "title": "Get Parameter Info",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -174,18 +160,7 @@ class QCodesToolRegistrar:
         async def get_parameter_info(
             instrument: str, parameter: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Get metadata information about a specific QCodes parameter.
-
-            Args:
-                instrument: Instrument name in namespace
-                parameter: Parameter path (e.g., "voltage", "ch01.voltage")
-                detailed: If False (default), return core metadata (name, label,
-                         unit, vals, gettable/settable); if True, return all
-                         available metadata including scale, offset, cache, etc.
-
-            Returns:
-                Parameter metadata including validator limits (vals).
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             try:
                 info = await self.tools.get_parameter_info(
@@ -234,7 +209,6 @@ class QCodesToolRegistrar:
         @self.mcp.tool(
             name="qcodes_get_parameter_values",
             annotations={
-                "title": "Get Parameter Values",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -243,15 +217,7 @@ class QCodesToolRegistrar:
         async def get_parameter_values(
             queries: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Get QCodes parameter values - supports both single parameter and batch queries.
-
-            Args:
-                queries: JSON string containing single query or list of queries
-                         Single: {"instrument": "name", "parameter": "param", "fresh": false}
-                         Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
-                detailed: If False (default), return concise {instrument, parameter, value};
-                         if True, return full response with timestamps and source info
-            """
+            # Description loaded from metadata_baseline.yaml
             start = time.perf_counter()
             try:
                 queries_data = json.loads(queries)

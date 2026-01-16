@@ -92,10 +92,7 @@ class DynamicToolRegistrar:
         """
         if result.get("status") == "error":
             return result
-        return {
-            "status": result.get("status"),
-            "tool_name": result.get("tool_name"),
-        }
+        return {"status": result.get("status"), "tool_name": result.get("tool_name")}
 
     def _to_concise_revoke_tool(self, result: dict) -> dict:
         """Convert full revoke tool result to concise format.
@@ -132,10 +129,7 @@ class DynamicToolRegistrar:
         if result.get("status") == "error":
             return result
         tool_info = result.get("tool", {})
-        return {
-            "status": result.get("status"),
-            "tool_name": tool_info.get("name"),
-        }
+        return {"status": result.get("status"), "tool_name": tool_info.get("name")}
 
     def _to_concise_registry_stats(self, result: dict) -> dict:
         """Convert full registry stats result to concise format.
@@ -225,7 +219,7 @@ class DynamicToolRegistrar:
             # Create wrapper function with dynamic signature
             def create_wrapper():
                 async def wrapper(*args, **kwargs):
-                    """Wrapper for dynamically created tool."""
+                    # Description loaded from metadata_baseline.yaml
                     # Check for execute consent if required
                     if self.require_consent and self.consent_manager:
                         try:
@@ -287,7 +281,7 @@ class DynamicToolRegistrar:
         else:
             # No parameters - create a simple wrapper
             async def dynamic_tool_wrapper():
-                """Wrapper for dynamically created tool."""
+                # Description loaded from metadata_baseline.yaml
                 # Check for execute consent if required
                 if self.require_consent and self.consent_manager:
                     try:
@@ -321,10 +315,7 @@ class DynamicToolRegistrar:
                             f"Consent request timed out for tool execution '{spec.name}'"
                         )
                         return json.dumps(
-                            {
-                                "status": "error",
-                                "message": "Consent request timed out",
-                            }
+                            {"status": "error", "message": "Consent request timed out"}
                         )
 
                 try:
@@ -378,25 +369,7 @@ class DynamicToolRegistrar:
         malformed_json: str,
         original_error: str,
     ) -> Optional[str]:
-        """Attempt to auto-correct malformed JSON using LLM sampling.
-
-        This method uses MCP sampling to request the client's LLM to fix
-        JSON parsing errors. It's limited to simple structural fixes only.
-
-        Args:
-            ctx: FastMCP Context for LLM sampling
-            field_name: Name of the field with malformed JSON (e.g., "parameters")
-            malformed_json: The malformed JSON string
-            original_error: The original JSON parsing error message
-
-        Returns:
-            Corrected JSON string if successful, None if correction failed
-
-        Note:
-            - Only attempts correction if auto_correct_json is enabled
-            - Maximum 1 correction attempt per call (no retry loops)
-            - Logs all correction attempts to audit trail
-        """
+        # Description loaded from metadata_baseline.yaml
         if not self.auto_correct_json:
             return None
 
@@ -474,7 +447,6 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_register_tool",
             annotations={
-                "title": "Register Dynamic Tool",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": False,
@@ -495,38 +467,7 @@ Corrected JSON:"""
             tags: Optional[str] = None,  # JSON array string
             detailed: bool = False,
         ) -> str:
-            """Register a new dynamic tool.
-
-            This meta-tool allows LLMs to create new tools at runtime. The tool
-            specification will be validated and stored in the registry.
-
-            Args:
-                name: Tool name (snake_case, max 64 chars) - REQUIRED
-                source_code: Python function source code (max 10KB) - REQUIRED
-                version: Semantic version (default: "1.0.0")
-                description: Tool description (default: auto-generated from name)
-                author: Author identifier (default: "unknown")
-                capabilities: JSON array of capabilities for documentation (default: [], not enforced)
-                parameters: JSON array of parameter specifications (default: [])
-                returns: JSON object with return type specification (default: {"type": "object", "description": "Result"})
-                examples: Optional JSON array of usage examples
-                tags: Optional JSON array of searchable tags
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with registration result
-
-            Example (minimal):
-                name="my_tool"
-                source_code="def my_tool(x):\\n    return x * 2"
-
-            Example (full):
-                name="analyze_data"
-                source_code="def analyze_data(data):\\n    return sum(data)"
-                capabilities='["cap:python.numpy"]'
-                parameters='[{"name": "data", "type": "array", "description": "Input data", "required": true}]'
-                returns='{"type": "number", "description": "Sum of data"}'
-            """
+            # Description loaded from metadata_baseline.yaml
             # Track which fields were corrected for transparency
             corrected_fields = {}
 
@@ -534,7 +475,7 @@ Corrected JSON:"""
                 # Parse JSON strings (with defaults for empty/None values)
                 # Attempt auto-correction for JSON parsing errors if enabled
                 async def parse_json_field(field_name: str, json_str: Optional[str]):
-                    """Parse JSON with optional auto-correction."""
+                    # Description loaded from metadata_baseline.yaml
                     if not json_str:
                         return None
                     try:
@@ -697,7 +638,6 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_update_tool",
             annotations={
-                "title": "Update Dynamic Tool",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": False,
@@ -716,35 +656,13 @@ Corrected JSON:"""
             tags: Optional[str] = None,  # JSON array string
             detailed: bool = False,
         ) -> str:
-            """Update an existing dynamic tool.
-
-            Updates the specified fields of an existing tool. All fields except
-            name and version are optional.
-
-            Args:
-                name: Tool name (must exist)
-                version: New version (must be different from current)
-                description: Updated description (optional)
-                capabilities: Updated capabilities JSON array (optional)
-                parameters: Updated parameters JSON array (optional)
-                returns: Updated return specification JSON object (optional)
-                source_code: Updated source code (optional)
-                examples: Updated examples JSON array (optional)
-                tags: Updated tags JSON array (optional)
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with update result
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 # Get existing spec
                 existing_spec = self.registry.get(name)
                 if not existing_spec:
                     return json.dumps(
-                        {
-                            "status": "error",
-                            "message": f"Tool '{name}' does not exist",
-                        }
+                        {"status": "error", "message": f"Tool '{name}' does not exist"}
                     )
 
                 old_version = existing_spec.version
@@ -896,7 +814,6 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_revoke_tool",
             annotations={
-                "title": "Revoke Dynamic Tool",
                 "readOnlyHint": False,
                 "destructiveHint": True,
                 "idempotentHint": True,
@@ -908,27 +825,13 @@ Corrected JSON:"""
             reason: Optional[str] = None,
             detailed: bool = False,
         ) -> str:
-            """Revoke (delete) a dynamic tool.
-
-            Permanently removes a tool from the registry. This action cannot be undone.
-
-            Args:
-                name: Tool name to revoke
-                reason: Optional reason for revocation
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with revocation result
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 # Get spec for logging
                 spec = self.registry.get(name)
                 if not spec:
                     return json.dumps(
-                        {
-                            "status": "error",
-                            "message": f"Tool '{name}' does not exist",
-                        }
+                        {"status": "error", "message": f"Tool '{name}' does not exist"}
                     )
 
                 version = spec.version
@@ -968,7 +871,6 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_list_tools",
             annotations={
-                "title": "List Dynamic Tools",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -980,27 +882,13 @@ Corrected JSON:"""
             author: Optional[str] = None,
             detailed: bool = False,
         ) -> str:
-            """List all registered dynamic tools with optional filtering.
-
-            Args:
-                tag: Filter by tag (optional)
-                capability: Filter by capability (e.g., "cap:qcodes.read") (optional)
-                author: Filter by author (optional)
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with list of tools
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 tools = self.registry.list_tools(
                     tag=tag, capability=capability, author=author
                 )
 
-                response = {
-                    "status": "success",
-                    "count": len(tools),
-                    "tools": tools,
-                }
+                response = {"status": "success", "count": len(tools), "tools": tools}
 
                 # Apply concise mode filtering
                 if not detailed:
@@ -1016,33 +904,18 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_inspect_tool",
             annotations={
-                "title": "Inspect Dynamic Tool",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def dynamic_inspect_tool(name: str, detailed: bool = False) -> str:
-            """Inspect a dynamic tool's complete specification.
-
-            Returns the full tool specification including source code, parameters,
-            capabilities, and metadata.
-
-            Args:
-                name: Tool name to inspect
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with complete tool specification
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 spec = self.registry.get(name)
                 if not spec:
                     return json.dumps(
-                        {
-                            "status": "error",
-                            "message": f"Tool '{name}' does not exist",
-                        }
+                        {"status": "error", "message": f"Tool '{name}' does not exist"}
                     )
 
                 response = {"status": "success", "tool": spec.to_dict()}
@@ -1061,24 +934,13 @@ Corrected JSON:"""
         @self.mcp.tool(
             name="dynamic_registry_stats",
             annotations={
-                "title": "Registry Statistics",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def dynamic_registry_stats(detailed: bool = False) -> str:
-            """Get statistics about the dynamic tool registry.
-
-            Returns information about the total number of tools, tools by author,
-            tools by capability, and registry location.
-
-            Args:
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON string with registry statistics
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 stats = self.registry.get_stats()
                 response = {"status": "success", "stats": stats}

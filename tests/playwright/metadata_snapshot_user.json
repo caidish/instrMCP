@@ -1,8 +1,8 @@
 {
   "resources": {
     "resource://available_instruments": {
-      "description": "Resource providing list of available QCodes instruments.",
-      "name": "available_instruments"
+      "description": "[USER OVERRIDE] Lists all QCodes instruments currently registered in the station.\nWhen to use: You need to discover what instruments are available before querying them.\nExample: First check available_instruments, then use qcodes_instrument_info for details.",
+      "name": "USER OVERRIDE: Available Instruments"
     },
     "resource://database_access0d_template": {
       "description": "Load Sweep0D time-based data from QCodes database",
@@ -373,8 +373,8 @@
           "description": null
         }
       },
-      "description": "Get detailed information about a QCodes instrument.\n\nArgs:\n    name: Instrument name, or \"*\" to list all instruments\n    with_values: Include parameter values in the response (only for specific instruments, not with \"*\")\n    detailed: If False (default), return concise summary; if True, return full response\n\nNote:\n    To get live parameter values, use qcodes_get_parameter_values with:\n    - \"{instrument}.{parameter}\" for direct parameters\n    - \"{instrument}.{channel}.{parameter}\" for multi-channel instruments\n    Example: \"lockin.X\" or \"dac.ch01.voltage\"",
-      "title": "Get Instrument Info"
+      "description": "[USER OVERRIDE] Get detailed information about QCodes instruments.\n\nThis description has been customized by the user to demonstrate\nthe metadata override system works correctly.\n\nArgs:\n    name: Name of the instrument to query (use '*' for all instruments)\n    with_values: Include current parameter values in the output",
+      "title": "USER OVERRIDE: Instrument Info"
     }
   }
 }

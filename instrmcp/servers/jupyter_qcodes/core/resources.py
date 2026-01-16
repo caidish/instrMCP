@@ -2,12 +2,13 @@
 Resource registrar for MCP server.
 
 Registers all MCP resources (core, MeasureIt templates, and database resources).
+Resource descriptions are loaded from metadata_baseline.yaml.
 """
 
 import asyncio
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 from mcp.types import Resource, TextResourceContents
 
@@ -24,6 +25,7 @@ class ResourceRegistrar:
         enabled_options=None,
         measureit_module=None,
         db_module=None,
+        metadata_config=None,
     ):
         """
         Initialize the resource registrar.
@@ -34,12 +36,48 @@ class ResourceRegistrar:
             enabled_options: Set of enabled optional features
             measureit_module: MeasureIt integration module (optional)
             db_module: Database integration module (optional)
+            metadata_config: MetadataConfig instance for resource descriptions
         """
         self.mcp = mcp_server
         self.tools = tools
         self.enabled_options = enabled_options or set()
         self.measureit = measureit_module
         self.db = db_module
+        self.metadata_config = metadata_config
+
+    def _get_resource_metadata(
+        self, uri: str, default_name: str = "resource", default_desc: str = ""
+    ) -> Tuple[str, str]:
+        """Look up resource name and description from metadata config.
+
+        Args:
+            uri: Resource URI (e.g., "resource://available_instruments")
+            default_name: Fallback name if not in config
+            default_desc: Fallback description if not in config
+
+        Returns:
+            Tuple of (name, description). Falls back to defaults if not in config.
+        """
+        if not self.metadata_config:
+            return default_name, default_desc
+
+        # Check resources section first
+        if uri in self.metadata_config.resources:
+            override = self.metadata_config.resources[uri]
+            return (
+                override.name or default_name,
+                override.compose_description() or default_desc,
+            )
+
+        # Check resource_templates section
+        if uri in self.metadata_config.resource_templates:
+            override = self.metadata_config.resource_templates[uri]
+            return (
+                override.name or default_name,
+                override.compose_description() or default_desc,
+            )
+
+        return default_name, default_desc
 
     def register_all(self):
         """Register all resources."""
@@ -59,159 +97,32 @@ class ResourceRegistrar:
         @self.mcp.tool(
             name="mcp_list_resources",
             annotations={
-                "title": "List MCP Resources",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def list_resources():
-            """
-            List all available MCP resources and guide on when to use them.
+            # Description loaded from metadata_baseline.yaml
+            # Dynamically query registered resources to reflect metadata overrides
+            try:
+                registered = await self.mcp.get_resources()
+            except Exception as e:
+                logger.error(f"Failed to get registered resources: {e}")
+                registered = {}
 
-            MCP Resources provide READ-ONLY reference data and templates,
-            while Tools perform active operations. Use this tool to discover
-            what context and documentation is available.
-
-            Returns:
-                Comprehensive guide including all resource URIs, descriptions,
-                use cases, and guidance on resources vs tools.
-            """
-            # Build list of available resources
+            # Build list of available resources from registered resources
             resources_list = []
+            for uri, resource in registered.items():
+                entry = {
+                    "uri": str(uri),
+                    "name": getattr(resource, "name", None) or str(uri),
+                    "description": getattr(resource, "description", None),
+                }
+                resources_list.append(entry)
 
-            # Core QCodes resources (always available)
-            resources_list.extend(
-                [
-                    {
-                        "uri": "resource://available_instruments",
-                        "name": "Available Instruments",
-                        "description": "JSON list of QCodes instruments with hierarchical parameter structure",
-                        "use_when": "Need to know what instruments exist BEFORE calling qcodes_instrument_info",
-                        "example": "Check this first to see instrument names, then use tools to read specific parameters",
-                    },
-                    {
-                        "uri": "resource://station_state",
-                        "name": "QCodes Station State",
-                        "description": "Station metadata summary (no instrument details)",
-                        "use_when": "Need station metadata; use available_instruments for instrument lists",
-                        "example": "Get station metadata, then fetch instruments from resource://available_instruments",
-                    },
-                ]
-            )
-
-            # MeasureIt resources (if enabled)
-            if "measureit" in self.enabled_options:
-                resources_list.extend(
-                    [
-                        {
-                            "uri": "resource://measureit_sweep0d_template",
-                            "name": "MeasureIt Sweep0D Template",
-                            "description": "Code examples for time-based monitoring",
-                            "use_when": "Need to monitor parameters over time without sweeping",
-                            "example": "Get complete working code for Sweep0D measurements",
-                        },
-                        {
-                            "uri": "resource://measureit_sweep1d_template",
-                            "name": "MeasureIt Sweep1D Template",
-                            "description": "Code examples for single parameter sweeps",
-                            "use_when": "Need to sweep one parameter and measure outputs",
-                            "example": "Get patterns for voltage sweeps, frequency scans, etc.",
-                        },
-                        {
-                            "uri": "resource://measureit_sweep2d_template",
-                            "name": "MeasureIt Sweep2D Template",
-                            "description": "Code examples for 2D parameter mapping",
-                            "use_when": "Need to create 2D maps (e.g., gate voltage vs bias)",
-                            "example": "Get code for two-parameter measurements",
-                        },
-                        {
-                            "uri": "resource://measureit_simulsweep_template",
-                            "name": "MeasureIt SimulSweep Template",
-                            "description": "Code for simultaneous parameter sweeping",
-                            "use_when": "Need to sweep multiple parameters together",
-                            "example": "Coordinated multi-parameter sweeps",
-                        },
-                        {
-                            "uri": "resource://measureit_sweepqueue_template",
-                            "name": "MeasureIt SweepQueue Template",
-                            "description": "Code for sequential measurement workflows",
-                            "use_when": "Need to run multiple measurements in sequence",
-                            "example": "Automated measurement sequences",
-                        },
-                        {
-                            "uri": "resource://measureit_common_patterns",
-                            "name": "MeasureIt Common Patterns",
-                            "description": "Best practices and common patterns",
-                            "use_when": "Need guidance on MeasureIt usage patterns",
-                            "example": "Learn best practices for measurements",
-                        },
-                        {
-                            "uri": "resource://measureit_code_examples",
-                            "name": "MeasureIt Code Examples",
-                            "description": "Complete collection of ALL MeasureIt patterns",
-                            "use_when": "Need comprehensive reference for all measurement types",
-                            "example": "Single source for all MeasureIt code patterns",
-                        },
-                        # Database access templates (for loading saved data)
-                        {
-                            "uri": "resource://database_access0d_template",
-                            "name": "Database Access Sweep0D",
-                            "description": "Load Sweep0D time-based data from QCodes database",
-                            "use_when": "Need to reload saved Sweep0D data for analysis",
-                            "example": "Load and plot time-series measurements",
-                        },
-                        {
-                            "uri": "resource://database_access1d_template",
-                            "name": "Database Access Sweep1D",
-                            "description": "Load Sweep1D data from QCodes database",
-                            "use_when": "Need to reload saved Sweep1D data for analysis",
-                            "example": "Load and analyze single parameter sweep data",
-                        },
-                        {
-                            "uri": "resource://database_access2d_template",
-                            "name": "Database Access Sweep2D",
-                            "description": "Load Sweep2D data from QCodes database (single run or parent group)",
-                            "use_when": "Need to reload saved 2D map data for analysis",
-                            "example": "Load and visualize 2D measurement maps",
-                        },
-                        {
-                            "uri": "resource://database_access_simulsweep_template",
-                            "name": "Database Access SimulSweep",
-                            "description": "Load SimulSweep data from QCodes database",
-                            "use_when": "Need to reload saved SimulSweep data for analysis",
-                            "example": "Load coordinated multi-parameter sweep data",
-                        },
-                        {
-                            "uri": "resource://database_access_sweepqueue_template",
-                            "name": "Database Access SweepQueue",
-                            "description": "Load SweepQueue batch data from QCodes database",
-                            "use_when": "Need to reload saved SweepQueue batch data for analysis",
-                            "example": "Load sequential measurement batch data",
-                        },
-                    ]
-                )
-
-            # Database resources (if enabled)
-            if "database" in self.enabled_options:
-                resources_list.extend(
-                    [
-                        {
-                            "uri": "resource://database_config",
-                            "name": "Database Configuration",
-                            "description": "Current database path and connection status",
-                            "use_when": "Need to check database location before querying",
-                            "example": "Verify database path before listing experiments",
-                        },
-                        {
-                            "uri": "resource://recent_measurements",
-                            "name": "Recent Measurements",
-                            "description": "Metadata for recent measurements across all experiments",
-                            "use_when": "Need quick overview of recent data",
-                            "example": "Browse recent measurements without listing all experiments",
-                        },
-                    ]
-                )
+            # Sort by URI for consistent ordering
+            resources_list.sort(key=lambda x: x["uri"])
 
             # Build guidance
             guide = {
@@ -232,31 +143,13 @@ class ResourceRegistrar:
         @self.mcp.tool(
             name="mcp_get_resource",
             annotations={
-                "title": "Get MCP Resource",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def get_resource(uri: str):
-            """
-            Retrieve the content of a specific MCP resource by its URI.
-
-            Use this tool to access resource content when you need the actual data
-            (e.g., instrument list, templates, configuration). This is a fallback
-            when direct resource access is not available.
-
-            Args:
-                uri: Resource URI (e.g., "resource://available_instruments")
-
-            Returns:
-                Resource content as JSON or text.
-
-            Examples:
-                - mcp_get_resource("resource://available_instruments")
-                - mcp_get_resource("resource://measureit_sweep1d_template")
-                - mcp_get_resource("resource://database_config")
-            """
+            # Description loaded from metadata_baseline.yaml
             # Map URIs to resource handlers
             resource_map = {
                 "resource://available_instruments": self._get_available_instruments,
@@ -337,7 +230,7 @@ class ResourceRegistrar:
                 return [TextContent(type="text", text=json.dumps(error_msg, indent=2))]
 
     async def _get_available_instruments(self):
-        """Get available instruments resource content."""
+        # Description loaded from metadata_baseline.yaml
         try:
             instruments = await self.tools.list_instruments()
             return json.dumps(instruments, indent=2, default=str)
@@ -346,7 +239,7 @@ class ResourceRegistrar:
             return json.dumps({"error": str(e), "status": "error"}, indent=2)
 
     async def _get_station_state(self):
-        """Get station state resource content."""
+        # Description loaded from metadata_baseline.yaml
         try:
             snapshot = await self.tools.get_station_snapshot()
             summary = self._summarize_station_snapshot(snapshot)
@@ -400,18 +293,29 @@ class ResourceRegistrar:
 
     def _register_core_resources(self):
         """Register core QCodes and notebook resources."""
+        # Get metadata from config (with fallback defaults for tests)
+        instr_name, instr_desc = self._get_resource_metadata(
+            "resource://available_instruments",
+            default_name="available_instruments",
+            default_desc="List of available QCodes instruments",
+        )
+        station_name, station_desc = self._get_resource_metadata(
+            "resource://station_state",
+            default_name="station_state",
+            default_desc="Current QCodes station snapshot",
+        )
 
         @self.mcp.resource("resource://available_instruments")
         async def available_instruments() -> Resource:
-            """Resource providing list of available QCodes instruments."""
+            # Description loaded from metadata_baseline.yaml
             try:
                 instruments = await self.tools.list_instruments()
                 content = json.dumps(instruments, indent=2, default=str)
 
                 return Resource(
                     uri="resource://available_instruments",
-                    name="Available Instruments",
-                    description="List of QCodes instruments available in the namespace with hierarchical parameter structure",
+                    name=instr_name,
+                    description=instr_desc,
                     mimeType="application/json",
                     contents=[
                         TextResourceContents(
@@ -428,8 +332,8 @@ class ResourceRegistrar:
                 )
                 return Resource(
                     uri="resource://available_instruments",
-                    name="Available Instruments (Error)",
-                    description="Error retrieving available instruments",
+                    name=instr_name,
+                    description=instr_desc,
                     mimeType="application/json",
                     contents=[
                         TextResourceContents(
@@ -442,7 +346,7 @@ class ResourceRegistrar:
 
         @self.mcp.resource("resource://station_state")
         async def station_state() -> Resource:
-            """Resource providing current QCodes station snapshot."""
+            # Description loaded from metadata_baseline.yaml
             try:
                 snapshot = await self.tools.get_station_snapshot()
                 summary = self._summarize_station_snapshot(snapshot)
@@ -450,8 +354,8 @@ class ResourceRegistrar:
 
                 return Resource(
                     uri="resource://station_state",
-                    name="QCodes Station State",
-                    description="Station metadata summary (no instrument details)",
+                    name=station_name,
+                    description=station_desc,
                     mimeType="application/json",
                     contents=[
                         TextResourceContents(
@@ -468,8 +372,8 @@ class ResourceRegistrar:
                 )
                 return Resource(
                     uri="resource://station_state",
-                    name="Station State (Error)",
-                    description="Error retrieving station state",
+                    name=station_name,
+                    description=station_desc,
                     mimeType="application/json",
                     contents=[
                         TextResourceContents(
@@ -481,8 +385,10 @@ class ResourceRegistrar:
                 )
 
     def _register_measureit_resources(self):
-        """Register MeasureIt template resources."""
+        """Register MeasureIt template resources.
 
+        Name and description loaded from metadata_baseline.yaml.
+        """
         # Import MeasureIt template functions
         from ..options.measureit import (
             get_sweep0d_template,
@@ -500,93 +406,46 @@ class ResourceRegistrar:
             get_database_access_sweepqueue_template,
         )
 
+        # Map URI suffix to content function - name/description from config
         templates = [
             # Sweep templates (for running measurements)
-            (
-                "measureit_sweep0d_template",
-                "MeasureIt Sweep0D Template",
-                "Sweep0D code examples and patterns for time-based monitoring",
-                get_sweep0d_template,
-            ),
-            (
-                "measureit_sweep1d_template",
-                "MeasureIt Sweep1D Template",
-                "Sweep1D code examples and patterns for single parameter sweeps",
-                get_sweep1d_template,
-            ),
-            (
-                "measureit_sweep2d_template",
-                "MeasureIt Sweep2D Template",
-                "Sweep2D code examples and patterns for 2D parameter mapping",
-                get_sweep2d_template,
-            ),
-            (
-                "measureit_simulsweep_template",
-                "MeasureIt SimulSweep Template",
-                "SimulSweep code examples for simultaneous parameter sweeping",
-                get_simulsweep_template,
-            ),
-            (
-                "measureit_sweepqueue_template",
-                "MeasureIt SweepQueue Template",
-                "SweepQueue code examples for sequential measurement workflows",
-                get_sweepqueue_template,
-            ),
-            (
-                "measureit_common_patterns",
-                "MeasureIt Common Patterns",
-                "Common MeasureIt patterns and best practices",
-                get_common_patterns_template,
-            ),
-            (
-                "measureit_code_examples",
-                "MeasureIt Code Examples",
-                "Complete collection of ALL MeasureIt patterns in structured format",
-                get_measureit_code_examples,
-            ),
+            ("measureit_sweep0d_template", get_sweep0d_template),
+            ("measureit_sweep1d_template", get_sweep1d_template),
+            ("measureit_sweep2d_template", get_sweep2d_template),
+            ("measureit_simulsweep_template", get_simulsweep_template),
+            ("measureit_sweepqueue_template", get_sweepqueue_template),
+            ("measureit_common_patterns", get_common_patterns_template),
+            ("measureit_code_examples", get_measureit_code_examples),
             # Data access templates (for loading saved data from database)
-            (
-                "database_access0d_template",
-                "Database Access Sweep0D",
-                "Load Sweep0D time-based data from QCodes database",
-                get_database_access0d_template,
-            ),
-            (
-                "database_access1d_template",
-                "Database Access Sweep1D",
-                "Load Sweep1D data from QCodes database",
-                get_database_access1d_template,
-            ),
-            (
-                "database_access2d_template",
-                "Database Access Sweep2D",
-                "Load Sweep2D data from QCodes database (single run or parent group)",
-                get_database_access2d_template,
-            ),
+            ("database_access0d_template", get_database_access0d_template),
+            ("database_access1d_template", get_database_access1d_template),
+            ("database_access2d_template", get_database_access2d_template),
             (
                 "database_access_simulsweep_template",
-                "Database Access SimulSweep",
-                "Load SimulSweep data from QCodes database",
                 get_database_access_simulsweep_template,
             ),
             (
                 "database_access_sweepqueue_template",
-                "Database Access SweepQueue",
-                "Load SweepQueue batch data from QCodes database",
                 get_database_access_sweepqueue_template,
             ),
         ]
 
-        for uri_suffix, name, description, get_content_func in templates:
-            self._register_template_resource(
-                uri_suffix, name, description, get_content_func
-            )
+        for uri_suffix, get_content_func in templates:
+            self._register_template_resource(uri_suffix, get_content_func)
 
-    def _register_template_resource(
-        self, uri_suffix, name, description, get_content_func
-    ):
-        """Helper to register a template resource."""
+    def _register_template_resource(self, uri_suffix, get_content_func):
+        """Helper to register a template resource.
+
+        Name and description loaded from metadata_baseline.yaml.
+        """
         uri = f"resource://{uri_suffix}"
+
+        # Look up metadata from config (with fallback to uri_suffix as name)
+        name, description = self._get_resource_metadata(
+            uri,
+            default_name=uri_suffix,
+            default_desc=f"Template resource: {uri_suffix}",
+        )
 
         @self.mcp.resource(uri)
         async def template_resource() -> Resource:
@@ -604,16 +463,30 @@ class ResourceRegistrar:
             )
 
     def _register_database_resources(self):
-        """Register database integration resources."""
+        """Register database integration resources.
+
+        Name and description loaded from metadata_baseline.yaml.
+        """
+        # Get metadata from config (with fallback defaults for tests)
+        db_config_name, db_config_desc = self._get_resource_metadata(
+            "resource://database_config",
+            default_name="database_config",
+            default_desc="Current QCodes database configuration",
+        )
+        recent_name, recent_desc = self._get_resource_metadata(
+            "resource://recent_measurements",
+            default_name="recent_measurements",
+            default_desc="Metadata for recent measurements",
+        )
 
         @self.mcp.resource("resource://database_config")
         async def database_config() -> Resource:
-            """Resource providing current QCodes database configuration."""
+            # Description loaded from metadata_baseline.yaml
             content = self.db.get_current_database_config()
             return Resource(
                 uri="resource://database_config",
-                name="Database Configuration",
-                description="Current QCodes database configuration, path, and connection status",
+                name=db_config_name,
+                description=db_config_desc,
                 mimeType="application/json",
                 contents=[
                     TextResourceContents(
@@ -626,12 +499,12 @@ class ResourceRegistrar:
 
         @self.mcp.resource("resource://recent_measurements")
         async def recent_measurements() -> Resource:
-            """Resource providing metadata for recent measurements."""
+            # Description loaded from metadata_baseline.yaml
             content = self.db.get_recent_measurements()
             return Resource(
                 uri="resource://recent_measurements",
-                name="Recent Measurements",
-                description="Metadata for recent measurements across all experiments",
+                name=recent_name,
+                description=recent_desc,
                 mimeType="application/json",
                 contents=[
                     TextResourceContents(

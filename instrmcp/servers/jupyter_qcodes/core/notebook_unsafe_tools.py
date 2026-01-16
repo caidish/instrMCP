@@ -219,7 +219,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_update_editing_cell",
             annotations={
-                "title": "Update Active Cell",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": True,
@@ -229,16 +228,7 @@ class UnsafeToolRegistrar:
         async def update_editing_cell(
             content: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Update the content of the currently editing cell in JupyterLab frontend.
-
-            UNSAFE: This tool modifies the content of the currently active cell.
-            Only available in unsafe mode. The content will replace the entire
-            current cell content.
-
-            Args:
-                content: New Python code content to set in the active cell
-                detailed: If False (default), return concise summary; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             # SECURITY: Scan the new content for dangerous patterns BEFORE consent
             rejection = self._scan_and_reject(content, "notebook_update_editing_cell")
             if rejection:
@@ -325,7 +315,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_execute_cell",
             annotations={
-                "title": "Execute Cell",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": False,
@@ -335,37 +324,7 @@ class UnsafeToolRegistrar:
         async def execute_editing_cell(
             timeout: float = 30.0, detailed: bool = False
         ) -> List[TextContent]:
-            """Execute the currently editing cell and return the output.
-
-            UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
-            The code will run in the frontend and this tool will wait for execution to complete,
-            returning the cell output in the response.
-
-            Args:
-                timeout: Maximum seconds to wait for execution to complete (default: 30.0)
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns:
-                JSON response with execution result including:
-                - signal_success: Whether the execution request was sent successfully (was 'success')
-                - status: Execution status ("completed", "error", or "timeout")
-                - execution_count: The IPython execution count for this cell
-                - input: The code that was executed (detailed mode only)
-                - outputs: List of cell outputs (both modes)
-                - output: Expression return value if any (both modes)
-                - output_summary: Truncated first output for quick preview (concise mode)
-                - has_output: Whether the cell produced output
-                - has_error: Whether an error occurred
-                - error_type: Error type name if execution failed
-                - error_message: Error message if execution failed
-                - traceback: Full traceback if execution failed (when available)
-                - sweep_detected: True if .start() was detected in the code
-                - suggestion: Hint to use wait tools if sweep was detected
-
-            Note:
-                - If sweep_detected is True, use measureit_wait_for_sweep(variable_name) or
-                  measureit_wait_for_all_sweeps() to wait for completion before proceeding.
-            """
+            # Description loaded from metadata_baseline.yaml
             # SECURITY: First get cell content and scan for dangerous patterns
             # This runs BEFORE consent - it's a hard security boundary
             try:
@@ -479,7 +438,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_add_cell",
             annotations={
-                "title": "Add Cell",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": False,
@@ -492,17 +450,7 @@ class UnsafeToolRegistrar:
             content: str = "",
             detailed: bool = False,
         ) -> List[TextContent]:
-            """Add a new cell in the notebook.
-
-            UNSAFE: This tool adds new cells to the notebook. Only available in unsafe mode.
-            The cell will be created relative to the currently active cell.
-
-            Args:
-                cell_type: Type of cell to create ("code", "markdown", "raw") - default: "code"
-                position: Where to add cell ("above", "below", "end") - default: "below"
-                content: Initial content for the new cell - default: empty string
-                detailed: If False (default), return just success; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             # SECURITY: Scan content for dangerous patterns (only for code cells)
             if cell_type == "code" and content:
                 rejection = self._scan_and_reject(content, "notebook_add_cell")
@@ -535,7 +483,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_delete_cell",
             annotations={
-                "title": "Delete Cell",
                 "readOnlyHint": False,
                 "destructiveHint": True,
                 "idempotentHint": True,
@@ -543,15 +490,7 @@ class UnsafeToolRegistrar:
             },
         )
         async def delete_editing_cell(detailed: bool = False) -> List[TextContent]:
-            """Delete the currently editing cell.
-
-            UNSAFE: This tool deletes the currently active cell from the notebook. Only available in unsafe mode.
-            Use with caution as this action cannot be undone easily. If this is the last cell in the notebook,
-            a new empty code cell will be created automatically.
-
-            Args:
-                detailed: If False (default), return just success; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             # Request consent if consent manager is available
             if self.consent_manager:
                 try:
@@ -632,7 +571,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_delete_cells",
             annotations={
-                "title": "Delete Multiple Cells",
                 "readOnlyHint": False,
                 "destructiveHint": True,
                 "idempotentHint": True,
@@ -642,24 +580,7 @@ class UnsafeToolRegistrar:
         async def delete_cells_by_number(
             cell_numbers: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Delete multiple cells by their execution count numbers.
-
-            UNSAFE: This tool deletes cells from the notebook by their execution counts.
-            Only available in unsafe mode. Use with caution as this action cannot be undone easily.
-
-            Args:
-                cell_numbers: JSON string containing a list of execution count numbers to delete.
-                             Example: "[1, 2, 5]" to delete cells 1, 2, and 5
-                             Can also be a single number: "3"
-                detailed: If False (default), return just success; if True, return full info
-
-            Returns:
-                JSON with deletion status and detailed results for each cell, including:
-                - success: Overall operation success
-                - deleted_count: Number of cells actually deleted
-                - total_requested: Number of cells requested to delete
-                - results: List with status for each cell number
-            """
+            # Description loaded from metadata_baseline.yaml
             # Parse cell_numbers first for validation
             import json as json_module
 
@@ -777,7 +698,6 @@ class UnsafeToolRegistrar:
         @self.mcp.tool(
             name="notebook_apply_patch",
             annotations={
-                "title": "Apply Patch",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": True,
@@ -787,16 +707,7 @@ class UnsafeToolRegistrar:
         async def apply_patch(
             old_text: str, new_text: str, detailed: bool = False
         ) -> List[TextContent]:
-            """Apply a patch to the current cell content.
-
-            UNSAFE: This tool modifies the content of the currently active cell. Only available in unsafe mode.
-            It replaces the first occurrence of old_text with new_text in the cell content.
-
-            Args:
-                old_text: Text to find and replace (cannot be empty)
-                new_text: Text to replace with (can be empty to delete text)
-                detailed: If False (default), return just success; if True, return full info
-            """
+            # Description loaded from metadata_baseline.yaml
             # SECURITY: Get current cell content and compute the patched result
             # We must scan the FULL resulting code, not just the new_text fragment
             try:

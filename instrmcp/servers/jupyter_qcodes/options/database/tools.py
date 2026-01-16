@@ -190,7 +190,6 @@ d = ds.get_parameter_data()
         @self.mcp.tool(
             name="database_list_experiments",
             annotations={
-                "title": "List Experiments",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -200,16 +199,7 @@ d = ds.get_parameter_data()
             database_path: Optional[str] = None,
             detailed: bool = False,
         ) -> List[TextContent]:
-            """List all experiments in the specified QCodes database.
-
-            Args:
-                database_path: Path to database file. If None, uses MeasureIt
-                    default or QCodes config.
-                detailed: If False (default), return concise summary; if True, return full info
-
-            Returns JSON containing experiment information including ID, name,
-            sample name, and format string for each experiment.
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result_str = self.db.list_experiments(database_path=database_path)
                 result = json.loads(result_str)
@@ -260,7 +250,6 @@ d = ds.get_parameter_data()
         @self.mcp.tool(
             name="database_get_dataset_info",
             annotations={
-                "title": "Get Dataset Info",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -272,17 +261,7 @@ d = ds.get_parameter_data()
             detailed: bool = False,
             code_suggestion: bool = True,
         ) -> List[TextContent]:
-            """Get detailed information about a specific dataset.
-
-            Args:
-                id: Dataset run ID to load (e.g., load_by_id(2))
-                database_path: Path to database file. If None, uses MeasureIt
-                    default or QCodes config.
-                detailed: If False (default), return concise summary; if True, return full info
-                code_suggestion: If True, include Python code example for loading the dataset.
-                    In unsafe/dangerous mode, the code is automatically added to a new cell
-                    and executed. In safe mode, the code is returned as a suggestion.
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result_str = self.db.get_dataset_info(
                     id=id, database_path=database_path
@@ -323,14 +302,7 @@ d = ds.get_parameter_data()
                 ]
 
     async def _auto_execute_code(self, code: str) -> dict:
-        """Add code to a new cell and execute it.
-
-        Args:
-            code: Python code to execute
-
-        Returns:
-            Dictionary with execution status and output
-        """
+        # Description loaded from metadata_baseline.yaml
         try:
             # 1. Add new cell with the code
             add_result = await self.tools.add_new_cell(
@@ -436,7 +408,6 @@ d = ds.get_parameter_data()
         @self.mcp.tool(
             name="database_get_database_stats",
             annotations={
-                "title": "Database Statistics",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -445,15 +416,7 @@ d = ds.get_parameter_data()
         async def get_database_stats(
             database_path: Optional[str] = None,
         ) -> List[TextContent]:
-            """Get database statistics and health information.
-
-            Args:
-                database_path: Path to database file. If None, uses MeasureIt
-                    default or QCodes config.
-
-            Returns JSON containing database statistics including path, size,
-            experiment count, dataset count, and last modified time.
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = self.db.get_database_stats(database_path=database_path)
                 return [TextContent(type="text", text=result)]
@@ -471,7 +434,6 @@ d = ds.get_parameter_data()
         @self.mcp.tool(
             name="database_list_available",
             annotations={
-                "title": "List Databases",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
@@ -480,17 +442,7 @@ d = ds.get_parameter_data()
         async def list_available_databases(
             detailed: bool = False,
         ) -> List[TextContent]:
-            """List all available QCodes databases.
-
-            Searches common locations including MeasureIt databases directory
-            and QCodes configuration paths.
-
-            Args:
-                detailed: If False (default), return only database names and paths;
-                    if True, return full info including size, source, experiment count.
-
-            Returns JSON containing available databases.
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result_str = self.db.list_available_databases()
                 result = json.loads(result_str)

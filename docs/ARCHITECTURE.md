@@ -8,19 +8,22 @@ This document describes the technical architecture of InstrMCP, including packag
 instrmcp/
 ├── servers/           # MCP server implementations
 │   ├── jupyter_qcodes/ # Jupyter integration with QCodes instrument access
-│   │   ├── mcp_server.py      # FastMCP server implementation (870 lines)
-│   │   ├── tools.py           # QCodes read-only tools and Jupyter integration (35KB)
-│   │   ├── tools_unsafe.py    # Unsafe mode tools with registrar pattern (130 lines)
-│   │   └── cache.py           # Caching and rate limiting for QCodes parameter reads
+│   │   ├── mcp_server.py      # FastMCP server implementation
+│   │   ├── tools.py           # QCodes read-only tools and Jupyter integration
+│   │   ├── tools_unsafe.py    # Unsafe mode tools with registrar pattern
+│   │   ├── cache.py           # Caching and rate limiting for QCodes parameter reads
+│   │   ├── core/              # Core tool registrars (qcodes, notebook, resources)
+│   │   ├── options/           # Optional features (measureit, database, dynamic_tool)
+│   │   └── security/          # Security scanners and consent management
 │   └── qcodes/        # Standalone QCodes station server
 ├── extensions/        # Jupyter/IPython extensions
-│   ├── jupyterlab/    # JupyterLab extension for active cell bridging
-│   ├── database/      # Database integration tools and resources
-│   └── MeasureIt/     # MeasureIt template resources
-├── tools/             # Helper utilities
-│   └── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
-├── config/            # Configuration management
-│   └── data/          # YAML station configuration files
+│   └── jupyterlab/    # JupyterLab extension for active cell bridging
+├── utils/             # Utility modules
+│   ├── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
+│   ├── metadata_config.py  # Metadata configuration loader
+│   └── logging_config.py   # Logging configuration
+├── config/            # Configuration files
+│   └── metadata_baseline.yaml  # Default tool/resource descriptions (single source of truth)
 └── cli.py             # Main command-line interface
 ```
 
@@ -245,6 +248,152 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 ### Configuration
 
 View configuration via: `instrmcp config`
+
+## Metadata Configuration
+
+InstrMCP uses a two-layer metadata system for tool and resource descriptions exposed to AI models:
+
+1. **Baseline** (`instrmcp/config/metadata_baseline.yaml`) - Default descriptions bundled with the package
+2. **User Overrides** (`~/.instrmcp/metadata.yaml`) - Optional customizations that override the baseline
+
+Final metadata = Baseline merged with User overrides
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Metadata Loading                          │
+├─────────────────────────────────────────────────────────────┤
+│  1. Load baseline from instrmcp/config/metadata_baseline.yaml│
+│  2. Load user overrides from ~/.instrmcp/metadata.yaml       │
+│  3. Merge: user overrides take precedence                    │
+│  4. Apply to tools via FastMCP transformation API            │
+│  5. Apply to resources via FunctionResource attributes       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Baseline Configuration
+
+The baseline file (`instrmcp/config/metadata_baseline.yaml`) contains all default tool and resource descriptions. This is the **single source of truth** for metadata - no descriptions are hardcoded in Python source files.
+
+**Location**: `instrmcp/config/metadata_baseline.yaml` (bundled with package)
+
+### User Override Configuration
+
+Users can customize metadata by creating an override file:
+
+**Location**: `~/.instrmcp/metadata.yaml`
+
+```yaml
+version: 1
+strict: true  # false = warn on unknown tools/resources instead of error
+
+tools:
+  qcodes_instrument_info:
+    title: "Get Instrument Info"
+    description: "Custom description for your lab setup."
+    arguments:
+      name:
+        description: "Instrument name or '*' for all."
+
+resources:
+  resource://available_instruments:
+    name: "Lab Instruments"
+    description: "Custom description for available instruments."
+    use_when: "Need instrument names before calling tools."
+    example: "Check this, then call qcodes_instrument_info."
+
+resource_templates:
+  resource://measureit_sweep1d_template:
+    description: "Custom Sweep1D description."
+```
+
+### Resource Description Composition
+
+For resources, the final description sent to the model is composed as:
+```
+{description}
+
+When to use: {use_when}
+Example: {example}
+```
+
+### CLI Commands
+
+Manage metadata configuration via the CLI:
+
+| Command | Description |
+|---------|-------------|
+| `instrmcp metadata init` | Create default config with examples |
+| `instrmcp metadata edit` | Open config in `$EDITOR` |
+| `instrmcp metadata list` | Show all configured overrides |
+| `instrmcp metadata show <name>` | Show specific tool/resource override |
+| `instrmcp metadata path` | Show config file path |
+| `instrmcp metadata validate` | Validate config against running server (via STDIO proxy) |
+
+#### Validation via STDIO Proxy
+
+The `validate` command tests the full communication path used by Claude Desktop/Codex:
+
+```
+CLI → STDIO → stdio_proxy → HTTP → MCP Server (8123)
+```
+
+This ensures that:
+1. Your metadata config file is valid YAML with correct schema
+2. All tools/resources referenced in your config exist on the running server
+3. All argument names referenced in tool overrides are valid
+4. The STDIO proxy correctly forwards metadata to MCP clients
+
+Example usage:
+```bash
+# Start the MCP server first (in JupyterLab: %mcp_start)
+instrmcp metadata validate
+
+# With custom timeout
+instrmcp metadata validate --timeout 30
+
+# With explicit launcher path
+instrmcp metadata validate --launcher-path /path/to/claude_launcher.py
+```
+
+### Validation Modes
+
+- **Strict mode** (`strict: true`): Errors on unknown tools/resources - catches typos
+- **Non-strict mode** (`strict: false`): Warnings only - useful for dynamic tools
+
+### Security Features
+
+- YAML loaded with `yaml.safe_load()` to prevent code execution attacks
+- Config file created with `0o600` permissions (user read/write only)
+- Pydantic validation provides clear error messages for invalid config
+- Trailing whitespace automatically stripped from descriptions
+
+### How Overrides Are Applied
+
+1. Server loads baseline config from package (`instrmcp/config/metadata_baseline.yaml`)
+2. Server loads user overrides from `~/.instrmcp/metadata.yaml` (if exists)
+3. Configs are merged (user overrides take precedence for individual fields)
+4. Tool metadata applied via FastMCP's `add_tool_transformation()` API
+5. Resource metadata applied via direct `FunctionResource` attribute modification
+6. Changes take effect immediately for that server session
+
+**Note:** Server restart is required after modifying the user config file.
+
+### E2E Testing
+
+The metadata e2e test (`tests/playwright/run_metadata_e2e.py`) automatically detects user config:
+
+- **No user config**: Uses `metadata_snapshot.json` (baseline reference)
+- **With user config**: Uses `metadata_snapshot_user.json` (user-specific reference)
+
+```bash
+# Verify metadata matches baseline
+python tests/playwright/run_metadata_e2e.py --mode verify
+
+# Create/update snapshot (auto-selects based on user config presence)
+python tests/playwright/run_metadata_e2e.py --mode snapshot
+```
 
 ## Integration Patterns
 

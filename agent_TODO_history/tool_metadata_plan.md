@@ -311,16 +311,36 @@ Integration test:
 
 ## Acceptance Criteria
 
-- [ ] Tool overrides appear in `tools/list` output from FastMCP
-- [ ] Resource overrides appear in `resources/list` output
-- [ ] Resource overrides appear in `mcp_list_resources` tool output (dynamic query)
-- [ ] Invalid config (typos, wrong args) raises clear error on server start (strict mode)
-- [ ] Invalid config logs warning and continues (non-strict mode)
-- [ ] CLI can create, update, validate config without running server
-- [ ] `instrmcp metadata edit` opens config in `$EDITOR`
-- [ ] `instrmcp metadata validate` checks config against live server schema
-- [ ] Config file created with 0o600 permissions
-- [ ] YAML loaded with `safe_load` (no arbitrary code execution)
+- [x] Tool overrides appear in `tools/list` output from FastMCP
+- [x] Resource overrides appear in `resources/list` output
+- [x] Resource overrides appear in `mcp_list_resources` tool output (dynamic query)
+- [x] Invalid config (typos, wrong args) raises clear error on server start (strict mode)
+- [x] Invalid config logs warning and continues (non-strict mode)
+- [x] CLI can create, update, validate config without running server
+- [x] `instrmcp metadata edit` opens config in `$EDITOR`
+- [x] `instrmcp metadata validate` checks config against live server schema (via STDIO proxy)
+- [x] Config file created with 0o600 permissions
+- [x] YAML loaded with `safe_load` (no arbitrary code execution)
+
+## Implementation Status (Updated)
+
+**Core implementation complete:**
+- `instrmcp/utils/metadata_config.py` - Pydantic models with baseline + user override merging
+- `instrmcp/config/metadata_baseline.yaml` - Default metadata (single source of truth)
+- Tool overrides via `add_tool_transformation()` API
+- Resource overrides via direct `FunctionResource` modification
+- `mcp_list_resources` dynamically queries registered resources
+- E2E test with snapshot verification and user config detection
+
+**CLI implementation complete:**
+- `instrmcp metadata init` - Create default config file
+- `instrmcp metadata edit` - Open config in $EDITOR
+- `instrmcp metadata list` - Show all configured overrides
+- `instrmcp metadata show <name>` - Show specific override
+- `instrmcp metadata path` - Show config file path
+- `instrmcp metadata validate` - Validate config against live server (via STDIO proxy)
+
+**All acceptance criteria met.**
 
 ## Verified API References
 

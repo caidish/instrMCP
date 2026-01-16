@@ -85,7 +85,11 @@ class MCPMetadataClient:
 
         self._client.post(
             f"{self.base_url}/mcp",
-            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            json={
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {},
+            },
             headers=self._headers(),
         )
 
@@ -115,7 +119,9 @@ class MCPMetadataClient:
 def _tool_summary(tool: Dict[str, Any]) -> Dict[str, Any]:
     annotations = tool.get("annotations") or {}
     input_schema = tool.get("inputSchema") or {}
-    properties = input_schema.get("properties") if isinstance(input_schema, dict) else {}
+    properties = (
+        input_schema.get("properties") if isinstance(input_schema, dict) else {}
+    )
 
     args_summary = {}
     if isinstance(properties, dict):

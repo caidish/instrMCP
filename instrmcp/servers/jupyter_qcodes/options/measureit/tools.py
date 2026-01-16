@@ -145,26 +145,13 @@ class MeasureItToolRegistrar:
         @self.mcp.tool(
             name="measureit_get_status",
             annotations={
-                "title": "MeasureIt Status",
                 "readOnlyHint": True,
                 "idempotentHint": True,
                 "openWorldHint": False,
             },
         )
         async def get_measureit_status(detailed: bool = False) -> List[TextContent]:
-            """Check if any MeasureIt sweep is currently running.
-
-            Returns information about active MeasureIt sweeps in the notebook namespace,
-            including sweep type, status, and basic configuration if available.
-
-            Args:
-                detailed: If False (default), return only active status and sweep names;
-                    if True, return full sweep information.
-
-            Returns JSON containing:
-            - Concise mode: active (bool), sweep_names (list), count (int)
-            - Detailed mode: active (bool), sweeps (dict with full sweep info)
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.get_measureit_status()
 
@@ -191,7 +178,6 @@ class MeasureItToolRegistrar:
         @self.mcp.tool(
             name="measureit_wait_for_all_sweeps",
             annotations={
-                "title": "Wait for All Sweeps",
                 "readOnlyHint": False,  # Kills sweeps to release hardware resources
                 "idempotentHint": False,
                 "openWorldHint": False,
@@ -200,31 +186,7 @@ class MeasureItToolRegistrar:
         async def wait_for_all_sweeps(
             timeout: float | None = None, detailed: bool = False
         ) -> List[TextContent]:
-            """Wait until all currently running MeasureIt sweeps finish.
-
-            AUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware
-            resources when they complete (success or error). This is NOT a read-only
-            operation. If you need to poll without killing, use measureit_get_status.
-
-            IMPORTANT: Calculate timeout based on sweep parameters before calling.
-            Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
-            Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
-            If sweep duration is unknown, use a reasonable default (e.g., 300s) or
-            call measureit_get_status first to check time_remaining.
-
-            Args:
-                timeout: Maximum time to wait in seconds. If None, wait indefinitely.
-                    STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
-                detailed: If False (default), return only sweep states;
-                    if True, return full sweep information.
-
-            Returns JSON containing:
-                - sweeps: Dict of sweep info (or None if no sweeps were running)
-                - killed: True if sweeps were killed (always True on success/error)
-                - kill_reason: Explanation of why sweeps were killed
-                - error: Error message if timeout or other error occurred
-                - timed_out: True if the timeout was reached (sweeps NOT killed)
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.wait_for_all_sweeps(timeout=timeout)
 
@@ -251,7 +213,6 @@ class MeasureItToolRegistrar:
         @self.mcp.tool(
             name="measureit_wait_for_sweep",
             annotations={
-                "title": "Wait for Sweep",
                 "readOnlyHint": False,  # Kills sweeps to release hardware resources
                 "idempotentHint": False,
                 "openWorldHint": False,
@@ -262,32 +223,7 @@ class MeasureItToolRegistrar:
             timeout: float | None = None,
             detailed: bool = False,
         ) -> List[TextContent]:
-            """Wait until the specified MeasureIt sweep finishes.
-
-            AUTO-KILL BEHAVIOR: The sweep is automatically killed to release hardware
-            resources when it completes (success or error). This is NOT a read-only
-            operation. If you need to poll without killing, use measureit_get_status.
-
-            IMPORTANT: Calculate timeout based on sweep parameters before calling.
-            Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
-            Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
-            If sweep duration is unknown, use a reasonable default (e.g., 300s) or
-            call measureit_get_status(detailed=True) first to check time_remaining.
-
-            Args:
-                variable_name: Name of the sweep variable to wait for.
-                timeout: Maximum time to wait in seconds. If None, wait indefinitely.
-                    STRONGLY RECOMMENDED to set this to avoid hanging on stuck sweeps.
-                detailed: If False (default), return only sweep state;
-                    if True, return full sweep information.
-
-            Returns JSON containing:
-                - sweep: Dict of sweep info (or None if no matching sweep was running)
-                - killed: True if sweep was killed (always True on success/error)
-                - kill_reason: Explanation of why sweep was killed
-                - error: Error message if timeout or other error occurred
-                - timed_out: True if the timeout was reached (sweep NOT killed)
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.wait_for_sweep(variable_name, timeout=timeout)
 
@@ -314,7 +250,6 @@ class MeasureItToolRegistrar:
         @self.mcp.tool(
             name="measureit_kill_sweep",
             annotations={
-                "title": "Kill Sweep",
                 "readOnlyHint": False,
                 "destructiveHint": False,
                 "idempotentHint": True,
@@ -322,27 +257,7 @@ class MeasureItToolRegistrar:
             },
         )
         async def kill_sweep(variable_name: str) -> List[TextContent]:
-            """Kill a running MeasureIt sweep to release resources.
-
-            UNSAFE: This tool stops a running sweep, which may leave instruments
-            in an intermediate state. Use when a sweep needs to be terminated
-            due to timeout, error, or user request.
-
-            After killing a sweep, you may need to:
-            - Re-initialize instruments to a known state
-            - Check instrument parameters before starting a new sweep
-
-            Args:
-                variable_name: Name of the sweep variable in the notebook namespace
-                    (e.g., "sweep1d", "my_sweep")
-
-            Returns JSON containing:
-                - success: bool - whether the kill was successful
-                - sweep_name: str - name of the sweep
-                - previous_state: str - state before kill
-                - new_state: str - state after kill
-                - error: str (if any error occurred)
-            """
+            # Description loaded from metadata_baseline.yaml
             try:
                 result = await self.tools.kill_sweep(variable_name)
                 return [
