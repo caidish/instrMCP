@@ -7,6 +7,7 @@ for MCP tool/resource metadata configuration.
 
 import os
 import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -237,6 +238,9 @@ class TestSaveConfig:
 
             assert config_path.exists()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Unix permissions not supported on Windows"
+    )
     def test_save_sets_permissions(self):
         """Test save_config sets restrictive file permissions."""
         with tempfile.TemporaryDirectory() as temp_dir:

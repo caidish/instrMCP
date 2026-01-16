@@ -313,18 +313,47 @@ def _count_measurement_types(db_path: str) -> Dict[str, int]:
     return measurement_types
 
 
-def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dict]:
+def _get_data_dir_constraint() -> Optional[Path]:
+    """
+    Get the data directory constraint from environment variable.
+
+    When INSTRMCP_DATA_DIR is set, database resolution is constrained to
+    only search within that directory. This prevents fallback to environment
+    paths (MeasureIt, QCodes config) and ensures isolation in sandboxed
+    environments like Codex.
+
+    Returns:
+        Path to data directory if INSTRMCP_DATA_DIR is set, None otherwise.
+    """
+    import os
+
+    data_dir = os.environ.get("INSTRMCP_DATA_DIR")
+    if data_dir:
+        return Path(data_dir)
+    return None
+
+
+def resolve_database_path(
+    database_path: Optional[str] = None, data_dir: Optional[Path] = None
+) -> tuple[str, dict]:
     """
     Resolve the database path using the following priority:
     1. Provided database_path parameter
-    2. MeasureIt get_path("databases") -> Example_database.db
-    3. QCodes default configuration
+    2. MeasureIt get_path("databases") -> Example_database.db (unless data_dir is set)
+    3. QCodes default configuration (unless data_dir is set)
+
+    When data_dir is set (explicitly or via INSTRMCP_DATA_DIR environment variable),
+    fallback to MeasureIt and QCodes environment paths is DISABLED. This ensures
+    database isolation in sandboxed environments.
 
     This is the canonical database path resolution function. Import this
     function from other modules instead of duplicating the logic.
 
     Args:
         database_path: Explicit database path
+        data_dir: If set, restricts database search to this directory only
+                  (no fallback to environment paths). If None, checks
+                  INSTRMCP_DATA_DIR environment variable.
 
     Returns:
         tuple: (resolved_path, resolution_info)
@@ -336,17 +365,48 @@ def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dic
     """
     resolution_info = {"source": None, "available_databases": [], "tried_path": None}
 
+    # Check for data_dir constraint from environment if not provided
+    if data_dir is None:
+        data_dir = _get_data_dir_constraint()
+
+    # Track if we're in constrained mode
+    is_constrained = data_dir is not None
+    if is_constrained:
+        resolution_info["data_dir_constraint"] = str(data_dir)
+
     # Case 1: Explicit path provided
     if database_path:
         db_path = Path(database_path)
         resolution_info["tried_path"] = str(db_path)
+
+        # If constrained, verify the path is within data_dir
+        if is_constrained:
+            try:
+                # Resolve both paths to absolute for comparison
+                abs_db_path = db_path.resolve()
+                abs_data_dir = data_dir.resolve()
+                if not str(abs_db_path).startswith(str(abs_data_dir)):
+                    resolution_info["available_databases"] = _list_available_databases(
+                        data_dir
+                    )
+                    raise FileNotFoundError(
+                        f"Database path '{database_path}' is outside the allowed "
+                        f"data directory: {data_dir}\n\n"
+                        "Available databases in data directory:\n"
+                        + _format_available_databases(
+                            resolution_info["available_databases"]
+                        )
+                    )
+            except ValueError:
+                # Path resolution failed - let it fall through to exists check
+                pass
 
         if db_path.exists():
             resolution_info["source"] = "explicit"
             return str(db_path), resolution_info
         else:
             # Path doesn't exist - provide helpful error
-            resolution_info["available_databases"] = _list_available_databases()
+            resolution_info["available_databases"] = _list_available_databases(data_dir)
             raise FileNotFoundError(
                 f"Database not found: {database_path}\n\n"
                 "Available databases:\n"
@@ -354,7 +414,37 @@ def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dic
                 + "\n\nTip: Use database_list_available() to discover all databases"
             )
 
-    # Case 2: Try MeasureIt default
+    # If constrained to data_dir, only search there - NO environment fallbacks
+    if is_constrained:
+        # Search for any .db file in data_dir
+        if data_dir.exists():
+            db_files = list(data_dir.glob("*.db"))
+            if db_files:
+                # Use the first .db file found (or Example_database.db if present)
+                default_db = data_dir / "Example_database.db"
+                if default_db.exists():
+                    resolution_info["source"] = "data_dir_default"
+                    resolution_info["tried_path"] = str(default_db)
+                    return str(default_db), resolution_info
+                else:
+                    # Use the most recently modified .db file
+                    db_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+                    resolution_info["source"] = "data_dir_auto"
+                    resolution_info["tried_path"] = str(db_files[0])
+                    return str(db_files[0]), resolution_info
+
+        # No database found in constrained directory
+        resolution_info["available_databases"] = _list_available_databases(data_dir)
+        raise FileNotFoundError(
+            f"No database found in data directory: {data_dir}\n\n"
+            "Note: Database resolution is constrained to this directory "
+            "(INSTRMCP_DATA_DIR is set).\n"
+            "Environment fallback paths (MeasureIt, QCodes config) are disabled.\n\n"
+            "Available databases:\n"
+            + _format_available_databases(resolution_info["available_databases"])
+        )
+
+    # Case 2: Try MeasureIt default (only if not constrained)
     try:
         from measureit import get_path
 
@@ -369,7 +459,7 @@ def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dic
         # MeasureIt not available or get_path failed
         pass
 
-    # Case 3: Fall back to QCodes config
+    # Case 3: Fall back to QCodes config (only if not constrained)
     qcodes_db = Path(qc.config.core.db_location)
     resolution_info["tried_path"] = str(qcodes_db)
 
@@ -402,16 +492,49 @@ def resolve_database_path(database_path: Optional[str] = None) -> tuple[str, dic
     )
 
 
-def _list_available_databases() -> list[dict]:
+def _list_available_databases(data_dir: Optional[Path] = None) -> list[dict]:
     """
     List available databases by searching common locations.
+
+    When data_dir is specified, ONLY searches within that directory.
+    When data_dir is None, searches MeasureIt and QCodes locations.
+
+    Args:
+        data_dir: If set, restricts search to this directory only.
+                  If None, uses standard MeasureIt/QCodes locations.
 
     Returns:
         List of dicts with 'name', 'path', 'source', 'size_mb', 'accessible'
     """
     databases = []
 
-    # Check MeasureIt databases directory
+    # If constrained to data_dir, only search there
+    if data_dir is not None:
+        if data_dir.exists():
+            for db_file in data_dir.glob("*.db"):
+                try:
+                    databases.append(
+                        {
+                            "name": db_file.name,
+                            "path": str(db_file),
+                            "source": "data_dir",
+                            "size_mb": round(db_file.stat().st_size / 1024 / 1024, 2),
+                            "accessible": True,
+                        }
+                    )
+                except Exception:
+                    databases.append(
+                        {
+                            "name": db_file.name,
+                            "path": str(db_file),
+                            "source": "data_dir",
+                            "size_mb": 0,
+                            "accessible": False,
+                        }
+                    )
+        return databases
+
+    # Standard search: Check MeasureIt databases directory
     try:
         from measureit import get_path
 
