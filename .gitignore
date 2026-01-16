@@ -153,3 +153,4 @@ TestNotebook.ipynb
 tests/playwright/notebooks/_working/
 # Playwright test logs
 tests/playwright/jupyter_lab.log
+tests/playwright/metadata_snapshot_user.json
