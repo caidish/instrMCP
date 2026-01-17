@@ -187,6 +187,9 @@ def _on_comm_open(comm, open_msg):
             "apply_patch_response",
             "move_cursor_response",
             "get_active_cell_output_response",
+            "get_notebook_structure_response",
+            "get_cells_by_index_response",
+            "delete_cells_by_index_response",
         ]:
             # Response from frontend for our requests
             request_id = data.get("request_id")
@@ -936,7 +939,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
                - "above": Move to cell above current
                - "below": Move to cell below current
                - "bottom": Move to the last cell in the notebook (by file order)
-               - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+               - "index:N": Move to cell at position N (0-indexed) - works for ALL cells
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
     Returns:
@@ -945,14 +948,11 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     # Validate target
     valid_targets = ["above", "below", "bottom"]
-    if target not in valid_targets:
-        try:
-            int(target)  # Check if it's a number
-        except ValueError:
-            return {
-                "success": False,
-                "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
-            }
+    if target not in valid_targets and not target.startswith("index:"):
+        return {
+            "success": False,
+            "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or 'index:N'",
+        }
 
     # Use _send_and_wait to get actual frontend response
     result = _send_and_wait(
@@ -998,5 +998,112 @@ def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
         {"type": "get_active_cell_output"},
         timeout_s=timeout_s,
     )
+
+    return result
+
+
+def get_notebook_structure(timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Get lightweight notebook structure (metadata only, no source code).
+
+    This function retrieves the list of all cells in the notebook with their
+    metadata (type, position, execution count) but WITHOUT source code,
+    making it fast for large notebooks.
+
+    Args:
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - total_cells (int): Total number of cells in notebook
+        - active_cell_index (int): Index of currently active cell
+        - cells (list): List of cell metadata dicts with:
+            - cell_id_notebook (int): Position in notebook (0-indexed)
+            - cell_type (str): "code", "markdown", or "raw"
+            - cell_execution_number (int|None): IPython counter or null
+        - error (str): Error message if failed
+    """
+    result = _send_and_wait(
+        {"type": "get_notebook_structure"},
+        timeout_s=timeout_s,
+    )
+    return result
+
+
+def get_cells_by_index(
+    cell_id_notebooks: List[int], timeout_s: float = 2.0
+) -> Dict[str, Any]:
+    """
+    Get specific cells by position index (with source code).
+
+    This function fetches specific cells from the notebook by their position,
+    allowing targeted retrieval of cell content without fetching the entire notebook.
+
+    Args:
+        cell_id_notebooks: List of cell indices to fetch (0-indexed positions)
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - cells (list): List of cell dicts with:
+            - cell_id_notebook (int): Position in notebook
+            - cell_type (str): "code", "markdown", or "raw"
+            - cell_execution_number (int|None): IPython counter or null
+            - source (str): Cell source code
+        - error (str): Error message if failed
+    """
+    result = _send_and_wait(
+        {
+            "type": "get_cells_by_index",
+            "cell_id_notebooks": cell_id_notebooks,
+        },
+        timeout_s=timeout_s,
+    )
+    return result
+
+
+def delete_cells_by_index(
+    cell_id_notebooks: List[int], timeout_s: float = 2.0
+) -> Dict[str, Any]:
+    """
+    Delete cells by position index (works for ALL cells including unexecuted ones).
+
+    This function deletes cells from the notebook by their position, allowing
+    deletion of markdown cells or unexecuted code cells that don't have
+    execution counts.
+
+    IMPORTANT: This function also invalidates the output cache for any deleted
+    cells that had execution counts, preventing stale data issues.
+
+    Args:
+        cell_id_notebooks: List of cell indices to delete (0-indexed positions)
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - deleted_count (int): Number of cells deleted
+        - cleared_count (int): Number of cells cleared (if last cell)
+        - invalidated_exec_counts (list): Execution counts that were invalidated
+        - message (str): Status message
+    """
+    result = _send_and_wait(
+        {
+            "type": "delete_cells_by_index",
+            "cell_id_notebooks": cell_id_notebooks,
+        },
+        timeout_s=timeout_s,
+    )
+
+    # Invalidate cache entries for deleted cells
+    if result.get("success") and result.get("invalidated_exec_counts"):
+        with _STATE_LOCK:
+            for exec_count in result["invalidated_exec_counts"]:
+                _CELL_OUTPUTS_CACHE.pop(exec_count, None)
+        logger.debug(
+            f"Invalidated cache for {len(result['invalidated_exec_counts'])} cells"
+        )
 
     return result

@@ -199,7 +199,7 @@ class NotebookUnsafeBackend(BaseBackend):
         IMPORTANT: This method only waits for completion and detects errors.
         Output retrieval is done separately by the caller using
         active_cell_bridge.get_active_cell_output() for consistency with
-        notebook_get_editing_cell_output.
+        notebook_read_active_cell_output.
 
         Args:
             initial_count: The execution_count before triggering execution
@@ -298,7 +298,7 @@ class NotebookUnsafeBackend(BaseBackend):
         UNSAFE: This tool executes code in the active notebook cell. The code will run
         in the frontend with output appearing in the notebook.
 
-        Output retrieval uses the same robust logic as notebook_get_editing_cell_output
+        Output retrieval uses the same robust logic as notebook_read_active_cell_output
         via active_cell_bridge.get_active_cell_output().
 
         Args:
@@ -320,12 +320,6 @@ class NotebookUnsafeBackend(BaseBackend):
             exec_result = self.bridge.execute_active_cell()
 
             if not exec_result.get("success"):
-                exec_result.update(
-                    {
-                        "source": "execute_editing_cell",
-                        "warning": "UNSAFE: Attempted to execute code but request failed",
-                    }
-                )
                 return exec_result
 
             # 3. Wait for execution to complete (simplified - no output polling)
@@ -336,11 +330,8 @@ class NotebookUnsafeBackend(BaseBackend):
                 return {
                     "success": True,
                     "executed": True,
-                    "execution_count": 0,
                     **wait_result,
-                    "source": "execute_editing_cell",
-                    "bridge_status": self.bridge.get_bridge_status(),
-                    "warning": "UNSAFE: Code was executed in the active cell",
+                    "input": wait_result.get("input", "") or cell_text_from_bridge,
                 }
 
             # 5. Handle errors detected during wait
@@ -348,30 +339,22 @@ class NotebookUnsafeBackend(BaseBackend):
                 return {
                     "success": True,
                     "executed": True,
-                    "execution_count": wait_result.get("cell_number", 0),
                     **wait_result,
+                    "input": wait_result.get("input", "") or cell_text_from_bridge,
                     "has_output": False,
-                    "source": "execute_editing_cell",
-                    "bridge_status": self.bridge.get_bridge_status(),
-                    "warning": "UNSAFE: Code was executed in the active cell",
                 }
 
             # 6. Fetch output using shared logic from get_active_cell_output
-            # This is the same path used by notebook_get_editing_cell_output
+            # This is the same path used by notebook_read_active_cell_output
             output_result = self.bridge.get_active_cell_output(timeout_s=2.0)
 
             # 7. Build combined result
             combined_result = {
                 "success": True,
                 "executed": True,
-                "execution_count": wait_result.get("cell_number", 0),
                 "status": wait_result.get("status", "completed"),
-                "cell_number": wait_result.get("cell_number", 0),
-                "input": wait_result.get("input", ""),
+                "input": wait_result.get("input", "") or cell_text_from_bridge,
                 "has_error": False,
-                "source": "execute_editing_cell",
-                "bridge_status": self.bridge.get_bridge_status(),
-                "warning": "UNSAFE: Code was executed in the active cell",
             }
 
             # 8. Merge output data from get_active_cell_output
@@ -439,8 +422,6 @@ class NotebookUnsafeBackend(BaseBackend):
             return {
                 "success": False,
                 "error": str(e),
-                "source": "error",
-                "warning": "UNSAFE: Attempted to execute code but failed",
             }
 
     async def add_new_cell(
@@ -448,7 +429,6 @@ class NotebookUnsafeBackend(BaseBackend):
         cell_type: str = "code",
         position: str = "below",
         content: str = "",
-        timeout_s: float = 2.0,
     ) -> Dict[str, Any]:
         """Add a new cell in the notebook.
 
@@ -459,15 +439,14 @@ class NotebookUnsafeBackend(BaseBackend):
             cell_type: Type of cell to create ("code", "markdown", "raw")
             position: Position relative to active cell ("above", "below", "end")
             content: Initial content for the new cell
-            timeout_s: How long to wait for frontend response (default 2.0s)
 
         Returns:
             Dictionary with creation status and response details
         """
         try:
-            # Send add cell request to frontend
+            # Send add cell request to frontend (fixed 2s timeout)
             result = self.bridge.add_new_cell(
-                cell_type, position, content, timeout_s=timeout_s
+                cell_type, position, content, timeout_s=2.0
             )
 
             # Add metadata
@@ -594,5 +573,45 @@ class NotebookUnsafeBackend(BaseBackend):
                 "error": str(e),
                 "source": "error",
                 "cell_numbers_requested": cell_numbers,
+                "warning": "UNSAFE: Attempted to delete cells but failed",
+            }
+
+    async def delete_cells_by_index(
+        self, cell_id_notebooks: List[int]
+    ) -> Dict[str, Any]:
+        """Delete multiple cells by their position index (works for ALL cells).
+
+        UNSAFE: This tool deletes cells from the notebook by their position.
+        This works for unexecuted cells (including markdown) that don't have
+        execution counts.
+
+        Args:
+            cell_id_notebooks: List of cell indices (0-indexed positions)
+
+        Returns:
+            Dictionary with deletion status and detailed results
+        """
+        try:
+            # Send delete cells by index request to frontend
+            result = self.bridge.delete_cells_by_index(cell_id_notebooks)
+
+            # Add metadata
+            result.update(
+                {
+                    "source": "delete_cells_by_index",
+                    "bridge_status": self.bridge.get_bridge_status(),
+                    "warning": "UNSAFE: Cells were deleted from the notebook by index",
+                }
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in delete_cells_by_index: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "source": "error",
+                "cell_id_notebooks_requested": cell_id_notebooks,
                 "warning": "UNSAFE: Attempted to delete cells but failed",
             }

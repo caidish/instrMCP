@@ -108,7 +108,7 @@ CLI → STDIO → stdio_proxy → HTTP → MCP Server (8123)
 - **Unsafe Mode**: Allows code execution (`--unsafe` flag or `%mcp_unsafe` magic)
 - **Dangerous Mode**: Unsafe mode with all consent dialogs auto-approved (`%mcp_dangerous` magic)
 
-Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
+Unsafe mode tools require user consent via dialog for: `notebook_execute_active_cell`, `notebook_delete_cell`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
 
 **Dynamic Tools** (opt-in, requires dangerous mode): Enable with `%mcp_option dynamictool` while in dangerous mode. Tools: `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`. These tools allow runtime creation and execution of arbitrary code.
 
@@ -122,12 +122,12 @@ pip install -e . --force-reinstall --no-deps
 
 ## MCP Tools Reference
 
-All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_get_editing_cell`).
+All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_read_active_cell`).
 
 **Core Tools:** `mcp_list_resources`, `mcp_get_resource`
 **QCodes:** `qcodes_instrument_info`, `qcodes_get_parameter_values`
-**Notebook:** `notebook_list_variables`, `notebook_get_variable_info`, `notebook_get_editing_cell`, `notebook_get_editing_cell_output`, `notebook_get_notebook_cells`, `notebook_server_status`, `notebook_move_cursor`
-**Unsafe Notebook:** `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`
+**Notebook:** `notebook_list_variables`, `notebook_read_variable`, `notebook_read_active_cell`, `notebook_read_active_cell_output`, `notebook_read_content`, `notebook_server_status`, `notebook_move_cursor`
+**Unsafe Notebook:** `notebook_execute_active_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_apply_patch`
 **MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_kill_sweep`
 **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
 **Dynamic Tools (opt-in via `dynamictool`, requires dangerous mode):** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`

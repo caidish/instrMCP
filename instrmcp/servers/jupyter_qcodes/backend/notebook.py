@@ -259,7 +259,7 @@ class NotebookBackend(BaseBackend):
                    - "above": Move to cell above current
                    - "below": Move to cell below current
                    - "bottom": Move to the last cell in the notebook (by file order)
-                   - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+                   - "index:N": Move to cell at position N (0-indexed) - works for ALL cells
 
         Returns:
             Dictionary with operation status, old index, and new index
@@ -267,15 +267,12 @@ class NotebookBackend(BaseBackend):
         try:
             # Validate target
             valid_targets = ["above", "below", "bottom"]
-            if target not in valid_targets:
-                try:
-                    int(target)  # Check if it's a number
-                except ValueError:
-                    return {
-                        "success": False,
-                        "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
-                        "source": "validation_error",
-                    }
+            if target not in valid_targets and not target.startswith("index:"):
+                return {
+                    "success": False,
+                    "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or 'index:N'",
+                    "source": "validation_error",
+                }
 
             # Send move cursor request to frontend
             # Use asyncio.to_thread to avoid blocking the event loop during wait

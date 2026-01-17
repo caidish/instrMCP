@@ -162,10 +162,15 @@ class QCodesBackend(BaseBackend):
         visited.add(obj_id)
         parameters = []
 
+        # Parameters to exclude (internal/special parameters)
+        exclude_params = {"IDN", "idn"}
+
         try:
             # Add direct parameters
             if hasattr(obj, "parameters"):
                 for param_name in obj.parameters.keys():
+                    if param_name in exclude_params:
+                        continue
                     full_path = f"{prefix}.{param_name}" if prefix else param_name
                     parameters.append(full_path)
 
@@ -300,6 +305,9 @@ class QCodesBackend(BaseBackend):
                 from qcodes.instrument.base import InstrumentBase
 
                 if isinstance(obj, InstrumentBase):
+                    # Parameters to exclude (internal/special parameters)
+                    exclude_params = {"IDN", "idn"}
+
                     # Discover all parameters recursively with depth limit and timeout
                     try:
                         # Add timeout protection (5 seconds max)
@@ -315,9 +323,13 @@ class QCodesBackend(BaseBackend):
                         logger.warning(
                             f"Parameter discovery timed out for instrument '{name}', using basic parameters"
                         )
-                        # Fall back to direct parameters only
+                        # Fall back to direct parameters only (excluding IDN)
                         all_parameters = (
-                            list(obj.parameters.keys())
+                            [
+                                p
+                                for p in obj.parameters.keys()
+                                if p not in exclude_params
+                            ]
                             if hasattr(obj, "parameters")
                             else []
                         )
@@ -378,8 +390,17 @@ class QCodesBackend(BaseBackend):
 
         instr = self._get_instrument(name)
 
+        # Parameters to exclude (internal/special parameters)
+        exclude_params = {"IDN", "idn"}
+
         # Get basic snapshot
         snapshot = await asyncio.to_thread(instr.snapshot, update=False)
+
+        # Remove IDN from snapshot parameters if present
+        if "parameters" in snapshot:
+            for param_name in exclude_params:
+                snapshot["parameters"].pop(param_name, None)
+
         if not with_values:
             self._strip_parameter_values(snapshot)
 
@@ -396,9 +417,11 @@ class QCodesBackend(BaseBackend):
             logger.warning(
                 f"Parameter discovery timed out for instrument '{name}', using basic parameters"
             )
-            # Fall back to direct parameters only
+            # Fall back to direct parameters only (excluding IDN)
             all_parameters = (
-                list(instr.parameters.keys()) if hasattr(instr, "parameters") else []
+                [p for p in instr.parameters.keys() if p not in exclude_params]
+                if hasattr(instr, "parameters")
+                else []
             )
 
         # Group parameters by hierarchy

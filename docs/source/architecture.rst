@@ -113,7 +113,6 @@ Unsafe Tools
 
 Cell manipulation (requires ``%mcp_unsafe``):
 
-- ``update_editing_cell`` - Replace cell content
 - ``execute_editing_cell`` - Run cell code
 - ``add_new_cell`` - Insert new cell
 - ``delete_editing_cell`` - Remove cell

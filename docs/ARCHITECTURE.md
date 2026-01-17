@@ -73,23 +73,22 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### QCodes Instrument Tools (`qcodes/*`)
 
-- `qcodes/instrument_info(name, with_values, detailed)` - Get instrument details; values included when `with_values=true`
+- `qcodes/instrument_info(name, with_values, detailed)` - Get instrument details; values included when `with_values=true`. Note: IDN parameter is filtered out from display.
 - `qcodes/get_parameter_info(instrument, parameter, detailed)` - Get metadata for a specific parameter (name, label, unit, vals/limits, gettable/settable; with detailed=True also includes scale, offset, cache)
 - `qcodes/get_parameter_values(queries, detailed)` - Read parameter values (supports both single and batch queries)
 
 ### Jupyter Notebook Tools (`notebook/*`)
 
 - `notebook/list_variables(type_filter)` - List notebook variables by type
-- `notebook/get_variable_info(name)` - Detailed variable information
-- `notebook/get_editing_cell(fresh_ms)` - Current JupyterLab cell content
-- `notebook/get_editing_cell_output()` - Get output of most recently executed cell
-- `notebook/get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
+- `notebook/read_variable(name)` - Detailed variable information
+- `notebook/read_active_cell(fresh_ms)` - Current JupyterLab cell content
+- `notebook/read_active_cell_output()` - Get output of the currently active cell
+- `notebook/read_content(num_cells, include_output)` - Get cells around cursor position
 - `notebook/server_status()` - Check server mode and status
 
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
-- `notebook/update_editing_cell(content)` - Update current cell content (requires consent)
-- `notebook/execute_cell(timeout)` - Execute current cell and return output (requires consent)
+- `notebook/execute_active_cell(timeout)` - Execute current cell and return output (requires consent)
 - `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
 - `notebook/delete_cell()` - Delete the currently active cell (requires consent)
 - `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
@@ -98,9 +97,8 @@ All tools now use hierarchical naming with `/` separator for better organization
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
 - `measureit/get_status(detailed)` - Check if any MeasureIt sweep is currently running
-- `measureit/wait_for_sweep(variable_name, timeout, detailed)` - Wait for the given sweep to finish
-- `measureit/wait_for_all_sweeps(timeout, detailed)` - Wait for all currently running sweeps to finish
-- `measureit/kill_sweep(variable_name)` - Kill a running sweep to release resources (UNSAFE)
+- `measureit/wait_for_sweep(variable_name, timeout, all, kill, detailed)` - Wait for sweep(s) to finish. When `kill=true` (default), automatically kills sweep to release resources after completion.
+- `measureit/kill_sweep(variable_name, all)` - Kill sweep(s) to release resources. When `all=true`, kills all sweeps.
 
 ### Database Integration Tools (`database/*` - requires `%mcp_option database`)
 
@@ -160,16 +158,15 @@ The server supports optional features that can be enabled/disabled via magic com
 
 Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consent in unsafe mode, auto-approved in dangerous mode):
 
-- `notebook/execute_cell(timeout)` - Execute code in the active cell and return output
-  - `timeout`: Max seconds to wait for completion (default: 30.0)
-  - Returns: success, status ("completed"/"error"/"timeout"), execution_count, input, outputs, output, has_output, has_error, error
+- `notebook/execute_active_cell(timeout)` - Execute code in the active cell and return output
+  - `timeout`: Max seconds to wait for completion (default: 30.0). If 0, fire-and-forget.
+  - Returns: status ("completed"/"error"/"timeout"/"no_wait"), executed (true/false/"unknown"), input, outputs, has_output, has_error, error
 - `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook
   - `cell_type`: "code", "markdown", or "raw" (default: "code")
   - `position`: "above" or "below" active cell (default: "below")
   - `content`: Initial cell content (default: empty)
 - `notebook/delete_cell()` - Delete the active cell (clears content if last cell)
 - `notebook/apply_patch(old_text, new_text)` - Replace text in active cell
-  - More efficient than `notebook_update_editing_cell` for small changes
   - Replaces first occurrence of `old_text` with `new_text`
 
 ### Optional Features
@@ -213,13 +210,13 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 
 **Read-Only Tools** (`readOnlyHint: true`):
 - All QCodes tools (`qcodes_instrument_info`, `qcodes_get_parameter_info`, `qcodes_get_parameter_values`)
-- All notebook read tools (`notebook_list_variables`, `notebook_get_*`)
+- All notebook read tools (`notebook_list_variables`, `notebook_read_*`, `notebook_server_status`)
 - All MeasureIt status tools, Database tools, Dynamic list/inspect/stats tools
 - Resource tools (`mcp_list_resources`, `mcp_get_resource`)
 
 **Write Tools - Non-Destructive** (`readOnlyHint: false`, `destructiveHint: false`):
-- `notebook_move_cursor`, `notebook_update_editing_cell`, `notebook_apply_patch`
-- `notebook_execute_cell` (also `openWorldHint: true` - executes code)
+- `notebook_move_cursor`, `notebook_apply_patch`
+- `notebook_execute_active_cell` (also `openWorldHint: true` - executes code)
 - `notebook_add_cell`
 - `measureit_kill_sweep` (stops running sweep, releases resources)
 - `dynamic_register_tool`, `dynamic_update_tool`
@@ -556,8 +553,7 @@ s("rm -rf /")  # Detected!
 
 For unsafe mode operations, user consent is required before execution:
 
-- `notebook_update_editing_cell` - Cell content modification
-- `notebook_execute_cell` - Code execution
+- `notebook_execute_active_cell` - Code execution
 - `notebook_delete_cell` - Cell deletion
 - `notebook_apply_patch` - Text replacement
 

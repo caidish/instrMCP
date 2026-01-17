@@ -13,6 +13,8 @@ from ..active_cell_bridge import (
     get_cell_outputs,
     get_cached_cell_output,
     get_active_cell_output,
+    get_notebook_structure,
+    get_cells_by_index,
     invalidate_cell_output_cache,  # noqa: F401 - exposed for unsafe tools to clear stale state
 )
 from instrmcp.utils.logging_config import get_logger
@@ -78,6 +80,25 @@ class NotebookToolRegistrar:
             "cell_content": result.get("cell_content"),
         }
 
+    def _to_detailed_editing_cell(self, result: dict) -> dict:
+        """Filter editing cell info for detailed mode.
+
+        Removes internal/debug fields: cell_id, notebook_path, client_id,
+        captured, age_seconds, timestamp_ms, source, fresh_requested, fresh_threshold_ms.
+        """
+        exclude_keys = {
+            "cell_id",
+            "notebook_path",
+            "client_id",
+            "captured",
+            "age_seconds",
+            "timestamp_ms",
+            "source",
+            "fresh_requested",
+            "fresh_threshold_ms",
+        }
+        return {k: v for k, v in result.items() if k not in exclude_keys}
+
     def _to_concise_editing_cell_output(self, info: dict) -> dict:
         """Convert full editing cell output to concise format.
 
@@ -109,6 +130,8 @@ class NotebookToolRegistrar:
                             break
 
         result = {
+            "cell_id_notebook": info.get("cell_id_notebook") or info.get("cell_index"),
+            "executed": info.get("executed", False),
             "status": info.get("status"),
             "message": info.get("message"),
             "has_output": info.get("has_output", False),
@@ -127,25 +150,32 @@ class NotebookToolRegistrar:
     ) -> dict:
         """Convert full notebook cells to concise format.
 
-        Concise: recent cells with cell_number, input (truncated).
+        Concise: recent cells with cell_id_notebook, cell_type, executed, source (truncated).
         If include_output=True, also includes has_output, has_error, status.
         """
         concise_cells = []
         for cell in result.get("cells", []):
-            input_text = cell.get("input", "")
-            truncated_input = (
-                input_text[:100] + "..." if len(input_text) > 100 else input_text
+            # Support both old field name (input) and new field name (source)
+            source_text = cell.get("source") or cell.get("input", "")
+            truncated_source = (
+                source_text[:100] + "..." if len(source_text) > 100 else source_text
             )
             concise_cell = {
-                "cell_number": cell.get("cell_number"),
-                "input": truncated_input,
+                "cell_id_notebook": cell.get("cell_id_notebook"),
+                "cell_type": cell.get("cell_type"),
+                "executed": cell.get("cell_execution_number") is not None,
+                "source": truncated_source,
             }
             if include_output:
                 concise_cell["has_output"] = cell.get("has_output", False)
                 concise_cell["has_error"] = cell.get("has_error", False)
                 concise_cell["status"] = cell.get("status")
             concise_cells.append(concise_cell)
-        return {"cells": concise_cells, "count": len(concise_cells)}
+        return {
+            "total_cells": result.get("total_cells"),
+            "cells": concise_cells,
+            "count": len(concise_cells),
+        }
 
     def _to_concise_move_cursor(self, result: dict) -> dict:
         """Convert full move cursor result to concise format.
@@ -207,10 +237,10 @@ class NotebookToolRegistrar:
     def register_all(self):
         """Register all notebook tools."""
         self._register_list_variables()
-        self._register_get_variable_info()
-        self._register_get_editing_cell()
-        self._register_get_editing_cell_output()
-        self._register_get_notebook_cells()
+        self._register_read_variable()
+        self._register_read_active_cell()
+        self._register_read_active_cell_output()
+        self._register_read_content()
         self._register_move_cursor()
         self._register_server_status()
 
@@ -257,11 +287,11 @@ class NotebookToolRegistrar:
                     )
                 ]
 
-    def _register_get_variable_info(self):
-        """Register the notebook/get_variable_info tool."""
+    def _register_read_variable(self):
+        """Register the notebook/read_variable tool."""
 
         @self.mcp.tool(
-            name="notebook_get_variable_info",
+            name="notebook_read_variable",
             annotations={
                 "readOnlyHint": True,
                 "idempotentHint": True,
@@ -277,7 +307,7 @@ class NotebookToolRegistrar:
                 info = await self.tools.get_variable_info(name)
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
-                    "notebook_get_variable_info",
+                    "notebook_read_variable",
                     {"name": name, "detailed": detailed},
                     duration,
                     "success",
@@ -291,7 +321,7 @@ class NotebookToolRegistrar:
             except Exception as e:
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
-                    "notebook_get_variable_info",
+                    "notebook_read_variable",
                     {"name": name, "detailed": detailed},
                     duration,
                     "error",
@@ -304,11 +334,11 @@ class NotebookToolRegistrar:
                     )
                 ]
 
-    def _register_get_editing_cell(self):
-        """Register the notebook/get_editing_cell tool."""
+    def _register_read_active_cell(self):
+        """Register the notebook/read_active_cell tool."""
 
         @self.mcp.tool(
-            name="notebook_get_editing_cell",
+            name="notebook_read_active_cell",
             annotations={
                 "readOnlyHint": True,
                 "idempotentHint": True,
@@ -339,10 +369,12 @@ class NotebookToolRegistrar:
                     max_lines=max_lines,
                 )
                 duration = (time.perf_counter() - start) * 1000
-                log_tool_call("notebook_get_editing_cell", args, duration, "success")
+                log_tool_call("notebook_read_active_cell", args, duration, "success")
 
-                # Apply concise mode filtering
-                if not detailed:
+                # Apply mode filtering
+                if detailed:
+                    result = self._to_detailed_editing_cell(result)
+                else:
                     result = self._to_concise_editing_cell(result)
 
                 return [
@@ -353,7 +385,7 @@ class NotebookToolRegistrar:
             except Exception as e:
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
-                    "notebook_get_editing_cell", args, duration, "error", str(e)
+                    "notebook_read_active_cell", args, duration, "error", str(e)
                 )
                 logger.error(f"Error in notebook/get_editing_cell: {e}")
                 return [
@@ -362,11 +394,11 @@ class NotebookToolRegistrar:
                     )
                 ]
 
-    def _register_get_editing_cell_output(self):
-        """Register the notebook/get_editing_cell_output tool."""
+    def _register_read_active_cell_output(self):
+        """Register the notebook/read_active_cell_output tool."""
 
         @self.mcp.tool(
-            name="notebook_get_editing_cell_output",
+            name="notebook_read_active_cell_output",
             annotations={
                 "readOnlyHint": True,
                 "idempotentHint": True,
@@ -404,6 +436,7 @@ class NotebookToolRegistrar:
                             "message": f"Active cell is a {cell_type} cell (no outputs)",
                             "cell_type": cell_type,
                             "cell_index": cell_index,
+                            "executed": False,
                             "has_output": False,
                             "has_error": False,
                         }
@@ -415,6 +448,7 @@ class NotebookToolRegistrar:
                             "status": "not_executed",
                             "message": "Active cell has not been executed yet",
                             "cell_index": cell_index,
+                            "executed": False,
                             "has_output": False,
                             "has_error": False,
                         }
@@ -444,9 +478,8 @@ class NotebookToolRegistrar:
                         message = "Cell executed successfully but produced no output"
 
                     cell_info = {
-                        "cell_number": execution_count,
-                        "execution_count": execution_count,
-                        "cell_index": cell_index,
+                        "cell_id_notebook": cell_index,
+                        "executed": True,
                         "status": status,
                         # Include outputs if there's output OR if there's an error
                         # (error details are in the outputs array)
@@ -589,11 +622,11 @@ class NotebookToolRegistrar:
         }
         return format_response(result)
 
-    def _register_get_notebook_cells(self):
-        """Register the notebook/get_notebook_cells tool."""
+    def _register_read_content(self):
+        """Register the notebook/read_content tool."""
 
         @self.mcp.tool(
-            name="notebook_get_notebook_cells",
+            name="notebook_read_content",
             annotations={
                 "readOnlyHint": True,
                 "idempotentHint": True,
@@ -601,237 +634,215 @@ class NotebookToolRegistrar:
             },
         )
         async def get_notebook_cells(
-            num_cells: int = 2, include_output: bool = True, detailed: bool = False
+            num_cells: int = 2,
+            include_output: bool = True,
+            cell_id_notebooks: Optional[str] = None,
+            detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+            # NEW TWO-PHASE APPROACH: Uses frontend to access ALL cells including unexecuted ones
             try:
                 import sys
                 import traceback
 
-                cells = []
-                current_execution_count = getattr(self.ipython, "execution_count", 0)
-
-                # FRONTEND-FIRST FIX: Removed pre-computation of latest_cell_with_error
-                # based on sys.last_* as it causes stale error state bugs.
-                # Error detection now happens per-cell using frontend data.
-
-                # Method 1: Use IPython's In/Out cache (fastest for recent cells)
-                if hasattr(self.ipython, "user_ns"):
-                    In = self.ipython.user_ns.get("In", [])
-                    Out = self.ipython.user_ns.get("Out", {})
-
-                    # Get the last num_cells entries
-                    if len(In) > 1:  # In[0] is empty
-                        start_idx = max(1, len(In) - num_cells)
-                        latest_executed = len(In) - 1
-
-                        for i in range(start_idx, len(In)):
-                            if i < len(In) and In[i]:  # Skip empty entries
-                                cell_info = {
-                                    "cell_number": i,
-                                    "execution_count": i,
-                                    "input": In[i],
-                                    "has_error": False,
-                                }
-
-                                if include_output:
-                                    # FRONTEND-FIRST FIX: Track whether frontend has valid data
-                                    frontend_output = None
-                                    frontend_has_data = False
-                                    try:
-                                        frontend_output = self._get_frontend_output(i)
-                                        # Check if frontend returned valid cell output data
-                                        # (not a failure response like {success: false})
-                                        frontend_has_data = (
-                                            self._is_valid_frontend_output(
-                                                frontend_output
-                                            )
-                                        )
-                                    except Exception as e:
-                                        logger.warning(
-                                            f"Error getting frontend output for cell {i}: {e}"
-                                        )
-
-                                    if frontend_output and frontend_output.get(
-                                        "has_output"
-                                    ):
-                                        # Frontend has output - check for errors
-                                        outputs = frontend_output.get("outputs", [])
-                                        has_error_output = any(
-                                            out.get("type") == "error"
-                                            or out.get("output_type") == "error"
-                                            for out in outputs
-                                        )
-                                        cell_info["outputs"] = outputs
-                                        cell_info["has_output"] = True
-                                        cell_info["has_error"] = has_error_output
-                                        # Always set explicit status
-                                        cell_info["status"] = (
-                                            "error" if has_error_output else "completed"
-                                        )
-                                        if has_error_output:
-                                            # Extract error details
-                                            for out in outputs:
-                                                if (
-                                                    out.get("type") == "error"
-                                                    or out.get("output_type") == "error"
-                                                ):
-                                                    cell_info["error"] = {
-                                                        "type": out.get(
-                                                            "ename", "UnknownError"
-                                                        ),
-                                                        "message": out.get(
-                                                            "evalue", ""
-                                                        ),
-                                                        "traceback": "\n".join(
-                                                            out.get("traceback", [])
-                                                        ),
-                                                    }
-                                                    break
-                                        cells.append(cell_info)
-                                        continue  # Skip other checks for this cell
-
-                                    elif frontend_has_data and not frontend_output.get(
-                                        "has_output"
-                                    ):
-                                        # FRONTEND-FIRST FIX: Frontend has data but no output
-                                        # Check if there's an error in outputs array
-                                        outputs = frontend_output.get("outputs", [])
-                                        has_error_output = any(
-                                            out.get("type") == "error"
-                                            or out.get("output_type") == "error"
-                                            for out in outputs
-                                        )
-                                        cell_info["has_output"] = False
-                                        cell_info["has_error"] = has_error_output
-                                        if has_error_output:
-                                            cell_info["status"] = "error"
-                                            for out in outputs:
-                                                if (
-                                                    out.get("type") == "error"
-                                                    or out.get("output_type") == "error"
-                                                ):
-                                                    cell_info["error"] = {
-                                                        "type": out.get(
-                                                            "ename", "UnknownError"
-                                                        ),
-                                                        "message": out.get(
-                                                            "evalue", ""
-                                                        ),
-                                                        "traceback": "\n".join(
-                                                            out.get("traceback", [])
-                                                        ),
-                                                    }
-                                                    break
-                                        else:
-                                            cell_info["status"] = "completed_no_output"
-                                        cells.append(cell_info)
-                                        continue
-
-                                    # Check Out dictionary (expression return values)
-                                    if i in Out:
-                                        # Cell has output
-                                        cell_info["output"] = str(Out[i])
-                                        cell_info["has_output"] = True
-                                        cell_info["status"] = "completed"
-                                    elif i < current_execution_count:
-                                        # Cell executed but has no output
-                                        # FRONTEND-FIRST FIX: Only use sys.last_* as last resort
-                                        cell_info["has_output"] = False
-                                        if (
-                                            not frontend_has_data
-                                            and i == latest_executed
-                                        ):
-                                            # Only check sys.last_* for latest cell when
-                                            # frontend has no data
-                                            if (
-                                                hasattr(sys, "last_type")
-                                                and hasattr(sys, "last_value")
-                                                and hasattr(sys, "last_traceback")
-                                                and sys.last_type is not None
-                                            ):
-                                                cell_info["has_error"] = True
-                                                cell_info["error"] = {
-                                                    "type": sys.last_type.__name__,
-                                                    "message": str(sys.last_value),
-                                                    "traceback": "".join(
-                                                        traceback.format_exception(
-                                                            sys.last_type,
-                                                            sys.last_value,
-                                                            sys.last_traceback,
-                                                        )
-                                                    ),
-                                                }
-                                                cell_info["status"] = "error"
-                                            else:
-                                                cell_info["status"] = (
-                                                    "completed_no_output"
-                                                )
-                                        else:
-                                            cell_info["status"] = "completed_no_output"
-                                    else:
-                                        # Cell not yet executed
-                                        cell_info["has_output"] = False
-                                        cell_info["status"] = "not_executed"
-                                else:
-                                    cell_info["has_output"] = False
-
-                                cells.append(cell_info)
-
-                # Method 2: Fallback to history_manager if In/Out not available
-                if not cells and hasattr(self.ipython, "history_manager"):
+                # Parse cell_id_notebooks if provided (JSON array of indices)
+                specific_indices = None
+                if cell_id_notebooks:
                     try:
-                        # Get range with output
-                        current_count = getattr(self.ipython, "execution_count", 1)
-                        start_line = max(1, current_count - num_cells)
-
-                        history = list(
-                            self.ipython.history_manager.get_range(
-                                session=0,  # Current session
-                                start=start_line,
-                                stop=current_count + 1,
-                                raw=True,
-                                output=include_output,
+                        parsed = json.loads(cell_id_notebooks)
+                        if isinstance(parsed, list):
+                            specific_indices = [int(i) for i in parsed]
+                        elif isinstance(parsed, int):
+                            specific_indices = [parsed]
+                        else:
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=json.dumps(
+                                        {
+                                            "error": "cell_id_notebooks must be an integer or list of integers"
+                                        },
+                                        indent=2,
+                                    ),
+                                )
+                            ]
+                    except (json.JSONDecodeError, ValueError) as e:
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {"error": f"Invalid cell_id_notebooks format: {e}"},
+                                    indent=2,
+                                ),
                             )
-                        )
+                        ]
 
-                        for _, line_num, content in history:
-                            if include_output and isinstance(content, tuple):
-                                input_text, output_text = content
-                                cells.append(
+                # PHASE 1: Get notebook structure (lightweight - no source code)
+                structure = get_notebook_structure(timeout_s=2.0)
+
+                if not structure.get("success"):
+                    # Frontend unavailable - check if position-based access was requested
+                    if specific_indices is not None:
+                        # Position-based access requires frontend - return explicit error
+                        logger.warning(
+                            f"Frontend unavailable: {structure.get('error')}. "
+                            "Cannot use cell_id_notebooks without frontend."
+                        )
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
                                     {
-                                        "cell_number": line_num,
-                                        "execution_count": line_num,
-                                        "input": input_text,
-                                        "output": (
-                                            str(output_text) if output_text else None
-                                        ),
-                                        "has_output": output_text is not None,
-                                        "has_error": False,  # Can't determine from history_manager
-                                    }
+                                        "error": "cell_id_notebooks requires JupyterLab frontend connection",
+                                        "detail": "Position-based cell access is only available when the frontend bridge is connected. "
+                                        "Use num_cells parameter instead, or ensure the JupyterLab extension is loaded.",
+                                        "frontend_error": structure.get("error"),
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+
+                    # Fallback to IPython-based approach only for num_cells mode
+                    logger.warning(
+                        f"Frontend unavailable: {structure.get('error')}. "
+                        "Falling back to IPython history."
+                    )
+                    return await self._get_cells_from_ipython(
+                        num_cells, include_output, detailed
+                    )
+
+                total_cells = structure.get("total_cells", 0)
+                structure_cells = structure.get("cells", [])
+
+                if total_cells == 0:
+                    result = {
+                        "total_cells": 0,
+                        "cells": [],
+                        "count": 0,
+                        "error_count": 0,
+                    }
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+                # PHASE 2: Determine which cells to fetch
+                if specific_indices is not None:
+                    # Fetch specific cells by index
+                    indices_to_fetch = [
+                        i for i in specific_indices if 0 <= i < total_cells
+                    ]
+                else:
+                    # Fetch cells around the active cell (cursor position)
+                    active_index = structure.get("active_cell_index", total_cells - 1)
+                    half = num_cells // 2
+                    start = max(0, active_index - half)
+                    end = min(total_cells, start + num_cells)
+                    # Adjust start if we hit the end boundary
+                    if end == total_cells:
+                        start = max(0, total_cells - num_cells)
+                    indices_to_fetch = list(range(start, end))
+
+                # Get cells with source code
+                cells_result = get_cells_by_index(indices_to_fetch, timeout_s=2.0)
+
+                if not cells_result.get("success"):
+                    logger.warning(
+                        f"Failed to get cells by index: {cells_result.get('error')}"
+                    )
+                    return await self._get_cells_from_ipython(
+                        num_cells, include_output, detailed
+                    )
+
+                fetched_cells = cells_result.get("cells", [])
+
+                # PHASE 3: Process cells and add outputs for executed cells
+                cells = []
+                for cell_data in fetched_cells:
+                    # Use execution number internally to fetch outputs (not exposed in return)
+                    exec_num = cell_data.get("cell_execution_number")
+
+                    cell_info = {
+                        "cell_id_notebook": cell_data.get("cell_id_notebook"),
+                        "cell_type": cell_data.get("cell_type"),
+                        "executed": exec_num is not None,
+                        "source": cell_data.get("source", ""),
+                        "has_output": False,
+                        "has_error": False,
+                    }
+
+                    if include_output and exec_num is not None:
+                        # Only fetch output for executed cells
+                        try:
+                            frontend_output = self._get_frontend_output(exec_num)
+                            if frontend_output and self._is_valid_frontend_output(
+                                frontend_output
+                            ):
+                                outputs = frontend_output.get("outputs", [])
+                                has_output = frontend_output.get("has_output", False)
+
+                                # Check for errors in outputs
+                                has_error_output = any(
+                                    out.get("type") == "error"
+                                    or out.get("output_type") == "error"
+                                    for out in outputs
                                 )
+
+                                cell_info["has_output"] = has_output
+                                cell_info["has_error"] = has_error_output
+                                cell_info["outputs"] = outputs
+
+                                if has_error_output:
+                                    cell_info["status"] = "error"
+                                    # Extract error details
+                                    for out in outputs:
+                                        if (
+                                            out.get("type") == "error"
+                                            or out.get("output_type") == "error"
+                                        ):
+                                            cell_info["error"] = {
+                                                "type": out.get(
+                                                    "ename", "UnknownError"
+                                                ),
+                                                "message": out.get("evalue", ""),
+                                                "traceback": "\n".join(
+                                                    out.get("traceback", [])
+                                                ),
+                                            }
+                                            break
+                                elif has_output:
+                                    cell_info["status"] = "completed"
+                                else:
+                                    cell_info["status"] = "completed_no_output"
                             else:
-                                cells.append(
-                                    {
-                                        "cell_number": line_num,
-                                        "execution_count": line_num,
-                                        "input": content,
-                                        "has_output": False,
-                                        "has_error": False,  # Can't determine from history_manager
-                                    }
-                                )
-                    except Exception as hist_error:
-                        logger.warning(f"History manager fallback failed: {hist_error}")
+                                # Fallback to IPython Out cache
+                                Out = self.ipython.user_ns.get("Out", {})
+                                if exec_num in Out:
+                                    cell_info["output"] = str(Out[exec_num])
+                                    cell_info["has_output"] = True
+                                    cell_info["status"] = "completed"
+                                else:
+                                    cell_info["status"] = "completed_no_output"
+                        except Exception as e:
+                            logger.warning(
+                                f"Error getting output for cell {exec_num}: {e}"
+                            )
+                            cell_info["status"] = "output_fetch_failed"
+                    elif exec_num is None:
+                        # Unexecuted cell (markdown or code that hasn't been run)
+                        cell_info["status"] = "not_executed"
+                    else:
+                        cell_info["status"] = "completed_no_output"
+
+                    cells.append(cell_info)
 
                 # Count cells with errors
                 error_count = sum(1 for cell in cells if cell.get("has_error", False))
 
                 result = {
+                    "total_cells": total_cells,
                     "cells": cells,
                     "count": len(cells),
-                    "requested": num_cells,
+                    "requested": len(indices_to_fetch),
                     "error_count": error_count,
-                    "note": "Only the most recent cell's output (print/error) can be captured. Older cells lose their output.",
                 }
 
                 # Apply concise mode filtering
@@ -847,6 +858,90 @@ class NotebookToolRegistrar:
                         type="text", text=json.dumps({"error": str(e)}, indent=2)
                     )
                 ]
+
+    async def _get_cells_from_ipython(
+        self, num_cells: int, include_output: bool, detailed: bool
+    ) -> List[TextContent]:
+        """Fallback method to get cells from IPython history when frontend unavailable."""
+        import sys
+        import traceback
+
+        cells = []
+        current_execution_count = getattr(self.ipython, "execution_count", 0)
+
+        if hasattr(self.ipython, "user_ns"):
+            In = self.ipython.user_ns.get("In", [])
+            Out = self.ipython.user_ns.get("Out", {})
+
+            if len(In) > 1:  # In[0] is empty
+                start_idx = max(1, len(In) - num_cells)
+                latest_executed = len(In) - 1
+
+                for i in range(start_idx, len(In)):
+                    if i < len(In) and In[i]:
+                        cell_info = {
+                            "cell_id_notebook": None,  # Unknown for IPython fallback
+                            "cell_type": "code",  # IPython only tracks code cells
+                            "executed": True,  # IPython In[] only contains executed cells
+                            "source": In[i],
+                            "has_error": False,
+                        }
+
+                        if include_output:
+                            if i in Out:
+                                cell_info["output"] = str(Out[i])
+                                cell_info["has_output"] = True
+                                cell_info["status"] = "completed"
+                            elif i < current_execution_count:
+                                cell_info["has_output"] = False
+                                # Check sys.last_* for latest cell errors
+                                if i == latest_executed:
+                                    if (
+                                        hasattr(sys, "last_type")
+                                        and hasattr(sys, "last_value")
+                                        and hasattr(sys, "last_traceback")
+                                        and sys.last_type is not None
+                                    ):
+                                        cell_info["has_error"] = True
+                                        cell_info["error"] = {
+                                            "type": sys.last_type.__name__,
+                                            "message": str(sys.last_value),
+                                            "traceback": "".join(
+                                                traceback.format_exception(
+                                                    sys.last_type,
+                                                    sys.last_value,
+                                                    sys.last_traceback,
+                                                )
+                                            ),
+                                        }
+                                        cell_info["status"] = "error"
+                                    else:
+                                        cell_info["status"] = "completed_no_output"
+                                else:
+                                    cell_info["status"] = "completed_no_output"
+                            else:
+                                cell_info["has_output"] = False
+                                cell_info["status"] = "not_executed"
+                        else:
+                            cell_info["has_output"] = False
+
+                        cells.append(cell_info)
+
+        error_count = sum(1 for cell in cells if cell.get("has_error", False))
+
+        result = {
+            "total_cells": None,  # Unknown for IPython fallback
+            "cells": cells,
+            "count": len(cells),
+            "requested": num_cells,
+            "error_count": error_count,
+            "note": "Using IPython fallback - only executed code cells shown",
+        }
+
+        if not detailed:
+            result = self._to_concise_notebook_cells(result, include_output)
+
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     def _register_move_cursor(self):
         """Register the notebook/move_cursor tool."""

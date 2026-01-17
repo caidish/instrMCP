@@ -70,12 +70,9 @@ class UnsafeToolRegistrar:
         scan_result = self.code_scanner.scan(code)
 
         if scan_result.blocked:
-            rejection_msg = self.code_scanner.get_rejection_message(scan_result)
             logger.error(
                 f"🚫 {tool_name} blocked by code scanner: {scan_result.block_reason}"
             )
-            # Print to ensure visibility even if logging isn't configured
-            print(f"🚫 BLOCKED: {scan_result.block_reason}")
 
             return [
                 TextContent(
@@ -84,9 +81,7 @@ class UnsafeToolRegistrar:
                         {
                             "success": False,
                             "blocked": True,
-                            "error": f"Security policy violation: {scan_result.block_reason}",
-                            "security_scan": scan_result.to_dict(),
-                            "message": rejection_msg,
+                            "block_reason": scan_result.block_reason,
                         },
                         indent=2,
                     ),
@@ -102,33 +97,37 @@ class UnsafeToolRegistrar:
 
         return None
 
-    # ===== Concise mode helpers =====
+    def _unescape_content(self, text: str) -> str:
+        """Convert common escape sequences in text content.
 
-    def _to_concise_update_cell(self, result: dict) -> dict:
-        """Convert full update cell result to concise format.
+        LLMs and tools sometimes pass literal escape sequences (e.g., '\\n')
+        instead of actual characters. This normalizes them for code/text content.
 
-        Concise: success, message.
+        Args:
+            text: Input text that may contain escape sequences
+
+        Returns:
+            Text with escape sequences converted to actual characters
         """
-        return {
-            "success": result.get("success", False),
-            "message": result.get("message", ""),
-        }
+        if not text:
+            return text
+        # Convert common escape sequences
+        return text.replace("\\n", "\n").replace("\\t", "\t")
+
+    # ===== Concise mode helpers =====
 
     def _to_concise_execute_cell(self, result: dict) -> dict:
         """Convert full execute cell result to concise format.
 
-        Concise: signal_success, status, execution_count, outputs, error info if error.
-        Also renames 'success' to 'signal_success' to clarify it indicates the signal was sent,
-        not that the cell code executed without error.
+        Concise: status, executed, outputs, error info if error.
 
         Bug fixes applied:
         - Bug #4: Always include has_output and outputs (not just output_summary)
         - Bug #5: Handle all three error patterns (direct fields, nested dict, string)
         """
         concise = {
-            "signal_success": result.get("success", False),
             "status": result.get("status"),
-            "execution_count": result.get("execution_count"),
+            "executed": result.get("executed", False),
         }
 
         # Bug #5 Fix: Include error info if present - handle all three patterns
@@ -206,114 +205,16 @@ class UnsafeToolRegistrar:
 
     def register_all(self):
         """Register all unsafe mode tools."""
-        self._register_update_editing_cell()
-        self._register_execute_cell()
+        self._register_execute_active_cell()
         self._register_add_cell()
         self._register_delete_cell()
-        self._register_delete_cells()
         self._register_apply_patch()
 
-    def _register_update_editing_cell(self):
-        """Register the notebook/update_editing_cell tool."""
+    def _register_execute_active_cell(self):
+        """Register the notebook/execute_active_cell tool."""
 
         @self.mcp.tool(
-            name="notebook_update_editing_cell",
-            annotations={
-                "readOnlyHint": False,
-                "destructiveHint": False,
-                "idempotentHint": True,
-                "openWorldHint": False,
-            },
-        )
-        async def update_editing_cell(
-            content: str, detailed: bool = False
-        ) -> List[TextContent]:
-            # Description loaded from metadata_baseline.yaml
-            # SECURITY: Scan the new content for dangerous patterns BEFORE consent
-            rejection = self._scan_and_reject(content, "notebook_update_editing_cell")
-            if rejection:
-                return rejection
-
-            # Request consent if consent manager is available
-            if self.consent_manager:
-                try:
-                    # Get current cell content to show what will be replaced
-                    cell_info = await self.tools.get_editing_cell()
-                    old_content = cell_info.get("cell_content", "")
-
-                    consent_result = await self.consent_manager.request_consent(
-                        operation="update_cell",
-                        tool_name="notebook_update_editing_cell",
-                        author="MCP Server",
-                        details={
-                            "old_content": old_content,
-                            "new_content": content,
-                            "description": f"Replace cell content ({len(old_content)} chars → {len(content)} chars)",
-                            "cell_type": cell_info.get("cell_type", "code"),
-                            "cell_index": cell_info.get("index", "unknown"),
-                        },
-                    )
-
-                    if not consent_result["approved"]:
-                        reason = consent_result.get("reason", "User declined")
-                        logger.warning(f"Cell update declined - {reason}")
-                        return [
-                            TextContent(
-                                type="text",
-                                text=json.dumps(
-                                    {
-                                        "success": False,
-                                        "error": f"Update declined: {reason}",
-                                    },
-                                    indent=2,
-                                ),
-                            )
-                        ]
-                    else:
-                        logger.debug("✅ Cell update approved")
-                        if consent_result.get("reason") != "bypass_mode":
-                            print("✅ Consent granted for cell update")
-
-                except TimeoutError:
-                    logger.error("Consent request timed out for cell update")
-                    return [
-                        TextContent(
-                            type="text",
-                            text=json.dumps(
-                                {
-                                    "success": False,
-                                    "error": "Consent request timed out",
-                                },
-                                indent=2,
-                            ),
-                        )
-                    ]
-
-            try:
-                result = await self.tools.update_editing_cell(content)
-
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_update_cell(result)
-
-                return [
-                    TextContent(
-                        type="text", text=json.dumps(result, indent=2, default=str)
-                    )
-                ]
-            except Exception as e:
-                logger.error(f"Error in notebook/update_editing_cell: {e}")
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": str(e)}, indent=2)
-                    )
-                ]
-
-    def _register_execute_cell(self):
-        """Register the notebook/execute_cell tool."""
-
-        @self.mcp.tool(
-            name="notebook_execute_cell",
+            name="notebook_execute_active_cell",
             annotations={
                 "readOnlyHint": False,
                 "destructiveHint": False,
@@ -349,7 +250,9 @@ class UnsafeToolRegistrar:
                 ]
 
             # Scan for dangerous patterns and reject if found
-            rejection = self._scan_and_reject(cell_content, "notebook_execute_cell")
+            rejection = self._scan_and_reject(
+                cell_content, "notebook_execute_active_cell"
+            )
             if rejection:
                 return rejection
 
@@ -358,7 +261,7 @@ class UnsafeToolRegistrar:
                 try:
                     consent_result = await self.consent_manager.request_consent(
                         operation="execute_cell",
-                        tool_name="notebook_execute_cell",
+                        tool_name="notebook_execute_active_cell",
                         author="MCP Server",
                         details={
                             "source_code": cell_content,
@@ -404,10 +307,35 @@ class UnsafeToolRegistrar:
 
             start = time.perf_counter()
             try:
+                # Special case: timeout=0 means fire-and-forget (no wait for output)
+                if timeout == 0:
+                    # Trigger execution without waiting
+                    from ..active_cell_bridge import execute_active_cell
+
+                    exec_result = execute_active_cell()
+                    duration = (time.perf_counter() - start) * 1000
+                    log_tool_call(
+                        "notebook_execute_active_cell",
+                        {"detailed": detailed, "no_wait": True},
+                        duration,
+                        "success",
+                    )
+
+                    result = {
+                        "status": "no_wait",
+                        "executed": "unknown",
+                        "message": "Cell execution triggered. Not waiting for output - cell might still be running.",
+                    }
+                    return [
+                        TextContent(
+                            type="text", text=json.dumps(result, indent=2, default=str)
+                        )
+                    ]
+
                 result = await self.tools.execute_editing_cell(timeout=timeout)
                 duration = (time.perf_counter() - start) * 1000
                 log_tool_call(
-                    "notebook_execute_cell",
+                    "notebook_execute_active_cell",
                     {"detailed": detailed},
                     duration,
                     "success",
@@ -424,7 +352,9 @@ class UnsafeToolRegistrar:
                 ]
             except Exception as e:
                 duration = (time.perf_counter() - start) * 1000
-                log_tool_call("notebook_execute_cell", {}, duration, "error", str(e))
+                log_tool_call(
+                    "notebook_execute_active_cell", {}, duration, "error", str(e)
+                )
                 logger.error(f"Error in notebook/execute_cell: {e}")
                 return [
                     TextContent(
@@ -448,10 +378,11 @@ class UnsafeToolRegistrar:
             cell_type: str = "code",
             position: str = "below",
             content: str = "",
-            timeout_s: float = 2.0,
-            detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+            # Normalize escape sequences (LLMs may pass literal \n instead of newlines)
+            content = self._unescape_content(content)
+
             # SECURITY: Scan content for dangerous patterns (only for code cells)
             if cell_type == "code" and content:
                 rejection = self._scan_and_reject(content, "notebook_add_cell")
@@ -459,13 +390,10 @@ class UnsafeToolRegistrar:
                     return rejection
 
             try:
-                result = await self.tools.add_new_cell(
-                    cell_type, position, content, timeout_s
-                )
+                result = await self.tools.add_new_cell(cell_type, position, content)
 
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_success_only(result)
+                # Always return concise success/error only
+                result = self._to_concise_success_only(result)
 
                 return [
                     TextContent(
@@ -481,7 +409,7 @@ class UnsafeToolRegistrar:
                 ]
 
     def _register_delete_cell(self):
-        """Register the notebook/delete_cell tool."""
+        """Register the notebook/delete_cell tool (unified single/multi-cell deletion)."""
 
         @self.mcp.tool(
             name="notebook_delete_cell",
@@ -492,107 +420,92 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def delete_editing_cell(detailed: bool = False) -> List[TextContent]:
+        async def delete_cell(
+            cell_id_notebooks: Optional[str] = None,
+        ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
-            # Request consent if consent manager is available
-            if self.consent_manager:
-                try:
-                    # Get current cell content for consent dialog
-                    cell_info = await self.tools.get_editing_cell()
-                    cell_content = cell_info.get("cell_content", "")
+            import json as json_module
 
-                    consent_result = await self.consent_manager.request_consent(
-                        operation="delete_cell",
-                        tool_name="notebook_delete_cell",
-                        author="MCP Server",
-                        details={
-                            "source_code": cell_content,
-                            "description": "Delete the currently active Jupyter notebook cell",
-                            "cell_type": cell_info.get("cell_type", "code"),
-                            "cell_index": cell_info.get("index", "unknown"),
-                        },
-                    )
+            # If no param, delete current cell
+            if cell_id_notebooks is None:
+                # Delete current cell mode
+                if self.consent_manager:
+                    try:
+                        cell_info = await self.tools.get_editing_cell()
+                        cell_content = cell_info.get("cell_content", "")
 
-                    if not consent_result["approved"]:
-                        reason = consent_result.get("reason", "User declined")
-                        logger.warning(f"Cell deletion declined - {reason}")
+                        consent_result = await self.consent_manager.request_consent(
+                            operation="delete_cell",
+                            tool_name="notebook_delete_cell",
+                            author="MCP Server",
+                            details={
+                                "source_code": cell_content,
+                                "description": "Delete the currently active cell",
+                                "cell_type": cell_info.get("cell_type", "code"),
+                                "cell_index": cell_info.get("index", "unknown"),
+                            },
+                        )
+
+                        if not consent_result["approved"]:
+                            reason = consent_result.get("reason", "User declined")
+                            logger.warning(f"Cell deletion declined - {reason}")
+                            return [
+                                TextContent(
+                                    type="text",
+                                    text=json_module.dumps(
+                                        {
+                                            "success": False,
+                                            "error": f"Deletion declined: {reason}",
+                                        },
+                                        indent=2,
+                                    ),
+                                )
+                            ]
+                        else:
+                            logger.debug("✅ Cell deletion approved")
+                            if consent_result.get("reason") != "bypass_mode":
+                                print("✅ Consent granted for cell deletion")
+
+                    except TimeoutError:
+                        logger.error("Consent request timed out for cell deletion")
                         return [
                             TextContent(
                                 type="text",
-                                text=json.dumps(
+                                text=json_module.dumps(
                                     {
                                         "success": False,
-                                        "error": f"Deletion declined: {reason}",
+                                        "error": "Consent request timed out",
                                     },
                                     indent=2,
                                 ),
                             )
                         ]
-                    else:
-                        logger.debug("✅ Cell deletion approved")
-                        if consent_result.get("reason") != "bypass_mode":
-                            print("✅ Consent granted for cell deletion")
 
-                except TimeoutError:
-                    logger.error("Consent request timed out for cell deletion")
+                try:
+                    result = await self.tools.delete_editing_cell()
+                    result = self._to_concise_success_only(result)
                     return [
                         TextContent(
                             type="text",
-                            text=json.dumps(
-                                {
-                                    "success": False,
-                                    "error": "Consent request timed out",
-                                },
-                                indent=2,
-                            ),
+                            text=json_module.dumps(result, indent=2, default=str),
+                        )
+                    ]
+                except Exception as e:
+                    logger.error(f"Error in notebook/delete_cell: {e}")
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json_module.dumps({"error": str(e)}, indent=2),
                         )
                     ]
 
+            # Multi-cell deletion by position index
             try:
-                result = await self.tools.delete_editing_cell()
-
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_success_only(result)
-
-                return [
-                    TextContent(
-                        type="text", text=json.dumps(result, indent=2, default=str)
-                    )
-                ]
-            except Exception as e:
-                logger.error(f"Error in notebook/delete_cell: {e}")
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": str(e)}, indent=2)
-                    )
-                ]
-
-    def _register_delete_cells(self):
-        """Register the notebook/delete_cells tool."""
-
-        @self.mcp.tool(
-            name="notebook_delete_cells",
-            annotations={
-                "readOnlyHint": False,
-                "destructiveHint": True,
-                "idempotentHint": True,
-                "openWorldHint": False,
-            },
-        )
-        async def delete_cells_by_number(
-            cell_numbers: str, detailed: bool = False
-        ) -> List[TextContent]:
-            # Description loaded from metadata_baseline.yaml
-            # Parse cell_numbers first for validation
-            import json as json_module
-
-            try:
-                parsed = json_module.loads(cell_numbers)
+                parsed = json_module.loads(cell_id_notebooks)
                 if isinstance(parsed, int):
                     cell_list = [parsed]
                 elif isinstance(parsed, list):
-                    cell_list = parsed
+                    cell_list = [int(x) for x in parsed]
                 else:
                     return [
                         TextContent(
@@ -600,20 +513,20 @@ class UnsafeToolRegistrar:
                             text=json_module.dumps(
                                 {
                                     "success": False,
-                                    "error": "cell_numbers must be an integer or list of integers",
+                                    "error": "cell_id_notebooks must be an integer or list of integers",
                                 },
                                 indent=2,
                             ),
                         )
                     ]
-            except json_module.JSONDecodeError:
+            except (json_module.JSONDecodeError, ValueError) as e:
                 return [
                     TextContent(
                         type="text",
                         text=json_module.dumps(
                             {
                                 "success": False,
-                                "error": f"Invalid JSON format: {cell_numbers}",
+                                "error": f"Invalid cell_id_notebooks format: {e}",
                             },
                             indent=2,
                         ),
@@ -625,11 +538,11 @@ class UnsafeToolRegistrar:
                 try:
                     consent_result = await self.consent_manager.request_consent(
                         operation="delete_cells",
-                        tool_name="notebook_delete_cells",
+                        tool_name="notebook_delete_cell",
                         author="MCP Server",
                         details={
                             "description": f"Delete {len(cell_list)} cell(s) from notebook",
-                            "cell_numbers": cell_list,
+                            "cell_id_notebooks": cell_list,
                             "count": len(cell_list),
                         },
                     )
@@ -673,13 +586,10 @@ class UnsafeToolRegistrar:
                         )
                     ]
 
-            # Now execute the deletion
+            # Execute the deletion by position index
             try:
-                result = await self.tools.delete_cells_by_number(cell_list)
-
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_success_only(result)
+                result = await self.tools.delete_cells_by_index(cell_list)
+                result = self._to_concise_success_only(result)
 
                 return [
                     TextContent(
@@ -688,10 +598,11 @@ class UnsafeToolRegistrar:
                     )
                 ]
             except Exception as e:
-                logger.error(f"Error in notebook/delete_cells: {e}")
+                logger.error(f"Error in notebook/delete_cell: {e}")
                 return [
                     TextContent(
-                        type="text", text=json_module.dumps({"error": str(e)}, indent=2)
+                        type="text",
+                        text=json_module.dumps({"error": str(e)}, indent=2),
                     )
                 ]
 
@@ -707,10 +618,12 @@ class UnsafeToolRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def apply_patch(
-            old_text: str, new_text: str, detailed: bool = False
-        ) -> List[TextContent]:
+        async def apply_patch(old_text: str, new_text: str) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+            # Normalize escape sequences (LLMs may pass literal \n instead of newlines)
+            old_text = self._unescape_content(old_text)
+            new_text = self._unescape_content(new_text)
+
             # SECURITY: Get current cell content and compute the patched result
             # We must scan the FULL resulting code, not just the new_text fragment
             try:
@@ -736,7 +649,8 @@ class UnsafeToolRegistrar:
                 ]
 
             # Verify the old_text exists in the cell
-            if old_text not in current_content:
+            match_count = current_content.count(old_text)
+            if match_count == 0:
                 return [
                     TextContent(
                         type="text",
@@ -744,6 +658,21 @@ class UnsafeToolRegistrar:
                             {
                                 "success": False,
                                 "error": "Patch failed: old_text not found in cell content.",
+                            },
+                            indent=2,
+                        ),
+                    )
+                ]
+
+            # Error if multiple matches found - patch must be unambiguous
+            if match_count > 1:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "error": f"Patch failed: old_text found {match_count} times. Provide more context to make it unique.",
                             },
                             indent=2,
                         ),
@@ -815,9 +744,8 @@ class UnsafeToolRegistrar:
             try:
                 result = await self.tools.apply_patch(old_text, new_text)
 
-                # Apply concise mode filtering
-                if not detailed:
-                    result = self._to_concise_success_only(result)
+                # Always return concise success/error only
+                result = self._to_concise_success_only(result)
 
                 return [
                     TextContent(

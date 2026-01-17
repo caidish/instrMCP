@@ -186,13 +186,16 @@ class MeasureItToolRegistrar:
             timeout: float,
             variable_name: Optional[str] = None,
             all: bool = False,
+            kill: bool = True,
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
                 # If all=True, wait for all sweeps
                 if all:
-                    result = await self.tools.wait_for_all_sweeps(timeout=timeout)
+                    result = await self.tools.wait_for_all_sweeps(
+                        timeout=timeout, kill=kill
+                    )
                     # Apply concise mode filtering
                     if not detailed:
                         result = self._to_concise_sweeps(result)
@@ -213,7 +216,7 @@ class MeasureItToolRegistrar:
                             )
                         ]
                     result = await self.tools.wait_for_sweep(
-                        variable_name, timeout=timeout
+                        variable_name, timeout=timeout, kill=kill
                     )
                     # Apply concise mode filtering
                     if not detailed:

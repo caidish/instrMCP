@@ -291,6 +291,10 @@ d = ds.get_parameter_data()
                 )
                 result = json.loads(result_str)
 
+                # If dataset not found, return error immediately without code generation
+                if "error" in result:
+                    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
                 # Generate code suggestion if requested
                 if code_suggestion:
                     code = self._generate_code_suggestion(result)

@@ -11,13 +11,10 @@ tools:
   database_get_database_stats:
     title: "Database Statistics"
     description: |
-      Check if Database exists. Get database statistics and health information.
+      Check database exists and return health/stats.
 
       Args:
-          database_path: Optional path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.
-
-      Returns JSON containing database statistics including full path, size,
-      experiment count, dataset count, measurement_types, last modified time.
+          database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.
 
   database_get_dataset_info:
     title: "Get Dataset Info"
@@ -25,10 +22,11 @@ tools:
       Get detailed information about a specific dataset.
 
       Args:
-          id: Dataset run ID to load (e.g., load_by_id(2))
-          database_path: Database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
-          detailed: If `false` (default), return concise summary; if `true`, return full info
-          code_suggestion: If true, include dataset-loading code; unsafe/dangerous mode auto-inserts+executes, safe returns a suggestion.
+          id: Dataset run ID to load
+          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          detailed: bool, if `true`, return full info
+          code_suggestion: dataset-loading code; 
+          unsafe/dangerous mode -> auto-inserts+executes, safe returns a suggestion.
 
   database_list_all_available_db:
     title: "List Databases"
@@ -39,8 +37,7 @@ tools:
       and QCodes configuration paths.
 
       Args:
-          detailed: If False (default), return only database names and paths;
-              if True, also return measureit sweep and qcodes default config.
+          detailed: bool, if true, also return measureit sweep and qcodes default config.
 
   database_list_experiments:
     title: "List Experiments"
@@ -48,10 +45,9 @@ tools:
       List all experiments in the specified QCoDeS database.
 
       Args:
-          database_path: Optional database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
-          scan_nested: If true, also scan nested Databases/ subdirectories under the MeasureIt data dir
-              (or INSTRMCP_DATA_DIR) when database_path is not provided.
-          detailed: If true, add path_resolved_via, experiment_count, per-experiment metadata
+          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          scan_nested: bool, if true, also scan nested Databases/ subdirectories
+          detailed: bool, If true, add path_resolved_via, experiment_count, per-experiment metadata
               (experiment_id, name, sample_name, start/end time, run_ids summary like "6-16(11)", (*) means total counts),
               and sweep_groups when detected.
 
@@ -61,225 +57,125 @@ tools:
     description: |
       Retrieve the content of a specific MCP resource by its URI.
 
-      Use this tool to access resource content when you need the actual data
-      (e.g., templates, configuration). This is a fallback
-      when direct resource access is not available.
+      Use this tool to access resource content. 
 
       Args:
-          uri: Resource URI (e.g., "resource://measureit_sweep1d_template")
+          uri: string, resource URI (e.g., "resource://measureit_sweep1d_template")
 
       Returns:
           Resource content as JSON or text.
 
-      Examples:
-          - mcp_get_resource("resource://measureit_sweep1d_template")
-          - mcp_get_resource("resource://measureit_code_examples")
-          - mcp_get_resource("resource://measureit_common_patterns")
-
   mcp_list_resources:
     title: "List MCP Resources"
     description: |
-      List all available MCP resources and guide on when to use them.
+      List all available MCP resources and guide.
 
-      MCP Resources provide READ-ONLY reference data and templates,
-      while Tools perform active operations. Use this tool to discover
+      Use this tool to discover
       what context and documentation is available.
-
-      Returns:
-          Comprehensive guide including all resource URIs, descriptions,
-          use cases, and guidance on resources vs tools.
 
   measureit_get_status:
     title: "MeasureIt Status"
     description: |
       Check if any MeasureIt sweep is currently running.
 
-      Returns information about active MeasureIt sweeps in the notebook namespace,
-      including sweep type, status, and basic configuration if available.
-
       Args:
-          detailed: If False (default), return only active status and sweep names;
-              if True, return full sweep information.
-
-      Returns JSON containing:
-      - Concise mode: active (bool), sweep_names (list), count (int)
-      - Detailed mode: active (bool), sweeps (dict with full sweep info)
+          detailed: bool, if false (default), if true, return adds sweep state and progress
 
   measureit_kill_sweep:
     title: "Kill Sweep"
     description: |
       Kill running MeasureIt sweep(s) to release resources.
 
-      UNSAFE: This tool stops running sweep(s), which may leave instruments
-      in an intermediate state. Use when a sweep needs to be terminated
-      due to timeout, error, or user request.
-
-      After killing a sweep, you may need to:
-      - Re-initialize instruments to a known state
-      - Check instrument parameters before starting a new sweep
-
       Args:
           variable_name: Name of the sweep variable in the notebook namespace
-              (e.g., "sweep1d", "my_sweep"). Required when all=False.
-          all: If True, kill all sweeps in namespace. If False (default),
+              (e.g., "sweep1d", "my_sweep"). Required when all=false.
+          all: If true, kill all sweeps in namespace. If false (default),
               kill only the sweep specified by variable_name.
-          detailed: If False (default), return concise result;
-              if True, return full details.
-
-      Returns JSON containing:
-          For single sweep (all=False):
-          - success: bool - whether the kill was successful
-          - sweep_name: str - name of the sweep
-          - previous_state: str - state before kill
-          - new_state: str - state after kill
-          - error: str (if any error occurred)
-
-          For all sweeps (all=True):
-          - success: bool - True if all sweeps killed successfully
-          - killed_count: int - number of sweeps killed
-          - total_sweeps: int - total sweeps found
-          - results: dict - individual results per sweep
-          - errors: list - error messages if any failed
 
   measureit_wait_for_sweep:
     title: "Wait for Sweep"
     description: |
       Wait until MeasureIt sweep(s) finish.
 
-      AUTO-KILL BEHAVIOR: Sweeps are automatically killed to release hardware
-      resources when they complete (success or error). This is NOT a read-only
-      operation. If you need to poll without killing, use measureit_get_status.
-
-      IMPORTANT: Calculate timeout based on sweep parameters before calling.
-      Formula: timeout = (num_points * delay_per_point) + ramp_time + safety_margin
-      Example: 100 points × 0.1s delay + 10s ramp + 30s margin = 50s timeout.
-      If sweep duration is unknown, use a reasonable default (e.g., 300s) or
-      call measureit_get_status(detailed=True) first to check time_remaining.
-
       Args:
           timeout: Maximum time to wait in seconds (REQUIRED).
               Calculate based on sweep parameters to avoid hanging on stuck sweeps.
-          variable_name: Name of the sweep variable to wait for.
-              Required when all=False.
-          all: If True, wait for all sweeps in namespace. If False (default),
+          variable_name: Name of the sweep variable to wait for. Required when all=false.
+          all: If true, wait for all sweeps in namespace. If false (default),
               wait only for the sweep specified by variable_name.
-          detailed: If False (default), return only sweep state;
-              if True, return full sweep information.
-
-      Returns JSON containing:
-          For single sweep (all=False):
-          - sweep: Dict of sweep info (or None if no matching sweep was running)
-          - killed: True if sweep was killed (always True on success/error)
-          - kill_reason: Explanation of why sweep was killed
-          - error: Error message if timeout or other error occurred
-          - timed_out: True if the timeout was reached (sweep NOT killed)
-
-          For all sweeps (all=True):
-          - sweeps: Dict of sweep info (or None if no sweeps were running)
-          - killed: True if sweeps were killed (always True on success/error)
-          - kill_reason: Explanation of why sweeps were killed
-          - error: Error message if timeout or other error occurred
-          - timed_out: True if the timeout was reached (sweeps NOT killed)
+          kill: If true (default), kill the sweep after waiting to release hardware
+              resources. If false, skip killing (useful for polling without cleanup).
+          detailed: If false (default), return only sweep state; if true, return full sweep information.
 
   notebook_add_cell:
     title: "Add Cell"
     description: |
-      Add a new cell in the notebook.
-
-      UNSAFE: This tool adds new cells to the notebook. Only available in unsafe mode.
-      The cell will be created relative to the currently active cell.
+      Add a new cell in the notebook. Cursor will move to the new cell, and notebook_execute_active_cell tool will execute this new cell.
 
       Args:
-          cell_type: Type of cell to create ("code", "markdown", "raw") - default: "code"
-          position: Where to add cell ("above", "below", "end") - default: "below"
-          content: Initial content for the new cell - default: empty string
-          timeout_s: How long to wait for frontend response in seconds - default: 2.0
-          detailed: If False (default), return just success; if True, return full info
+          cell_type: "code", "markdown", "raw" - default: "code"
+          position: "above", "below", "end" - default: "below"
+          content: default: empty string
+
+      Returns: {"success": true/false, "error": "..." if failed}
 
   notebook_apply_patch:
     title: "Apply Patch"
     description: |
       Apply a patch to the current cell content.
 
-      UNSAFE: This tool modifies the content of the currently active cell. Only available in unsafe mode.
-      It replaces the first occurrence of old_text with new_text in the cell content.
+      May require human consent.
 
       Args:
-          old_text: Text to find and replace (cannot be empty)
+          old_text: Text to find and replace (must be unique in cell, cannot be empty)
           new_text: Text to replace with (can be empty to delete text)
-          detailed: If False (default), return just success; if True, return full info
+
+      Returns: {"success": true/false, "error": "..." if failed}
 
   notebook_delete_cell:
     title: "Delete Cell"
     description: |
-      Delete the currently editing cell.
+      Delete cell(s) from the notebook.
 
-      UNSAFE: This tool deletes the currently active cell from the notebook. Only available in unsafe mode.
-      Use with caution as this action cannot be undone easily. If this is the last cell in the notebook,
-      a new empty code cell will be created automatically.
+      May require human consent.
 
       Args:
-          detailed: If False (default), return just success; if True, return full info
+        no input: delete current editing cell. 
 
-  notebook_delete_cells:
-    title: "Delete Multiple Cells"
-    description: |
-      Delete multiple cells by their execution count numbers.
+        cell_id_notebooks: (Optional) JSON string of position indices to delete (0-indexed). You must read them before deleting.
+        Example: "[0, 2, 5]" deletes cells at positions 0, 2, 5. 
 
-      UNSAFE: This tool deletes cells from the notebook by their execution counts.
-      Only available in unsafe mode. Use with caution as this action cannot be undone easily.
+      Returns: {"success": true/false, "error": "..." if failed}
 
-      Args:
-          cell_numbers: JSON string containing a list of execution count numbers to delete.
-                       Example: "[1, 2, 5]" to delete cells 1, 2, and 5
-                       Can also be a single number: "3"
-          detailed: If False (default), return just success; if True, return full info
-
-      Returns:
-          JSON with deletion status and detailed results for each cell, including:
-          - success: Overall operation success
-          - deleted_count: Number of cells actually deleted
-          - total_requested: Number of cells requested to delete
-          - results: List with status for each cell number
-
-  notebook_execute_cell:
+  notebook_execute_active_cell:
     title: "Execute Cell"
     description: |
-      Execute the currently editing cell and return the output.
+      Execute the currently active cell and return the output.
 
-      UNSAFE: This tool executes code in the active notebook cell. Only available in unsafe mode.
-      The code will run in the frontend and this tool will wait for execution to complete,
-      returning the cell output in the response.
+      May require human consent.
 
       Args:
-          timeout: Maximum seconds to wait for execution to complete (default: 30.0)
-          detailed: If False (default), return concise summary; if True, return full info
+          timeout: Maximum seconds to wait for execution to complete (default: 30.0). if 0, fire-and-forget.
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
-      Returns:
-          JSON response with execution result including:
-          - signal_success: Whether the execution request was sent successfully (was 'success')
-          - status: Execution status ("completed", "error", or "timeout")
-          - execution_count: The IPython execution count for this cell
-          - input: The code that was executed (detailed mode only)
-          - outputs: List of cell outputs (both modes)
-          - output: Expression return value if any (both modes)
-          - output_summary: Truncated first output for quick preview (concise mode)
-          - has_output: Whether the cell produced output
-          - has_error: Whether an error occurred
-          - error_type: Error type name if execution failed
-          - error_message: Error message if execution failed
-          - traceback: Full traceback if execution failed (when available)
-          - sweep_detected: True if .start() was detected in the code
-          - suggestion: Hint to use wait tools if sweep was detected
+      Returns (concise mode):
+          - signal_success: Whether the execution request was sent successfully
+          - status: "completed", "error", "timeout", or "no_wait"
+          - executed: true if cell was executed
+          - has_output, has_error: Boolean flags
+          - outputs: List of cell outputs
+          - error_type, error_message, traceback: If error occurred
 
-      Note:
-          - If sweep_detected is True, use measureit_wait_for_sweep(variable_name=name, timeout=...)
-            or measureit_wait_for_sweep(all=True, timeout=...) to wait for completion before proceeding.
+      Returns (detailed mode - adds):
+          - input: The code that was executed
+          - sweep_detected: true if .start() was detected
+          - suggestion: Hint to use wait tools if sweep detected
+          - the output will not be summarized.
 
-  notebook_get_editing_cell:
-    title: "Get Active Cell"
+  notebook_read_active_cell:
+    title: "Read Active Cell"
     description: |
-      Get the currently editing cell content from JupyterLab frontend.
+      Get the currently active cell content from JupyterLab frontend.
 
       This captures the cell that is currently being edited in the frontend.
 
@@ -289,17 +185,10 @@ tools:
           line_start: Optional starting line number (1-indexed).
           line_end: Optional ending line number (1-indexed, inclusive).
           max_lines: Maximum number of lines to return (default: 200).
-          detailed: If False (default), return concise summary; if True, return full info
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
-      Line selection logic:
-          - If both line_start and line_end are provided: return those lines exactly
-          - Else if total_lines <= max_lines: return all lines
-          - Else if line_start is provided: return max_lines starting from line_start
-          - Else if line_end is provided: return max_lines ending at line_end
-          - Else: return first max_lines lines
-
-  notebook_get_editing_cell_output:
-    title: "Get Cell Output"
+  notebook_read_active_cell_output:
+    title: "Read Cell Output"
     description: |
       Get the output of the currently active cell in JupyterLab.
 
@@ -308,26 +197,47 @@ tools:
       it will indicate that status.
 
       Args:
-          detailed: If False (default), return concise summary; if True, return full info
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
-  notebook_get_notebook_cells:
-    title: "Get Recent Cells"
+      Returns:
+          - cell_id_notebook: Position in notebook (0-indexed)
+          - executed: true if cell has been executed, false otherwise
+          - status: "completed", "error", "not_executed", or "not_code_cell"
+          - has_output, has_error: Boolean flags
+          - outputs: Cell outputs (detailed mode)
+          - output_summary: Truncated output preview (concise mode)
+
+  notebook_read_content:
+    title: "Read Notebook Content"
     description: |
-      Get recent notebook cells with input, output, and error information.
+      Read notebook cells around the active cell (cursor position).
+      Supports ALL cells including markdown and unexecuted cells.
 
       Args:
-          num_cells: Number of recent cells to retrieve (default: 2 for performance)
-          include_output: Include cell outputs and errors (default: True)
-          detailed: If False (default), return concise summary; if True, return full info
+          num_cells: Number of cells to retrieve around cursor (default: 2)
+          include_output: Include cell outputs and errors (default: true)
+          cell_id_notebooks: (Optional) JSON string of specific position indices to fetch.
+              Example: "[0, 2, 5]" fetches cells at positions 0, 2, 5 in the notebook.
+              If provided, num_cells is ignored. Works for ALL cells.
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
-  notebook_get_variable_info:
-    title: "Get Variable Info"
+      Response fields:
+          - total_cells: Total number of cells in the notebook
+          - cells: List of cell objects with:
+              - cell_id_notebook: Position in notebook (0-indexed)
+              - cell_type: "code", "markdown", or "raw"
+              - executed: true if cell has been executed, false otherwise
+              - source: Cell source code/content
+              - has_output, has_error, status, outputs (when include_output=true)
+
+  notebook_read_variable:
+    title: "Read Variable"
     description: |
       Get detailed information about a notebook variable.
 
       Args:
           name: Variable name
-          detailed: If False (default), return concise summary; if True, return full info
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
   notebook_list_variables:
     title: "List Notebook Variables"
@@ -350,17 +260,10 @@ tools:
                  - "above": Move to cell above current
                  - "below": Move to cell below current
                  - "bottom": Move to the last cell in the notebook (by file order)
-                 - "<number>": Move to cell with that execution count (e.g., "5" for [5])
-          detailed: If False (default), return just success; if True, return full info
+                 - "index:N": Move to cell at position N (0-indexed). Works for ALL cells.
+                             Example: "index:0" moves to first cell, "index:5" to 6th cell.
 
-      Returns:
-          JSON with operation status, old index, and new index
-
-      Example usage:
-          move_cursor("below")   # Move to next cell
-          move_cursor("above")   # Move to previous cell
-          move_cursor("bottom")  # Move to last cell in notebook
-          move_cursor("5")       # Move to cell [5]
+      Returns: {"success": true/false}
 
   notebook_server_status:
     title: "Server Status"
@@ -371,13 +274,11 @@ tools:
     description: |
       Update the content of the currently editing cell in JupyterLab frontend.
 
-      UNSAFE: This tool modifies the content of the currently active cell.
-      Only available in unsafe mode. The content will replace the entire
-      current cell content.
+      May require human consent.
 
       Args:
-          content: New Python code content to set in the active cell
-          detailed: If False (default), return concise summary; if True, return full info
+          content: string, New Python code content to set in the active cell
+          detailed: bool, If false (default), return concise summary; if true, return full info
 
   qcodes_get_parameter_info:
     title: "Get Parameter Info"
@@ -385,11 +286,9 @@ tools:
       Get metadata information about a specific QCodes parameter.
 
       Args:
-          instrument: Instrument name in namespace
+          instrument: string, Instrument name in namespace
           parameter: Parameter path (e.g., "voltage", "ch01.voltage")
-          detailed: If False (default), return core metadata (name, label,
-                   unit, vals, gettable/settable); if True, return all
-                   available metadata including scale, offset, cache, etc.
+          detailed: bool. If true, return full data. 
 
       Returns:
           Parameter metadata including validator limits (vals).
@@ -403,8 +302,8 @@ tools:
           queries: JSON string containing single query or list of queries
                    Single: {"instrument": "name", "parameter": "param", "fresh": false}
                    Batch: [{"instrument": "name1", "parameter": "param1"}, ...]
-          detailed: If False (default), return concise {instrument, parameter, value};
-                   if True, return full response with timestamps and source info
+          detailed: bool, If false (default), return concise {instrument, parameter, value};
+                   if true, return full response with timestamps and source info
 
   qcodes_instrument_info:
     title: "Get Instrument Info"
@@ -414,7 +313,7 @@ tools:
       Args:
           name: Instrument name, or "*" to list all instruments
           with_values: Include parameter values in the response (only for specific instruments, not with "*")
-          detailed: If False (default), return concise summary; if True, return full response
+          detailed: bool, If false (default), return concise summary; if true, return full response
 
       Note:
           To get live parameter values, use qcodes_get_parameter_values with:

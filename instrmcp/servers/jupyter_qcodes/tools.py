@@ -193,12 +193,9 @@ class QCodesReadOnlyTools:
         cell_type: str = "code",
         position: str = "below",
         content: str = "",
-        timeout_s: float = 2.0,
     ) -> Dict[str, Any]:
         """Add a new cell in the notebook."""
-        return await self._notebook_unsafe.add_new_cell(
-            cell_type, position, content, timeout_s
-        )
+        return await self._notebook_unsafe.add_new_cell(cell_type, position, content)
 
     async def delete_editing_cell(self) -> Dict[str, Any]:
         """Delete the currently editing cell."""
@@ -221,16 +218,16 @@ class QCodesReadOnlyTools:
         return await self.measureit_backend.get_measureit_status()
 
     async def wait_for_sweep(
-        self, var_name: str, timeout: Optional[float] = None
+        self, var_name: str, timeout: Optional[float] = None, kill: bool = True
     ) -> Dict[str, Any]:
         """Wait for a measureit sweep to finish."""
-        return await self.measureit_backend.wait_for_sweep(var_name, timeout)
+        return await self.measureit_backend.wait_for_sweep(var_name, timeout, kill)
 
     async def wait_for_all_sweeps(
-        self, timeout: Optional[float] = None
+        self, timeout: Optional[float] = None, kill: bool = True
     ) -> Dict[str, Any]:
         """Wait until all running measureit sweeps finish."""
-        return await self.measureit_backend.wait_for_all_sweeps(timeout)
+        return await self.measureit_backend.wait_for_all_sweeps(timeout, kill)
 
     async def kill_sweep(self, var_name: str) -> Dict[str, Any]:
         """Kill a running MeasureIt sweep to release resources."""

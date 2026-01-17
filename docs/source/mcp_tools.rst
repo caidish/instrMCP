@@ -69,18 +69,31 @@ Get the output from the most recently executed cell.
 get_notebook_cells
 ~~~~~~~~~~~~~~~~~~
 
-Get recent notebook cells with input, output, and error information.
+Get notebook cells with source, output, and error information.
+Now supports fetching ALL cells (including markdown and unexecuted cells).
 
 **Parameters**:
 
 - ``num_cells`` (int, optional): Number of recent cells to retrieve. Default 2.
 - ``include_output`` (bool, optional): Include cell outputs. Default True.
+- ``cell_id_notebooks`` (str, optional): JSON string of specific position indices to fetch.
+  Example: ``"[0, 2, 5]"`` fetches cells at positions 0, 2, 5. Works for ALL cells.
 
-**Returns**: JSON array of cell objects with input, output, execution count
+**Response fields**:
+
+- ``total_cells``: Total number of cells in the notebook
+- ``cells``: List of cell objects with:
+
+  - ``cell_id_notebook``: Position in notebook (0-indexed)
+  - ``cell_type``: "code", "markdown", or "raw"
+  - ``cell_execution_number``: IPython counter (null for unexecuted/non-code cells)
+  - ``source``: Cell source code/content
+  - ``has_output``, ``has_error``, ``status``, ``outputs`` (when include_output=True)
 
 **Example usage via Claude**:
 
 "Show me the last 5 cells with their outputs"
+"Get me cells at positions 0, 3, and 7"
 
 move_cursor
 ~~~~~~~~~~~
@@ -93,7 +106,11 @@ Move the cursor (change active cell) to a different cell in the notebook.
 
   - ``"above"`` - Move to cell above current
   - ``"below"`` - Move to cell below current
-  - ``"<number>"`` - Move to cell with that execution count (e.g., "5")
+  - ``"bottom"`` - Move to the last cell in the notebook
+  - ``"index:N"`` - Move to cell at position N (0-indexed). Works for ALL cells.
+    Example: ``"index:0"`` moves to first cell, ``"index:5"`` to 6th cell.
+  - ``"<number>"`` - Move to cell with that execution count (e.g., "5").
+    Only works for executed code cells.
 
 **Returns**: JSON with operation status, old index, new index
 
@@ -169,21 +186,6 @@ These tools are only available when unsafe mode is enabled (``%mcp_unsafe``).
 .. warning::
    These tools allow code execution and cell modification. Use with caution.
 
-update_editing_cell
-~~~~~~~~~~~~~~~~~~~
-
-Update the content of the currently active cell.
-
-**Parameters**:
-
-- ``content`` (str): New Python code content
-
-**Returns**: JSON with operation status
-
-**Example usage via Claude**:
-
-"Replace the current cell with: import numpy as np"
-
 execute_editing_cell
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -250,16 +252,20 @@ Apply a text replacement patch to the active cell. More efficient than replacing
 
 "Change 'np.array' to 'np.asarray' in the current cell"
 
-delete_cells_by_number
-~~~~~~~~~~~~~~~~~~~~~~
+delete_cells
+~~~~~~~~~~~~
 
-Delete multiple cells by their execution count numbers.
+Delete multiple cells from the notebook. Supports two targeting modes.
 
-**Parameters**:
+**Parameters** (provide exactly ONE):
 
-- ``cell_numbers`` (str): Comma-separated execution counts (e.g., "1,2,5")
+- ``cell_execution_numbers`` (str, optional): JSON string of execution counts to delete.
+  Example: ``"[1, 2, 5]"`` deletes cells [1], [2], [5]. Only works for executed code cells.
+- ``cell_id_notebooks`` (str, optional): JSON string of position indices to delete (0-indexed).
+  Example: ``"[0, 2, 5]"`` deletes cells at positions 0, 2, 5 in the notebook.
+  Works for ALL cells including markdown and unexecuted code cells.
 
-**Returns**: JSON with deletion results for each cell
+**Returns**: JSON with deletion results including deleted_count, cleared_count
 
 **Example usage via Claude**:
 
