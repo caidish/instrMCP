@@ -29,6 +29,7 @@ tests/
 │   ├── test_tools_safe_mode.py         # Safe mode end-to-end
 │   ├── test_tools_unsafe_mode.py       # Unsafe mode end-to-end
 │   └── test_stdio_client.py            # STDIO proxy end-to-end
+├── playwright/                          # Playwright-driven MCP metadata E2E
 └── fixtures/                            # Test data and mocks
     ├── mock_instruments.py             # Mock QCodes instruments
     ├── mock_ipython.py                 # Mock IPython kernel

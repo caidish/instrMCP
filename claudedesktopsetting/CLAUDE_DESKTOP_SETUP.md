@@ -80,7 +80,7 @@ ls $instrMCP_PATH/venv/bin/python
 
 The environment variable approach ensures all required dependencies (QCoDeS, FastMCP, etc.) are available and keeps your configuration portable.
 
-Note: The Claude launcher uses a shared STDIO↔HTTP proxy in `instrmcp.tools.stdio_proxy` so Codex and Claude share the same proxy logic while remaining configured separately.
+Note: The Claude launcher uses a shared STDIO↔HTTP proxy in `instrmcp.utils.stdio_proxy` so Codex and Claude share the same proxy logic while remaining configured separately.
 
 ### 3. Save and Restart
 

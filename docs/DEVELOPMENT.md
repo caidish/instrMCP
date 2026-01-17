@@ -103,6 +103,109 @@ The server operates in two modes:
 
 This is controlled via the `safe_mode` parameter in server initialization and the `--unsafe` CLI flag.
 
+## Threading Architecture & Qt Integration
+
+### System Structure
+
+When running as a Jupyter extension, the system involves multiple threads and event loops:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     IPython Kernel (Main Thread)                │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Tornado IOLoop (wraps asyncio)                           │  │
+│  │    └── Qt Event Loop (integrated via %gui qt)             │  │
+│  │          └── MeasureIt Sweeps (QThread workers)           │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                    spawns    │                                   │
+│                              ▼                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  MCP Server Thread (_server_thread)                       │  │
+│  │    └── asyncio event loop (separate from kernel)          │  │
+│  │          └── HTTP/SSE handlers                            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+1. **IPython Kernel (Main Thread)**
+   - Runs Tornado's `AsyncIOMainLoop` which wraps an asyncio event loop
+   - When Qt GUI is enabled (`%gui qt`), Qt's event loop is integrated
+   - MeasureIt sweeps run on `QThread` workers but UI operations must happen on the main thread
+
+2. **MCP Server Thread**
+   - Started by `load_ipython_extension()` in a separate daemon thread
+   - Runs its own asyncio event loop for handling MCP protocol
+   - Cannot directly call Qt/MeasureIt methods due to thread-safety requirements
+
+3. **MeasureIt Sweeps**
+   - Each sweep runs in a `QThread` (Qt's threading)
+   - The `sweep.kill()` method must be called from the sweep's Qt thread
+   - Uses Qt signals/slots for cross-thread communication
+
+### Cross-Thread Communication Challenges
+
+**What DOES NOT work** when MCP server needs to call MeasureIt from its thread:
+
+| Approach | Why It Fails |
+|----------|--------------|
+| `asyncio.call_soon_threadsafe()` | When Qt event loop is integrated with IPython, asyncio callbacks don't run while Qt is processing events |
+| `tornado.ioloop.add_callback()` | Same issue - Tornado wraps asyncio, so callbacks are blocked |
+| `asyncio.run_coroutine_threadsafe()` | Also blocked by Qt event loop integration |
+| `QTimer.singleShot(0, callback)` | Not thread-safe when called from non-Qt thread |
+
+**What DOES work:**
+
+| Approach | Why It Works |
+|----------|--------------|
+| `QMetaObject.invokeMethod(..., Qt.QueuedConnection)` | Thread-safe Qt mechanism that posts to the target object's event queue |
+| Proxy QObject on target thread | Create a `QObject` on the sweep's thread, use `moveToThread()`, then invoke its slot |
+
+### Current Implementation: Qt Proxy Pattern
+
+For `kill_sweep`, we use a Qt proxy pattern that bypasses asyncio entirely:
+
+```python
+class _KillProxy(QObject):
+    def __init__(self, target_sweep):
+        super().__init__()
+        self._sweep = target_sweep
+
+    @pyqtSlot()
+    def do_kill(self):
+        self._sweep.kill()
+
+# Create proxy and move to sweep's thread
+proxy = _KillProxy(sweep)
+proxy.moveToThread(sweep.thread())
+
+# Queue kill on sweep's Qt thread (thread-safe!)
+QMetaObject.invokeMethod(proxy, "do_kill", Qt.QueuedConnection)
+```
+
+This works because:
+1. The proxy `QObject` is moved to the sweep's Qt thread
+2. `invokeMethod` with `QueuedConnection` posts an event to that thread's event queue
+3. When the sweep's thread processes events, it calls `do_kill()` on the correct thread
+4. This is the same mechanism MeasureIt uses internally for cross-thread operations
+
+### Debugging Thread Issues
+
+When debugging cross-thread issues:
+
+1. **Check which event loop is active**: IPython with Qt GUI uses Qt's event loop, not pure asyncio
+2. **Verify thread affinity**: Qt objects belong to specific threads; check with `obj.thread()`
+3. **Use file-based logging**: Console logging may not work reliably across threads
+4. **Test with kernel idle**: Some approaches work when kernel is busy but fail when idle
+
+### References
+
+- [ipykernel eventloops.py](https://github.com/ipython/ipykernel/blob/main/ipykernel/eventloops.py) - How IPython integrates with Qt
+- [Qt Thread Safety](https://doc.qt.io/qt-5/threads-qobject.html) - Qt's threading model and `invokeMethod`
+- [ipywidgets threading issues](https://github.com/jupyter-widgets/ipywidgets/issues/1349) - Similar challenges with widget callbacks
+
 ### JupyterLab Extension Development
 
 The package includes a JupyterLab extension for active cell bridging:
@@ -125,9 +228,8 @@ The package includes a JupyterLab extension for active cell bridging:
 
 ### Configuration
 
-- Station configuration: YAML files in `instrmcp/config/data/`
-- Environment variable: `instrMCP_PATH` must be set for proper operation
-- Auto-detection of installation paths via `instrmcp config`
+- Environment variable: `instrMCP_PATH` can be set for custom paths
+- View configuration: `instrmcp config`
 
 ## Contributing
 
@@ -150,7 +252,7 @@ The package includes a JupyterLab extension for active cell bridging:
 - Remember to update stdio_proxy.py whenever we change the tools for mcp server
 - Check requirements.txt when new python file is created
 - Don't forget to update pyproject.toml
-- Whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.tools.stdio_proxy
+- Whenever delete or create a tool in mcp_server.py, update the hook in instrmcp.utils.stdio_proxy
 - When removing features, update README.md
 
 See [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md) for detailed contribution guidelines.

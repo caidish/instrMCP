@@ -14,33 +14,58 @@ from typing import Dict, Any, Optional
 from fastmcp import FastMCP
 
 from .tools import QCodesReadOnlyTools
-from .tools_unsafe import UnsafeToolRegistrar
-from .registrars import (
+from .core.notebook_unsafe_tools import UnsafeToolRegistrar
+from .core import (
     QCodesToolRegistrar,
     NotebookToolRegistrar,
-    MeasureItToolRegistrar,
-    DatabaseToolRegistrar,
     ResourceRegistrar,
 )
-from .dynamic_registrar import DynamicToolRegistrar
-from instrmcp.logging_config import get_logger
+
+# Dynamic tool integration (optional, requires dangerous mode + dynamictool option)
+try:
+    from .options.dynamic_tool import DynamicToolRegistrar
+
+    DYNAMICTOOL_AVAILABLE = True
+except ImportError:
+    DynamicToolRegistrar = None
+    DYNAMICTOOL_AVAILABLE = False
+from instrmcp.utils.logging_config import get_logger
+from instrmcp.utils.metadata_config import (
+    load_config as load_metadata_config,
+    validate_config_against_server,
+    MetadataConfig,
+)
+
+# Tool transformation imports
+try:
+    from fastmcp.tools.tool_transform import ToolTransformConfig, ArgTransformConfig
+
+    TOOL_TRANSFORM_AVAILABLE = True
+except ImportError:
+    ToolTransformConfig = None  # type: ignore[misc, assignment]
+    ArgTransformConfig = None  # type: ignore[misc, assignment]
+    TOOL_TRANSFORM_AVAILABLE = False
 
 # MeasureIt integration (optional)
 try:
-    from ...extensions import measureit as measureit_module
+    from .options import measureit as measureit_module
+    from .options.measureit import MeasureItToolRegistrar
 
     MEASUREIT_AVAILABLE = True
 except ImportError:
     measureit_module = None
+    MeasureItToolRegistrar = None
     MEASUREIT_AVAILABLE = False
 
 # Database integration (optional)
 try:
-    from ...extensions import database as db_integration
+    from .options import database as db_integration
+    from .options.database import DatabaseToolRegistrar
 
     DATABASE_AVAILABLE = True
 except ImportError:
     db_integration = None
+    DatabaseToolRegistrar = None
     DATABASE_AVAILABLE = False
 
 logger = get_logger("server")
@@ -77,6 +102,9 @@ class JupyterMCPServer:
         # Generate a random token for basic security
         self.token = secrets.token_urlsafe(32)
 
+        # Load metadata config early (needed for resource descriptions)
+        self.metadata_config = self._load_metadata_config()
+
         # Initialize tools
         self.tools = QCodesReadOnlyTools(ipython)
 
@@ -88,10 +116,28 @@ class JupyterMCPServer:
         self._register_resources()
         self._register_tools()
 
+        # Apply metadata overrides from config file (tool transformations)
+        self._apply_metadata_overrides()
+
         mode_status = "safe" if safe_mode else "unsafe"
         logger.debug(
             f"Jupyter MCP Server initialized on {host}:{port} in {mode_status} mode"
         )
+
+    def _load_metadata_config(self) -> Optional[MetadataConfig]:
+        """Load metadata configuration (baseline + user overrides).
+
+        Returns MetadataConfig instance or None if loading fails.
+        """
+        try:
+            return load_metadata_config()
+        except ImportError:
+            # PyYAML not installed
+            logger.debug("PyYAML not installed, skipping metadata config")
+            return None
+        except ValueError as e:
+            logger.error(f"Invalid metadata config: {e}")
+            return None
 
     def _register_resources(self):
         """Register MCP resources using the ResourceRegistrar."""
@@ -101,11 +147,12 @@ class JupyterMCPServer:
             enabled_options=self.enabled_options,
             measureit_module=measureit_module if MEASUREIT_AVAILABLE else None,
             db_module=db_integration if DATABASE_AVAILABLE else None,
+            metadata_config=self.metadata_config,
         )
         resource_registrar.register_all()
 
     def _register_tools(self):
-        """Register all MCP tools using registrars."""
+        """Register all MCP tools using core."""
 
         # QCodes instrument tools
         qcodes_registrar = QCodesToolRegistrar(self.mcp, self.tools)
@@ -145,7 +192,12 @@ class JupyterMCPServer:
 
         # Optional: Database tools
         if DATABASE_AVAILABLE and "database" in self.enabled_options:
-            database_registrar = DatabaseToolRegistrar(self.mcp, db_integration)
+            database_registrar = DatabaseToolRegistrar(
+                self.mcp,
+                db_integration,
+                tools=self.tools,
+                safe_mode=self.safe_mode,
+            )
             database_registrar.register_all()
 
         # Dynamic tool creation (meta-tools)
@@ -176,6 +228,184 @@ class JupyterMCPServer:
         #     """Get parameter cache statistics."""
         #     pass
 
+    def _apply_metadata_overrides(self) -> None:
+        """Apply tool and resource metadata overrides from config.
+
+        Uses self.metadata_config (baseline + user overrides) to apply:
+        - Tool overrides via FastMCP's add_tool_transformation()
+        - Resource overrides via direct FunctionResource attribute modification
+
+        Note: Resource descriptions are already set during registration via
+        ResourceRegistrar. This method handles tool transformations and
+        updates FunctionResource wrappers for resources/list responses.
+        """
+        if self.metadata_config is None:
+            logger.debug("No metadata config loaded, skipping overrides")
+            return
+
+        config = self.metadata_config
+
+        # Skip if config is empty (no overrides)
+        if not config.tools and not config.resources and not config.resource_templates:
+            logger.debug("No metadata overrides configured")
+            return
+
+        # Apply tool overrides
+        self._apply_tool_overrides(config)
+
+        # Apply resource overrides (updates FunctionResource wrappers)
+        self._apply_resource_overrides(config)
+
+        logger.info(
+            f"Applied metadata overrides: {len(config.tools)} tools, "
+            f"{len(config.resources) + len(config.resource_templates)} resources"
+        )
+
+    def _apply_tool_overrides(self, config: MetadataConfig) -> None:
+        """Apply tool metadata overrides using FastMCP's transformation API."""
+        if not TOOL_TRANSFORM_AVAILABLE:
+            if config.tools:
+                logger.warning(
+                    "Tool transformations not available (FastMCP < 2.8.0), "
+                    "skipping tool overrides"
+                )
+            return
+
+        # Get registered tools for validation
+        # Note: mcp.get_tools() is async, but we're in sync context during __init__
+        # We'll validate tool names lazily - invalid names will be caught by FastMCP
+
+        for tool_name, overrides in config.tools.items():
+            try:
+                # Build argument transformations
+                arg_transforms: Dict[str, Any] = {}
+                for arg_name, arg_config in overrides.arguments.items():
+                    if arg_config.description:
+                        arg_transforms[arg_name] = ArgTransformConfig(
+                            description=arg_config.description
+                        )
+
+                # Build tool transformation config
+                transform = ToolTransformConfig(
+                    title=overrides.title,
+                    description=overrides.description,
+                    arguments=arg_transforms if arg_transforms else {},
+                )
+
+                # Apply transformation
+                self.mcp.add_tool_transformation(tool_name, transform)
+                logger.debug(f"Applied metadata override for tool: {tool_name}")
+
+            except Exception as e:
+                if config.strict:
+                    logger.error(
+                        f"Failed to apply tool override for '{tool_name}': {e}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to apply tool override for '{tool_name}': {e} (skipped)"
+                    )
+
+    def _apply_resource_overrides(self, config: MetadataConfig) -> None:
+        """Apply resource metadata overrides via direct attribute modification.
+
+        FastMCP has no resource transformation API, so we modify
+        FunctionResource attributes directly after registration.
+        """
+        # Get registered resources
+        # FastMCP.get_resources() is async, so we need to run it
+        # In Jupyter there's usually already a running event loop
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in an event loop (e.g., Jupyter) - use nest_asyncio or thread
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.mcp.get_resources())
+                    registered = future.result(timeout=5.0)
+            except RuntimeError:
+                # No running loop - safe to use asyncio.run()
+                registered = asyncio.run(self.mcp.get_resources())
+            logger.debug(
+                f"Got {len(registered)} registered resources: {list(registered.keys())}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not get registered resources: {e}")
+            return
+
+        # Combine resources and resource_templates for processing
+        all_overrides = {**config.resources, **config.resource_templates}
+
+        for uri, overrides in all_overrides.items():
+            if uri not in registered:
+                if config.strict:
+                    logger.error(f"Config references unknown resource: {uri}")
+                else:
+                    logger.warning(
+                        f"Config references unknown resource: {uri} (skipped)"
+                    )
+                continue
+
+            try:
+                resource = registered[uri]
+
+                # Apply name override
+                if overrides.name:
+                    resource.name = overrides.name
+
+                # Compose and apply description override
+                composed_desc = overrides.compose_description()
+                if composed_desc:
+                    resource.description = composed_desc
+
+                logger.debug(f"Applied metadata override for resource: {uri}")
+
+            except Exception as e:
+                if config.strict:
+                    logger.error(f"Failed to apply resource override for '{uri}': {e}")
+                else:
+                    logger.warning(
+                        f"Failed to apply resource override for '{uri}': {e} (skipped)"
+                    )
+
+    def _cancel_all_tasks(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Cancel all pending tasks in the event loop.
+
+        This ensures proper cleanup of FastMCP's embedded Docket worker
+        and any other background tasks before closing the loop.
+        """
+        try:
+            # Get all tasks for this loop
+            pending = asyncio.all_tasks(loop)
+            if not pending:
+                return
+
+            logger.debug(f"Cancelling {len(pending)} pending tasks")
+
+            # Cancel all tasks
+            for task in pending:
+                task.cancel()
+
+            # Wait for all tasks to complete their cancellation
+            # Use a timeout to avoid hanging forever
+            loop.run_until_complete(asyncio.wait(pending, timeout=2.0))
+
+            # Log any tasks that didn't cancel cleanly
+            for task in pending:
+                if not task.done():
+                    logger.warning(f"Task {task.get_name()} did not cancel in time")
+                elif task.cancelled():
+                    logger.debug(f"Task {task.get_name()} cancelled successfully")
+                elif task.exception():
+                    # Suppress CancelledError, log others
+                    exc = task.exception()
+                    if not isinstance(exc, asyncio.CancelledError):
+                        logger.debug(f"Task {task.get_name()} raised: {exc}")
+
+        except Exception as e:
+            logger.debug(f"Error during task cancellation: {e}")
+
     def _run_server_in_thread(self):
         """Thread target: runs uvicorn with its own event loop.
 
@@ -201,10 +431,15 @@ class JupyterMCPServer:
             logger.error(f"Server thread error: {e}")
         finally:
             self._server_started = False
-            try:
-                self._server_loop.close()
-            except Exception:
-                pass
+            # Cancel all pending tasks before closing the loop
+            # This ensures FastMCP's Docket worker and other background tasks
+            # get a chance to clean up properly
+            if self._server_loop and not self._server_loop.is_closed():
+                self._cancel_all_tasks(self._server_loop)
+                try:
+                    self._server_loop.close()
+                except Exception:
+                    pass
             self._server_loop = None
 
     async def _async_serve(self):

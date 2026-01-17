@@ -209,13 +209,16 @@ By default, "always allow" permissions are **session-only**:
 
 This ensures fresh consent for each session while allowing convenience during active work.
 
-### Bypass Mode (Testing Only)
+### Bypass Mode (Dangerous Mode)
 
-For automated testing, set environment variable:
+Use dangerous mode in Jupyter to auto-approve all consents:
 
-```bash
-export INSTRMCP_CONSENT_BYPASS=1
-instrmcp jupyter --unsafe --port 3000
+```python
+# In a Jupyter notebook cell:
+%load_ext instrmcp.extensions
+%mcp_dangerous                    # Enable dangerous mode
+%mcp_option dynamictool           # Enable dynamic tools
+%mcp_start
 ```
 
 **WARNING**: This auto-approves ALL tool registrations. Use only in trusted environments.
@@ -723,9 +726,11 @@ def quick_iv_sweep(start_voltage, stop_voltage, num_points=50):
    jupyter labextension list | grep mcp
    ```
 
-2. Check server is in unsafe mode:
-   ```bash
-   instrmcp jupyter --unsafe --port 3000
+2. Check server is in dangerous mode with dynamic tools enabled:
+   ```python
+   %mcp_dangerous
+   %mcp_option dynamictool
+   %mcp_restart
    ```
 
 3. Check browser console for errors (F12)

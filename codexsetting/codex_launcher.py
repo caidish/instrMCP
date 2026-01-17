@@ -22,7 +22,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 # Reuse the existing proxy implementation
-from instrmcp.tools.stdio_proxy import (
+from instrmcp.utils.stdio_proxy import (
     create_stdio_proxy_server,
     check_http_mcp_server,
 )

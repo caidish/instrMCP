@@ -148,3 +148,9 @@ config/station.yaml
 TestNotebook.ipynb
 /demo
 *.ipynb
+!tests/playwright/notebooks/original/*.ipynb
+# Playwright working copies (created during test runs, should not be committed)
+tests/playwright/notebooks/_working/
+# Playwright test logs
+tests/playwright/jupyter_lab.log
+tests/playwright/metadata_snapshot_user.json

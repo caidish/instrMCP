@@ -20,7 +20,7 @@ logging.getLogger("asyncio").setLevel(logging.WARNING)  # Suppress asyncio logs
 
 # Import from pip-installed instrmcp package
 from fastmcp import FastMCP
-from instrmcp.tools.stdio_proxy import (
+from instrmcp.utils.stdio_proxy import (
     create_stdio_proxy_server,
     check_http_mcp_server,
 )

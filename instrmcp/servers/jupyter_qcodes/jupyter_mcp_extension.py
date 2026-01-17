@@ -13,7 +13,7 @@ from IPython.core.magic import Magics, line_magic, magics_class
 
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
-from instrmcp.logging_config import setup_logging, get_logger
+from instrmcp.utils.logging_config import setup_logging, get_logger
 
 # Initialize unified logging system
 setup_logging()
@@ -134,15 +134,16 @@ def _auto_detect_options() -> Dict[str, bool]:
         logger.debug(f"MeasureIt detection failed: {e}")
         detected["measureit"] = False
 
-    # Check for QCodes database support
+    # Check for QCodes database support (lightweight spec check, no blocking import)
     try:
         qcodes_spec = importlib.util.find_spec("qcodes")
         if qcodes_spec is not None:
-            # Further check if qcodes.dataset is available
-            from qcodes.dataset import experiments  # noqa: F401
-
-            detected["database"] = True
-            logger.debug("Auto-detected: QCodes database available")
+            # Use spec check instead of import to avoid blocking during extension load
+            detected["database"] = (
+                importlib.util.find_spec("qcodes.dataset") is not None
+            )
+            if detected["database"]:
+                logger.debug("Auto-detected: QCodes database available")
         else:
             detected["database"] = False
     except Exception as e:

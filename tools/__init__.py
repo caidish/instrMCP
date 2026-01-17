@@ -1,3 +1,3 @@
-"""Legacy tools directory - deprecated, use instrmcp.tools instead"""
+"""Legacy tools directory - deprecated, use instrmcp.utils instead"""
 
 __all__ = []

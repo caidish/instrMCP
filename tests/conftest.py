@@ -151,7 +151,7 @@ def mock_qcodes_db_config(temp_dir, monkeypatch):
     db_path.touch()
 
     # Use monkeypatch to set qc.config.core.db_location
-    import instrmcp.extensions.database.query_tools as query_tools
+    import instrmcp.servers.jupyter_qcodes.options.database.query_tools as query_tools
 
     if hasattr(query_tools, "qc") and hasattr(query_tools.qc, "config"):
         monkeypatch.setattr(query_tools.qc.config.core, "db_location", str(db_path))

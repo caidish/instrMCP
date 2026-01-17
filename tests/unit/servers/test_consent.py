@@ -230,7 +230,7 @@ class TestConsentBypassModeParameter:
 
             result = await manager.request_consent(
                 operation="execute",
-                tool_name="notebook_execute_cell",
+                tool_name="notebook_execute_active_cell",
                 author="system",
                 details={"code": "print('hello')"},
             )

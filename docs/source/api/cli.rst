@@ -1,7 +1,7 @@
 CLI
 ===
 
-Command-line interface for InstrMCP server management.
+Command-line interface for InstrMCP utilities.
 
 Main CLI Module
 ---------------
@@ -14,7 +14,7 @@ Main CLI Module
 Commands
 --------
 
-The ``instrmcp`` command provides several subcommands:
+The ``instrmcp`` command provides the following subcommands:
 
 version
 ~~~~~~~
@@ -29,12 +29,12 @@ Show InstrMCP version information.
 
 .. code-block:: text
 
-   InstrMCP version 1.0.0
+   InstrMCP version 2.2.0
 
 config
 ~~~~~~
 
-Show configuration information including installation path and environment.
+Show configuration information including installation path and optional extensions.
 
 .. code-block:: bash
 
@@ -44,93 +44,12 @@ Show configuration information including installation path and environment.
 
 .. code-block:: text
 
-   InstrMCP Configuration
-   Installation path: /path/to/instrmcp
-   Python: 3.11.x
-   QCodes: 0.45.x
+   InstrMCP Configuration:
+   Version: 2.2.0
+   Package path: /path/to/instrmcp
 
-jupyter
-~~~~~~~
-
-Start the Jupyter MCP server.
-
-.. code-block:: bash
-
-   instrmcp jupyter [OPTIONS]
-
-**Options**:
-
-- ``--port PORT``: Port number (default: 8123)
-- ``--host HOST``: Host address (default: 127.0.0.1)
-- ``--unsafe``: Enable unsafe mode (allows code execution)
-- ``--database``: Enable database integration
-- ``--measureit``: Enable MeasureIt templates
-
-**Examples**:
-
-.. code-block:: bash
-
-   # Start server on default port (8123)
-   instrmcp jupyter
-
-   # Start on custom port
-   instrmcp jupyter --port 3000
-
-   # Start with unsafe mode enabled
-   instrmcp jupyter --port 8123 --unsafe
-
-   # Start with all optional features
-   instrmcp jupyter --database --measureit
-
-qcodes
-~~~~~~
-
-Start standalone QCodes station server (without Jupyter).
-
-.. code-block:: bash
-
-   instrmcp qcodes [OPTIONS]
-
-**Options**:
-
-- ``--port PORT``: Port number (default: 8124)
-- ``--host HOST``: Host address (default: 127.0.0.1)
-- ``--station PATH``: Path to station YAML file
-
-**Examples**:
-
-.. code-block:: bash
-
-   # Start with default station
-   instrmcp qcodes
-
-   # Use custom station file
-   instrmcp qcodes --station /path/to/station.yaml
-
-setup
-~~~~~
-
-Run setup utilities and configuration.
-
-.. code-block:: bash
-
-   instrmcp setup [OPTIONS]
-
-**Options**:
-
-- ``--claude-desktop``: Setup Claude Desktop integration
-- ``--codex``: Setup Codex integration
-- ``--all``: Setup all integrations
-
-**Examples**:
-
-.. code-block:: bash
-
-   # Setup all integrations
-   instrmcp setup --all
-
-   # Setup only Claude Desktop
-   instrmcp setup --claude-desktop
+   Optional Extensions:
+     ✅ measureit: 1.0.0
 
 Setup Utilities
 ---------------
@@ -164,14 +83,6 @@ Jupyter QCodes CLI
 ~~~~~~~~~~~~~~~~~~
 
 .. automodule:: instrmcp.servers.jupyter_qcodes.cli
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Standalone Runner
-~~~~~~~~~~~~~~~~~
-
-.. automodule:: instrmcp.servers.jupyter_qcodes.run_standalone
    :members:
    :undoc-members:
    :show-inheritance:
@@ -246,16 +157,10 @@ Then in notebook:
 
 .. code-block:: python
 
-   %load_ext instrmcp
+   %load_ext instrmcp.extensions
    %mcp_start
 
-2. **Or start standalone**:
-
-.. code-block:: bash
-
-   instrmcp jupyter --port 8123
-
-3. **Connect Claude Desktop** using launcher:
+2. **Connect Claude Desktop** using launcher:
 
 .. code-block:: bash
 
@@ -268,12 +173,6 @@ Development Workflow
 
    # Install in development mode
    pip install -e .[dev]
-
-   # Run with unsafe mode for testing
-   instrmcp jupyter --port 8123 --unsafe
-
-   # Enable all features
-   instrmcp jupyter --database --measureit --unsafe
 
    # Check version
    instrmcp version

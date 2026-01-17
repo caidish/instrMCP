@@ -41,7 +41,7 @@ Tool Registrars
 QCodes Tool Registrar
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.servers.jupyter_qcodes.registrars.qcodes_tools
+.. automodule:: instrmcp.servers.jupyter_qcodes.core.qcodes_tools
    :members:
    :undoc-members:
    :show-inheritance:
@@ -49,7 +49,7 @@ QCodes Tool Registrar
 Notebook Tool Registrar
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.servers.jupyter_qcodes.registrars.notebook_tools
+.. automodule:: instrmcp.servers.jupyter_qcodes.core.notebook_tools
    :members:
    :undoc-members:
    :show-inheritance:
@@ -57,7 +57,7 @@ Notebook Tool Registrar
 Database Tool Registrar
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.servers.jupyter_qcodes.registrars.database_tools
+.. automodule:: instrmcp.servers.jupyter_qcodes.core.database_tools
    :members:
    :undoc-members:
    :show-inheritance:
@@ -65,7 +65,7 @@ Database Tool Registrar
 MeasureIt Tool Registrar
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.servers.jupyter_qcodes.registrars.measureit_tools
+.. automodule:: instrmcp.servers.jupyter_qcodes.core.measureit_tools
    :members:
    :undoc-members:
    :show-inheritance:
@@ -73,7 +73,7 @@ MeasureIt Tool Registrar
 Resource Registrar
 ~~~~~~~~~~~~~~~~~~
 
-.. automodule:: instrmcp.servers.jupyter_qcodes.registrars.resources
+.. automodule:: instrmcp.servers.jupyter_qcodes.core.resources
    :members:
    :undoc-members:
    :show-inheritance:

@@ -53,12 +53,6 @@ VERSION_FILES = {
         "format": '__version__ = "{version}"',
         "type": "python",
     },
-    "instrmcp/servers/qcodes/__init__.py": {
-        "path": "instrmcp/servers/qcodes/__init__.py",
-        "pattern": r'^__version__ = "([^"]+)"',
-        "format": '__version__ = "{version}"',
-        "type": "python",
-    },
     "instrmcp/servers/jupyter_qcodes/__init__.py": {
         "path": "instrmcp/servers/jupyter_qcodes/__init__.py",
         "pattern": r'^__version__ = "([^"]+)"',
