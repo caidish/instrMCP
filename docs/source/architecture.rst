@@ -113,7 +113,6 @@ Unsafe Tools
 
 Cell manipulation (requires ``%mcp_unsafe``):
 
-- ``update_editing_cell`` - Replace cell content
 - ``execute_editing_cell`` - Run cell code
 - ``add_new_cell`` - Insert new cell
 - ``delete_editing_cell`` - Remove cell
@@ -144,8 +143,7 @@ MCP resources provide context to LLMs:
 
 **QCodes Resources** (Always available):
 
-- ``available_instruments`` - Instrument hierarchy with all parameters
-- ``station_state`` - Current station snapshot
+None. Use ``qcodes_instrument_info("*")`` to list instruments, then ``qcodes_instrument_info(name)`` for details.
 
 **Jupyter Resources** (Always available):
 
@@ -153,9 +151,7 @@ MCP resources provide context to LLMs:
 
 **Database Resources** (Optional):
 
-- ``database_config`` - Database path and connection info
-- ``recent_measurements`` - Last N measurement metadata
-- ``measurement_templates`` - Common patterns from history
+None. Use ``database_list_experiments`` and ``database_get_dataset_info`` for database metadata.
 
 **MeasureIt Resources** (Optional):
 

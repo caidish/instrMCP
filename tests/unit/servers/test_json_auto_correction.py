@@ -4,7 +4,9 @@ import pytest
 import json
 from unittest.mock import Mock, AsyncMock, patch
 
-from instrmcp.servers.jupyter_qcodes.dynamic_registrar import DynamicToolRegistrar
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registrar import (
+    DynamicToolRegistrar,
+)
 
 
 @pytest.fixture
@@ -45,7 +47,7 @@ def temp_registry(tmp_path):
 def registrar_disabled(mock_mcp, mock_ipython, temp_registry):
     """Create a DynamicToolRegistrar with auto_correct_json disabled."""
     with patch(
-        "instrmcp.tools.dynamic.tool_registry.Path.home",
+        "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
         return_value=temp_registry.parent,
     ):
         registrar = DynamicToolRegistrar(
@@ -59,7 +61,7 @@ def registrar_disabled(mock_mcp, mock_ipython, temp_registry):
 def registrar_enabled(mock_mcp, mock_ipython, temp_registry):
     """Create a DynamicToolRegistrar with auto_correct_json enabled."""
     with patch(
-        "instrmcp.tools.dynamic.tool_registry.Path.home",
+        "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
         return_value=temp_registry.parent,
     ):
         registrar = DynamicToolRegistrar(mock_mcp, mock_ipython, auto_correct_json=True)
@@ -334,7 +336,7 @@ class TestOptInOptOutBehavior:
     ):
         """Test that registrar defaults to disabled when parameter not provided."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             # Create without auto_correct_json parameter
@@ -344,7 +346,7 @@ class TestOptInOptOutBehavior:
     def test_registrar_can_be_enabled(self, mock_mcp, mock_ipython, temp_registry):
         """Test that registrar can be explicitly enabled."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(
@@ -355,7 +357,7 @@ class TestOptInOptOutBehavior:
     def test_registrar_can_be_disabled(self, mock_mcp, mock_ipython, temp_registry):
         """Test that registrar can be explicitly disabled."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(

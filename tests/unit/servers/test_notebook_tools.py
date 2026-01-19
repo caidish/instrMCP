@@ -9,7 +9,7 @@ import json
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from instrmcp.servers.jupyter_qcodes.registrars.notebook_tools import (
+from instrmcp.servers.jupyter_qcodes.core.notebook_tools import (
     NotebookToolRegistrar,
 )
 
@@ -75,10 +75,10 @@ class TestNotebookToolRegistrar:
 
         expected_tools = [
             "notebook_list_variables",
-            "notebook_get_variable_info",
-            "notebook_get_editing_cell",
-            "notebook_get_editing_cell_output",
-            "notebook_get_notebook_cells",
+            "notebook_read_variable",
+            "notebook_read_active_cell",
+            "notebook_read_active_cell_output",
+            "notebook_read_content",
             "notebook_move_cursor",
             "notebook_server_status",
         ]
@@ -146,7 +146,7 @@ class TestNotebookToolRegistrar:
         mock_tools.get_variable_info.return_value = mock_info
 
         registrar.register_all()
-        get_var_func = mock_mcp_server._tools["notebook_get_variable_info"]
+        get_var_func = mock_mcp_server._tools["notebook_read_variable"]
         result = await get_var_func(name="x", detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -161,7 +161,7 @@ class TestNotebookToolRegistrar:
         mock_tools.get_variable_info.side_effect = KeyError("Variable not found")
 
         registrar.register_all()
-        get_var_func = mock_mcp_server._tools["notebook_get_variable_info"]
+        get_var_func = mock_mcp_server._tools["notebook_read_variable"]
         result = await get_var_func(name="nonexistent")
 
         response_data = json.loads(result[0].text)
@@ -174,17 +174,19 @@ class TestNotebookToolRegistrar:
         """Test getting editing cell content."""
         mock_cell = {
             "content": "import numpy as np",
-            "cell_id": "abc123",
+            "cell_id": "abc123",  # This will be filtered out in detailed mode
             "timestamp": 1234567890,
         }
         mock_tools.get_editing_cell.return_value = mock_cell
 
         registrar.register_all()
-        get_cell_func = mock_mcp_server._tools["notebook_get_editing_cell"]
+        get_cell_func = mock_mcp_server._tools["notebook_read_active_cell"]
         result = await get_cell_func(fresh_ms=1000, detailed=True)
 
         response_data = json.loads(result[0].text)
-        assert response_data == mock_cell
+        # cell_id is filtered out in detailed mode
+        expected = {"content": "import numpy as np", "timestamp": 1234567890}
+        assert response_data == expected
         mock_tools.get_editing_cell.assert_called_once_with(
             fresh_ms=1000, line_start=None, line_end=None, max_lines=200
         )
@@ -198,7 +200,7 @@ class TestNotebookToolRegistrar:
         mock_tools.get_editing_cell.return_value = mock_cell
 
         registrar.register_all()
-        get_cell_func = mock_mcp_server._tools["notebook_get_editing_cell"]
+        get_cell_func = mock_mcp_server._tools["notebook_read_active_cell"]
         await get_cell_func(fresh_ms=1000)
 
         mock_tools.get_editing_cell.assert_called_once_with(
@@ -215,7 +217,7 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 2
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -234,7 +236,7 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 3
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func()
 
         response_data = json.loads(result[0].text)
@@ -251,7 +253,7 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 1
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -267,7 +269,7 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 1
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func()
 
         response_data = json.loads(result[0].text)
@@ -294,7 +296,7 @@ class TestNotebookToolRegistrar:
             patch.object(sys, "last_traceback", None, create=True),
         ):
             registrar.register_all()
-            get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+            get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
             result = await get_output_func(detailed=True)
 
             response_data = json.loads(result[0].text)
@@ -313,7 +315,7 @@ class TestNotebookToolRegistrar:
         mock_ipython.execution_count = 3
 
         registrar.register_all()
-        get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
+        get_cells_func = mock_mcp_server._tools["notebook_read_content"]
         result = await get_cells_func(num_cells=2, include_output=True, detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -329,13 +331,14 @@ class TestNotebookToolRegistrar:
         mock_ipython.user_ns = {"In": ["", "x = 5", "y = 10"], "Out": {}}
 
         registrar.register_all()
-        get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
+        get_cells_func = mock_mcp_server._tools["notebook_read_content"]
         result = await get_cells_func(num_cells=2, include_output=False)
 
         response_data = json.loads(result[0].text)
         assert response_data["count"] == 2
+        # When include_output=False, has_output field is not included
         for cell in response_data["cells"]:
-            assert cell["has_output"] is False
+            assert "has_output" not in cell
 
     @pytest.mark.asyncio
     async def test_move_cursor_success(self, registrar, mock_tools, mock_mcp_server):
@@ -352,16 +355,16 @@ class TestNotebookToolRegistrar:
         mock_tools.move_cursor.assert_called_once_with("below")
 
     @pytest.mark.asyncio
-    async def test_move_cursor_by_number(self, registrar, mock_tools, mock_mcp_server):
-        """Test moving cursor to specific cell number."""
+    async def test_move_cursor_by_index(self, registrar, mock_tools, mock_mcp_server):
+        """Test moving cursor to specific cell by position index."""
         mock_result = {"status": "success", "old_index": 10, "new_index": 5}
         mock_tools.move_cursor.return_value = mock_result
 
         registrar.register_all()
         move_cursor_func = mock_mcp_server._tools["notebook_move_cursor"]
-        await move_cursor_func(target="5")
+        await move_cursor_func(target="index:5")
 
-        mock_tools.move_cursor.assert_called_once_with("5")
+        mock_tools.move_cursor.assert_called_once_with("index:5")
 
     @pytest.mark.asyncio
     async def test_move_cursor_error(self, registrar, mock_tools, mock_mcp_server):
@@ -415,7 +418,7 @@ class TestNotebookToolRegistrar:
             patch.object(sys, "last_traceback", None, create=True),
         ):
             registrar.register_all()
-            get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
+            get_cells_func = mock_mcp_server._tools["notebook_read_content"]
             result = await get_cells_func(
                 num_cells=2, include_output=True, detailed=True
             )
@@ -448,7 +451,7 @@ class TestNotebookToolRegistrar:
         monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -484,7 +487,7 @@ class TestNotebookToolRegistrar:
         monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -535,16 +538,17 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
-        assert response_data["cell_number"] == 1
+        assert response_data["cell_id_notebook"] == 0  # Changed from cell_number
+        assert response_data["executed"] is True  # New field
         assert response_data["status"] == "error"
         assert response_data["has_error"] is True
         assert response_data["has_output"] is True
@@ -584,12 +588,12 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -601,13 +605,55 @@ class TestNotebookToolRegistrar:
     async def test_get_notebook_cells_with_stdout_capture(
         self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
     ):
-        """Test getting notebook cells with captured stdout."""
-        # Setup IPython with print statements
+        """Test getting notebook cells with captured stdout via frontend two-phase approach."""
+        # Setup IPython with print statements (used as fallback)
         mock_ipython.user_ns = {
             "In": ["", 'print("first")', 'print("second")'],
             "Out": {},
         }
         mock_ipython.execution_count = 3
+
+        # Mock the new two-phase frontend functions
+        def mock_get_notebook_structure(timeout_s=2.0):
+            return {
+                "success": True,
+                "total_cells": 2,
+                "active_cell_index": 1,
+                "cells": [
+                    {
+                        "cell_id_notebook": 0,
+                        "cell_type": "code",
+                        "cell_execution_number": 1,
+                    },
+                    {
+                        "cell_id_notebook": 1,
+                        "cell_type": "code",
+                        "cell_execution_number": 2,
+                    },
+                ],
+            }
+
+        def mock_get_cells_by_index(indices, timeout_s=2.0):
+            cells = []
+            if 0 in indices:
+                cells.append(
+                    {
+                        "cell_id_notebook": 0,
+                        "cell_type": "code",
+                        "cell_execution_number": 1,
+                        "source": 'print("first")',
+                    }
+                )
+            if 1 in indices:
+                cells.append(
+                    {
+                        "cell_id_notebook": 1,
+                        "cell_type": "code",
+                        "cell_execution_number": 2,
+                        "source": 'print("second")',
+                    }
+                )
+            return {"success": True, "cells": cells}
 
         # Mock the frontend output response
         def mock_get_frontend_output(cell_number):
@@ -627,10 +673,18 @@ class TestNotebookToolRegistrar:
                 }
             return None
 
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_notebook_structure",
+            mock_get_notebook_structure,
+        )
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_cells_by_index",
+            mock_get_cells_by_index,
+        )
         monkeypatch.setattr(registrar, "_get_frontend_output", mock_get_frontend_output)
 
         registrar.register_all()
-        get_cells_func = mock_mcp_server._tools["notebook_get_notebook_cells"]
+        get_cells_func = mock_mcp_server._tools["notebook_read_content"]
         result = await get_cells_func(num_cells=2, include_output=True, detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -641,6 +695,87 @@ class TestNotebookToolRegistrar:
         assert cells[0]["has_output"] is True
         assert cells[1]["outputs"][0]["text"] == "second\n"
         assert cells[1]["has_output"] is True
+        # Verify new field names
+        assert cells[0]["cell_id_notebook"] == 0
+        assert (
+            cells[0]["executed"] is True
+        )  # Replaced cell_execution_number with executed
+        assert "source" in cells[0]
+
+    @pytest.mark.asyncio
+    async def test_get_notebook_cells_cell_id_notebooks_requires_frontend(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test that cell_id_notebooks returns explicit error when frontend unavailable."""
+        # Setup IPython fallback data
+        mock_ipython.user_ns = {
+            "In": ["", 'print("first")', 'print("second")'],
+            "Out": {},
+        }
+        mock_ipython.execution_count = 3
+
+        # Mock frontend as unavailable
+        def mock_get_notebook_structure(timeout_s=2.0):
+            return {
+                "success": False,
+                "error": "No active notebook",
+            }
+
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_notebook_structure",
+            mock_get_notebook_structure,
+        )
+
+        registrar.register_all()
+        get_cells_func = mock_mcp_server._tools["notebook_read_content"]
+
+        # Request specific cells by position - should fail with explicit error
+        result = await get_cells_func(cell_id_notebooks="[0, 1]", detailed=True)
+
+        response_data = json.loads(result[0].text)
+        assert "error" in response_data
+        assert (
+            "cell_id_notebooks requires JupyterLab frontend" in response_data["error"]
+        )
+        assert "detail" in response_data
+        assert "frontend_error" in response_data
+
+    @pytest.mark.asyncio
+    async def test_get_notebook_cells_num_cells_fallback_works(
+        self, registrar, mock_ipython, mock_tools, mock_mcp_server, monkeypatch
+    ):
+        """Test that num_cells mode falls back to IPython when frontend unavailable."""
+        # Setup IPython fallback data
+        mock_ipython.user_ns = {
+            "In": ["", "x = 1", "y = 2"],
+            "Out": {1: None, 2: 2},
+        }
+        mock_ipython.execution_count = 3
+
+        # Mock frontend as unavailable
+        def mock_get_notebook_structure(timeout_s=2.0):
+            return {
+                "success": False,
+                "error": "No active notebook",
+            }
+
+        monkeypatch.setattr(
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_notebook_structure",
+            mock_get_notebook_structure,
+        )
+
+        registrar.register_all()
+        get_cells_func = mock_mcp_server._tools["notebook_read_content"]
+
+        # Request with num_cells (no cell_id_notebooks) - should fallback to IPython
+        result = await get_cells_func(num_cells=2, detailed=True)
+
+        response_data = json.loads(result[0].text)
+        # Should succeed with IPython fallback
+        assert "error" not in response_data
+        assert "cells" in response_data
+        assert "note" in response_data
+        assert "IPython fallback" in response_data["note"]
 
     @pytest.mark.asyncio
     async def test_frontend_output_priority_over_out_dict(
@@ -670,12 +805,12 @@ class TestNotebookToolRegistrar:
             }
 
         monkeypatch.setattr(
-            "instrmcp.servers.jupyter_qcodes.registrars.notebook_tools.get_active_cell_output",
+            "instrmcp.servers.jupyter_qcodes.core.notebook_tools.get_active_cell_output",
             mock_get_active_cell_output,
         )
 
         registrar.register_all()
-        get_output_func = mock_mcp_server._tools["notebook_get_editing_cell_output"]
+        get_output_func = mock_mcp_server._tools["notebook_read_active_cell_output"]
         result = await get_output_func(detailed=True)
 
         response_data = json.loads(result[0].text)
@@ -719,7 +854,9 @@ class TestUnsafeToolRegistrarUpdateCell:
     @pytest.fixture
     def mock_tools(self):
         """Create a mock QCodesReadOnlyTools instance."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         tools = MagicMock()
         tools.get_editing_cell = AsyncMock()
@@ -728,6 +865,7 @@ class TestUnsafeToolRegistrarUpdateCell:
         tools.add_new_cell = AsyncMock()
         tools.delete_editing_cell = AsyncMock()
         tools.delete_cells_by_number = AsyncMock()
+        tools.delete_cells_by_index = AsyncMock()
         tools.apply_patch = AsyncMock()
         return tools
 
@@ -742,69 +880,27 @@ class TestUnsafeToolRegistrarUpdateCell:
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
         """Test update_editing_cell is registered in UnsafeToolRegistrar."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
 
         registrar = UnsafeToolRegistrar(
             mock_mcp_server, mock_tools, mock_consent_manager
         )
         registrar.register_all()
-
-        assert "notebook_update_editing_cell" in mock_mcp_server._tools
 
     @pytest.mark.asyncio
-    async def test_update_editing_cell_consent_approved(
+    async def test_execute_cell_blocked_by_scanner(
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
-        """Test update_editing_cell with consent approved."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
-
-        new_content = "# Updated code\nx = 10"
-        old_content = "# Original code\nx = 5"
-        mock_tools.get_editing_cell.return_value = {
-            "text": old_content,
-            "cell_type": "code",
-            "index": 0,
-        }
-        mock_result = {"status": "success", "updated": True}
-        mock_tools.update_editing_cell.return_value = mock_result
-        mock_consent_manager.request_consent.return_value = {"approved": True}
-
-        registrar = UnsafeToolRegistrar(
-            mock_mcp_server, mock_tools, mock_consent_manager
+        """Test execute_editing_cell is blocked by unsafe code scanner."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
         )
-        registrar.register_all()
 
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content=new_content, detailed=True)
-
-        response_data = json.loads(result[0].text)
-        assert response_data == mock_result
-        mock_tools.update_editing_cell.assert_called_once_with(new_content)
-        mock_consent_manager.request_consent.assert_called_once()
-
-        # Verify consent details
-        call_args = mock_consent_manager.request_consent.call_args
-        assert call_args.kwargs["operation"] == "update_cell"
-        assert call_args.kwargs["tool_name"] == "notebook_update_editing_cell"
-        assert call_args.kwargs["details"]["old_content"] == old_content
-        assert call_args.kwargs["details"]["new_content"] == new_content
-
-    @pytest.mark.asyncio
-    async def test_update_editing_cell_consent_declined(
-        self, mock_mcp_server, mock_tools, mock_consent_manager
-    ):
-        """Test update_editing_cell with consent declined."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
-
-        new_content = "# Updated code\nx = 10"
         mock_tools.get_editing_cell.return_value = {
-            "text": "# Original",
+            "cell_content": "eval('1')",
             "cell_type": "code",
-            "index": 0,
-        }
-        mock_consent_manager.request_consent.return_value = {
-            "approved": False,
-            "reason": "User declined",
         }
 
         registrar = UnsafeToolRegistrar(
@@ -812,29 +908,23 @@ class TestUnsafeToolRegistrarUpdateCell:
         )
         registrar.register_all()
 
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content=new_content)
+        execute_cell_func = mock_mcp_server._tools["notebook_execute_active_cell"]
+        result = await execute_cell_func(timeout=1.0, detailed=True)
 
         response_data = json.loads(result[0].text)
         assert response_data["success"] is False
-        assert "Update declined" in response_data["error"]
-        mock_tools.update_editing_cell.assert_not_called()
+        assert response_data["blocked"] is True
+        assert "block_reason" in response_data
+        mock_consent_manager.request_consent.assert_not_called()
+        mock_tools.execute_editing_cell.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_update_editing_cell_consent_timeout(
+    async def test_add_new_cell_blocked_by_scanner(
         self, mock_mcp_server, mock_tools, mock_consent_manager
     ):
-        """Test update_editing_cell with consent timeout."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
-
-        new_content = "# Updated code\nx = 10"
-        mock_tools.get_editing_cell.return_value = {
-            "text": "# Original",
-            "cell_type": "code",
-            "index": 0,
-        }
-        mock_consent_manager.request_consent.side_effect = TimeoutError(
-            "Consent timed out"
+        """Test add_new_cell is blocked by unsafe code scanner."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
         )
 
         registrar = UnsafeToolRegistrar(
@@ -842,40 +932,13 @@ class TestUnsafeToolRegistrarUpdateCell:
         )
         registrar.register_all()
 
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        result = await update_cell_func(content=new_content)
+        add_cell_func = mock_mcp_server._tools["notebook_add_cell"]
+        result = await add_cell_func(
+            cell_type="code", position="below", content="eval('1')"
+        )
 
         response_data = json.loads(result[0].text)
         assert response_data["success"] is False
-        assert "timed out" in response_data["error"]
-        mock_tools.update_editing_cell.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_update_editing_cell_consent_shows_char_count(
-        self, mock_mcp_server, mock_tools, mock_consent_manager
-    ):
-        """Test consent dialog shows character count in description."""
-        from instrmcp.servers.jupyter_qcodes.tools_unsafe import UnsafeToolRegistrar
-
-        new_content = "x = 100"  # 7 chars
-        old_content = "x = 5"  # 5 chars
-        mock_tools.get_editing_cell.return_value = {
-            "text": old_content,
-            "cell_type": "code",
-            "index": 0,
-        }
-        mock_consent_manager.request_consent.return_value = {"approved": True}
-        mock_tools.update_editing_cell.return_value = {"status": "success"}
-
-        registrar = UnsafeToolRegistrar(
-            mock_mcp_server, mock_tools, mock_consent_manager
-        )
-        registrar.register_all()
-
-        update_cell_func = mock_mcp_server._tools["notebook_update_editing_cell"]
-        await update_cell_func(content=new_content)
-
-        call_args = mock_consent_manager.request_consent.call_args
-        description = call_args.kwargs["details"]["description"]
-        assert "5 chars" in description
-        assert "7 chars" in description
+        assert response_data["blocked"] is True
+        assert "block_reason" in response_data
+        mock_tools.add_new_cell.assert_not_called()

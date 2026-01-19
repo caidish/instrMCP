@@ -7,9 +7,13 @@ Dynamic tools allow LLMs to create custom tools at runtime in instrMCP. This gui
 ## Prerequisites
 
 1. Install instrMCP: `pip install -e .`
-2. Start Jupyter with MCP server in unsafe mode:
-   ```bash
-   instrmcp jupyter --unsafe --port 3000
+2. Start JupyterLab and enable dangerous mode (required for dynamic tools):
+   ```python
+   # In a Jupyter notebook cell:
+   %load_ext instrmcp.extensions
+   %mcp_dangerous                    # Enable dangerous mode (auto-approve consents)
+   %mcp_option dynamictool           # Enable dynamic tools
+   %mcp_start                        # Start the server
    ```
 
 ## Using MCP Inspector

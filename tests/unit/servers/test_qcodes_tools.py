@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock, AsyncMock
 from mcp.types import TextContent
 
-from instrmcp.servers.jupyter_qcodes.registrars.qcodes_tools import QCodesToolRegistrar
+from instrmcp.servers.jupyter_qcodes.core.qcodes_tools import QCodesToolRegistrar
 
 
 class TestQCodesToolRegistrar:

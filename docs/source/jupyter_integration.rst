@@ -228,6 +228,9 @@ Example via Claude:
 
 "Show me all QCodes instruments in the notebook"
 
+Note: ``list_variables`` returns only variable names and types. Use
+``get_variable_info`` for detailed metadata.
+
 Variable Information
 ~~~~~~~~~~~~~~~~~~~~
 

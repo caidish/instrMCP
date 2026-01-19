@@ -21,7 +21,14 @@ _LAST_TS = 0.0
 # FIX: Changed from set() to Dict to track comm-to-kernel association
 # This prevents broadcasting to ALL comms - only sends to the current kernel's comm
 _KERNEL_COMM_MAP: Dict[str, Any] = {}  # kernel_id -> comm (one-to-one mapping)
-_CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}  # {exec_count: output_data}
+
+# Cell outputs cache with timestamps for staleness detection
+# Structure: {exec_count: {"data": output_data, "timestamp": float, "kernel_id": str}}
+_CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}
+
+# Default cache TTL in seconds (60 seconds)
+# Cached outputs older than this are considered stale and will be refreshed
+CELL_OUTPUT_CACHE_TTL_SECONDS = 60.0
 
 # Response waiting mechanism for operations that need frontend confirmation
 # Maps request_id -> [threading.Event, response_dict or None]
@@ -154,17 +161,23 @@ def _on_comm_open(comm, open_msg):
         elif msg_type == "get_cell_outputs_response":
             # Response from frontend with cell outputs
             outputs = data.get("outputs", {})
+            current_time = time.time()
+            kernel_id = getattr(comm, "_mcp_kernel_id", "unknown")
 
-            # Store outputs in cache
+            # Store outputs in cache with timestamp for staleness detection
             with _STATE_LOCK:
                 for cell_num_str, output_data in outputs.items():
                     try:
                         cell_num = int(cell_num_str)
-                        _CELL_OUTPUTS_CACHE[cell_num] = output_data
+                        _CELL_OUTPUTS_CACHE[cell_num] = {
+                            "data": output_data,
+                            "timestamp": current_time,
+                            "kernel_id": kernel_id,
+                        }
                     except ValueError:
                         pass
 
-            logger.debug(f"Cached outputs for {len(outputs)} cells")
+            logger.debug(f"Cached outputs for {len(outputs)} cells (with timestamps)")
 
         elif msg_type in [
             "update_response",
@@ -174,6 +187,9 @@ def _on_comm_open(comm, open_msg):
             "apply_patch_response",
             "move_cursor_response",
             "get_active_cell_output_response",
+            "get_notebook_structure_response",
+            "get_cells_by_index_response",
+            "delete_cells_by_index_response",
         ]:
             # Response from frontend for our requests
             request_id = data.get("request_id")
@@ -609,11 +625,13 @@ def add_new_cell(
     """
     Add a new cell relative to the currently active cell in JupyterLab frontend.
 
-    FIX: Now sends to only the current kernel's comm instead of all comms.
+    FIX: Now sends to only the current kernel's comm instead of all comms and
+    waits for the frontend response to report actual success/failure.
 
     Args:
         cell_type: Type of cell to create ("code", "markdown", "raw")
-        position: Position relative to active cell ("above", "below")
+        position: Position relative to active cell ("above", "below", "end")
+                  "end" appends the cell at the very end of the notebook
         content: Initial content for the new cell
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
@@ -626,7 +644,7 @@ def add_new_cell(
 
     # Validate parameters
     valid_types = {"code", "markdown", "raw"}
-    valid_positions = {"above", "below"}
+    valid_positions = {"above", "below", "end"}
 
     if cell_type not in valid_types:
         return {
@@ -640,13 +658,14 @@ def add_new_cell(
             "error": f"Invalid position '{position}'. Must be one of: {', '.join(valid_positions)}",
         }
 
-    result = _send_to_kernel(
+    result = _send_and_wait(
         {
             "type": "add_cell",
             "cell_type": cell_type,
             "position": position,
             "content": content,
-        }
+        },
+        timeout_s=timeout_s,
     )
 
     if result["success"]:
@@ -757,18 +776,123 @@ def delete_cells_by_number(
     return result
 
 
-def get_cached_cell_output(cell_number: int) -> Optional[Dict[str, Any]]:
+def get_cached_cell_output(
+    cell_number: int,
+    max_age_seconds: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Get cached output for a specific cell from the frontend response cache.
 
+    Implements timestamp-based cache validation to avoid returning stale
+    error states that no longer reflect the current cell state.
+
     Args:
         cell_number: Execution count number of the cell
+        max_age_seconds: Maximum age of cached data in seconds.
+                        If None, uses CELL_OUTPUT_CACHE_TTL_SECONDS (default 60s).
+                        If 0, returns cached data regardless of age.
 
     Returns:
-        Dictionary with output data if available, None otherwise
+        Dictionary with output data if available and not expired, None otherwise.
+        The returned dict includes metadata:
+        - "data": The actual output data
+        - "timestamp": When the data was cached
+        - "age_seconds": How old the cached data is
+        - "stale": Whether the data exceeds max_age_seconds
     """
+    if max_age_seconds is None:
+        max_age_seconds = CELL_OUTPUT_CACHE_TTL_SECONDS
+
     with _STATE_LOCK:
-        return _CELL_OUTPUTS_CACHE.get(cell_number)
+        cache_entry = _CELL_OUTPUTS_CACHE.get(cell_number)
+        if cache_entry is None:
+            return None
+
+        current_time = time.time()
+        cached_timestamp = cache_entry.get("timestamp", 0)
+        age_seconds = current_time - cached_timestamp
+
+        # Check if cache entry is expired (unless max_age is 0, meaning no expiry)
+        is_stale = max_age_seconds > 0 and age_seconds > max_age_seconds
+
+        if is_stale:
+            # Remove stale entry from cache
+            del _CELL_OUTPUTS_CACHE[cell_number]
+            logger.debug(
+                f"Cache entry for cell {cell_number} expired "
+                f"(age: {age_seconds:.1f}s > TTL: {max_age_seconds}s)"
+            )
+            return None
+
+        # Return the cached data with metadata
+        return {
+            "data": cache_entry.get("data"),
+            "timestamp": cached_timestamp,
+            "age_seconds": age_seconds,
+            "stale": False,
+            "kernel_id": cache_entry.get("kernel_id"),
+        }
+
+
+def invalidate_cell_output_cache(
+    cell_numbers: Optional[List[int]] = None,
+    older_than_seconds: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Invalidate (clear) cached cell outputs.
+
+    This function helps prevent stale error states from persisting in the cache.
+    It can be called after cell re-execution to ensure fresh data is fetched.
+
+    Args:
+        cell_numbers: List of specific cell numbers to invalidate.
+                     If None, invalidates all cached cells.
+        older_than_seconds: Only invalidate entries older than this many seconds.
+                           If None, invalidates regardless of age.
+
+    Returns:
+        Dictionary with invalidation results:
+        - "invalidated_count": Number of cache entries removed
+        - "remaining_count": Number of entries still in cache
+        - "cell_numbers": List of cell numbers that were invalidated
+    """
+    current_time = time.time()
+    invalidated = []
+
+    with _STATE_LOCK:
+        if cell_numbers is None:
+            # Invalidate all or by age
+            cells_to_check = list(_CELL_OUTPUTS_CACHE.keys())
+        else:
+            cells_to_check = cell_numbers
+
+        for cell_num in cells_to_check:
+            if cell_num not in _CELL_OUTPUTS_CACHE:
+                continue
+
+            cache_entry = _CELL_OUTPUTS_CACHE[cell_num]
+            should_invalidate = True
+
+            if older_than_seconds is not None:
+                cached_timestamp = cache_entry.get("timestamp", 0)
+                age_seconds = current_time - cached_timestamp
+                should_invalidate = age_seconds > older_than_seconds
+
+            if should_invalidate:
+                del _CELL_OUTPUTS_CACHE[cell_num]
+                invalidated.append(cell_num)
+
+        remaining_count = len(_CELL_OUTPUTS_CACHE)
+
+    logger.debug(
+        f"Invalidated {len(invalidated)} cache entries, {remaining_count} remaining"
+    )
+
+    return {
+        "invalidated_count": len(invalidated),
+        "remaining_count": remaining_count,
+        "cell_numbers": invalidated,
+    }
 
 
 def get_cell_outputs(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[str, Any]:
@@ -815,7 +939,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
                - "above": Move to cell above current
                - "below": Move to cell below current
                - "bottom": Move to the last cell in the notebook (by file order)
-               - "<number>": Move to cell with that execution count (e.g., "5" for [5])
+               - "index:N": Move to cell at position N (0-indexed) - works for ALL cells
         timeout_s: How long to wait for response from frontend (default 2.0s)
 
     Returns:
@@ -824,14 +948,11 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     """
     # Validate target
     valid_targets = ["above", "below", "bottom"]
-    if target not in valid_targets:
-        try:
-            int(target)  # Check if it's a number
-        except ValueError:
-            return {
-                "success": False,
-                "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or a cell number",
-            }
+    if target not in valid_targets and not target.startswith("index:"):
+        return {
+            "success": False,
+            "error": f"Invalid target '{target}'. Must be 'above', 'below', 'bottom', or 'index:N'",
+        }
 
     # Use _send_and_wait to get actual frontend response
     result = _send_and_wait(
@@ -877,5 +998,112 @@ def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
         {"type": "get_active_cell_output"},
         timeout_s=timeout_s,
     )
+
+    return result
+
+
+def get_notebook_structure(timeout_s: float = 2.0) -> Dict[str, Any]:
+    """
+    Get lightweight notebook structure (metadata only, no source code).
+
+    This function retrieves the list of all cells in the notebook with their
+    metadata (type, position, execution count) but WITHOUT source code,
+    making it fast for large notebooks.
+
+    Args:
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - total_cells (int): Total number of cells in notebook
+        - active_cell_index (int): Index of currently active cell
+        - cells (list): List of cell metadata dicts with:
+            - cell_id_notebook (int): Position in notebook (0-indexed)
+            - cell_type (str): "code", "markdown", or "raw"
+            - cell_execution_number (int|None): IPython counter or null
+        - error (str): Error message if failed
+    """
+    result = _send_and_wait(
+        {"type": "get_notebook_structure"},
+        timeout_s=timeout_s,
+    )
+    return result
+
+
+def get_cells_by_index(
+    cell_id_notebooks: List[int], timeout_s: float = 2.0
+) -> Dict[str, Any]:
+    """
+    Get specific cells by position index (with source code).
+
+    This function fetches specific cells from the notebook by their position,
+    allowing targeted retrieval of cell content without fetching the entire notebook.
+
+    Args:
+        cell_id_notebooks: List of cell indices to fetch (0-indexed positions)
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - cells (list): List of cell dicts with:
+            - cell_id_notebook (int): Position in notebook
+            - cell_type (str): "code", "markdown", or "raw"
+            - cell_execution_number (int|None): IPython counter or null
+            - source (str): Cell source code
+        - error (str): Error message if failed
+    """
+    result = _send_and_wait(
+        {
+            "type": "get_cells_by_index",
+            "cell_id_notebooks": cell_id_notebooks,
+        },
+        timeout_s=timeout_s,
+    )
+    return result
+
+
+def delete_cells_by_index(
+    cell_id_notebooks: List[int], timeout_s: float = 2.0
+) -> Dict[str, Any]:
+    """
+    Delete cells by position index (works for ALL cells including unexecuted ones).
+
+    This function deletes cells from the notebook by their position, allowing
+    deletion of markdown cells or unexecuted code cells that don't have
+    execution counts.
+
+    IMPORTANT: This function also invalidates the output cache for any deleted
+    cells that had execution counts, preventing stale data issues.
+
+    Args:
+        cell_id_notebooks: List of cell indices to delete (0-indexed positions)
+        timeout_s: How long to wait for response from frontend (default 2.0s)
+
+    Returns:
+        Dictionary with:
+        - success (bool): Whether the operation succeeded
+        - deleted_count (int): Number of cells deleted
+        - cleared_count (int): Number of cells cleared (if last cell)
+        - invalidated_exec_counts (list): Execution counts that were invalidated
+        - message (str): Status message
+    """
+    result = _send_and_wait(
+        {
+            "type": "delete_cells_by_index",
+            "cell_id_notebooks": cell_id_notebooks,
+        },
+        timeout_s=timeout_s,
+    )
+
+    # Invalidate cache entries for deleted cells
+    if result.get("success") and result.get("invalidated_exec_counts"):
+        with _STATE_LOCK:
+            for exec_count in result["invalidated_exec_counts"]:
+                _CELL_OUTPUTS_CACHE.pop(exec_count, None)
+        logger.debug(
+            f"Invalidated cache for {len(result['invalidated_exec_counts'])} cells"
+        )
 
     return result

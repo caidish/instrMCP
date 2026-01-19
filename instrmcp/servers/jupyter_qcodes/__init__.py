@@ -5,7 +5,7 @@ A read-only MCP server that provides access to QCoDeS instruments
 running in a Jupyter kernel without arbitrary code execution.
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.1"
 
 # Re-export extension loading functions
 from .jupyter_mcp_extension import load_ipython_extension, unload_ipython_extension

@@ -57,7 +57,7 @@ cp claude_desktop_config.json ~/Library/Application\ Support/Claude/claude_deskt
 
 **Architecture:**
 ```
-Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ (instrmcp.tools.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
+Claude Desktop ←→ STDIO ←→ claude_launcher.py ←→ (instrmcp.utils.stdio_proxy) ←→ HTTP ←→ Jupyter MCP Server
 ```
 
 **Mode Detection:**

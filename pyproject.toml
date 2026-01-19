@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instrmcp"
-version = "2.2.0"
+version = "2.3.1"
 description = "MCP server suite for physics laboratory instrumentation control"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -39,7 +39,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp>=2.0.0",  # Required for FastMCP.as_proxy() and ProxyClient
     "mcp>=1.0.0",
     "pyyaml>=6.0",
     "httpx>=0.25.0",
@@ -97,13 +97,11 @@ Changelog = "https://github.com/caidish/instrMCP/blob/main/CHANGELOG.md"
 
 [project.scripts]
 instrmcp = "instrmcp.cli:main"
-instrmcp-jupyter = "instrmcp.servers.jupyter_qcodes.cli:main" 
-instrmcp-qcodes = "instrmcp.servers.qcodes.server:main"
+instrmcp-jupyter = "instrmcp.servers.jupyter_qcodes.cli:main"
 instrmcp-setup = "instrmcp.setup_utils:setup_all"
 
 [project.entry-points."mcp.servers"]
 jupyter_qcodes = "instrmcp.servers.jupyter_qcodes:JupyterMCPServer"
-qcodes = "instrmcp.servers.qcodes:QCodesStationServer"
 
 
 [project.entry-points."jupyter_labextension_paths"]
@@ -119,7 +117,6 @@ exclude = ["tests*", "docs*", "servers*", "tools*"]
 
 [tool.setuptools.package-data]
 "instrmcp" = ["**/*.yaml", "**/*.yml", "**/*.json", "**/*.ini", "**/*.md"]
-"instrmcp.config" = ["data/**/*", "templates/**/*"]
 "instrmcp.extensions.jupyterlab" = ["install.json"]
 "instrmcp.extensions.jupyterlab.mcp_active_cell_bridge" = ["labextension/**/*"]
 

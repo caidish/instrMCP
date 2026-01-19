@@ -6,6 +6,7 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 """
 
 import asyncio
+import threading
 import time
 from typing import Any, Dict, Optional
 
@@ -13,7 +14,7 @@ from IPython.core.magic import Magics, line_magic, magics_class
 
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
-from instrmcp.logging_config import setup_logging, get_logger
+from instrmcp.utils.logging_config import setup_logging, get_logger
 
 # Initialize unified logging system
 setup_logging()
@@ -32,8 +33,6 @@ _enabled_options: set = set()  # Set of enabled option names
 # Note: We create a fresh comm for each broadcast to avoid stale socket issues
 
 # Toolbar control comms tracking (for safe sends)
-import threading
-
 _toolbar_comms: set = set()  # Active toolbar control comms
 _toolbar_comms_lock = threading.Lock()  # Lock for thread-safe access to _toolbar_comms
 
@@ -134,15 +133,16 @@ def _auto_detect_options() -> Dict[str, bool]:
         logger.debug(f"MeasureIt detection failed: {e}")
         detected["measureit"] = False
 
-    # Check for QCodes database support
+    # Check for QCodes database support (lightweight spec check, no blocking import)
     try:
         qcodes_spec = importlib.util.find_spec("qcodes")
         if qcodes_spec is not None:
-            # Further check if qcodes.dataset is available
-            from qcodes.dataset import experiments  # noqa: F401
-
-            detected["database"] = True
-            logger.debug("Auto-detected: QCodes database available")
+            # Use spec check instead of import to avoid blocking during extension load
+            detected["database"] = (
+                importlib.util.find_spec("qcodes.dataset") is not None
+            )
+            if detected["database"]:
+                logger.debug("Auto-detected: QCodes database available")
         else:
             detected["database"] = False
     except Exception as e:
@@ -722,9 +722,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_start_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_start_server
-            pass
+        except Exception:
+            logger.debug("Start server failed (user notified)", exc_info=True)
 
     @line_magic
     def mcp_close(self, line):
@@ -735,9 +734,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_stop_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_stop_server
-            pass
+        except Exception:
+            logger.debug("Stop server failed (user notified)", exc_info=True)
 
     @line_magic
     def mcp_option(self, line):
@@ -871,9 +869,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_restart_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_restart_server
-            pass
+        except Exception:
+            logger.debug("Restart server failed (user notified)", exc_info=True)
 
 
 def load_ipython_extension(ipython):
@@ -1074,7 +1071,7 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
             try:
                 # Use thread-safe method since we might be called from any thread
                 loop.call_soon_threadsafe(_do_broadcast_sends, payload, status)
-                logger.debug(f"broadcast_server_status: scheduled thread-safe on loop")
+                logger.debug("broadcast_server_status: scheduled thread-safe on loop")
                 return
             except RuntimeError as e:
                 # Loop was closed between our check and the call
@@ -1084,7 +1081,7 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
         else:
             # Loop exists but not running - call directly since call_soon would never execute
             # This is safe because we're in the same thread context (no async contention)
-            logger.debug(f"broadcast_server_status: loop not running, calling directly")
+            logger.debug("broadcast_server_status: loop not running, calling directly")
             _do_broadcast_sends(payload, status)
             return
 

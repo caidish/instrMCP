@@ -1,0 +1,350 @@
+{
+  "resources": {
+    "resource://database_access0d_template": {
+      "description": "Code Template: Load Sweep0D time-based data from QCodes database",
+      "name": "Database Access Sweep0D"
+    },
+    "resource://database_access1d_template": {
+      "description": "Code Template: Load Sweep1D data from QCodes database",
+      "name": "Database Access Sweep1D"
+    },
+    "resource://database_access2d_template": {
+      "description": "Code Template: Load Sweep2D data from QCodes database (single run or parent group)",
+      "name": "Database Access Sweep2D"
+    },
+    "resource://database_access_simulsweep_template": {
+      "description": "Code Template: Load SimulSweep data from QCodes database",
+      "name": "Database Access SimulSweep"
+    },
+    "resource://database_access_sweepqueue_template": {
+      "description": "Code Template: Load SweepQueue batch data from QCodes database",
+      "name": "Database Access SweepQueue"
+    },
+    "resource://measureit_code_examples": {
+      "description": "Complete collection of measureit code and resource link",
+      "name": "MeasureIt Code Examples"
+    },
+    "resource://measureit_common_patterns": {
+      "description": "Common MeasureIt patterns and best practices",
+      "name": "MeasureIt Common Patterns"
+    },
+    "resource://measureit_simulsweep_template": {
+      "description": "SimulSweep code examples for simultaneous parameter sweeping",
+      "name": "MeasureIt SimulSweep Template"
+    },
+    "resource://measureit_sweep0d_template": {
+      "description": "Sweep0D code examples and patterns for time-based monitoring",
+      "name": "MeasureIt Sweep0D Template"
+    },
+    "resource://measureit_sweep1d_template": {
+      "description": "Sweep1D code examples and patterns for single parameter sweeps",
+      "name": "MeasureIt Sweep1D Template"
+    },
+    "resource://measureit_sweep2d_template": {
+      "description": "Sweep2D code examples and patterns for 2D parameter mapping",
+      "name": "MeasureIt Sweep2D Template"
+    },
+    "resource://measureit_sweepqueue_template": {
+      "description": "SweepQueue code examples for sequential measurement workflows",
+      "name": "MeasureIt SweepQueue Template"
+    }
+  },
+  "tools": {
+    "database_get_database_stats": {
+      "arguments": {
+        "database_path": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Check database exists and return health/stats.\n\nArgs:\n    database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.",
+      "title": "Database Statistics"
+    },
+    "database_get_dataset_info": {
+      "arguments": {
+        "code_suggestion": {
+          "description": null
+        },
+        "database_path": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "id": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: bool, if `true`, return full info\n    code_suggestion: dataset-loading code; \n    unsafe/dangerous mode -> auto-inserts+executes, safe returns a suggestion.",
+      "title": "Get Dataset Info"
+    },
+    "database_list_all_available_db": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "List all available QCodes databases.\n\nSearches common locations including MeasureIt databases directory\nand QCodes configuration paths.\n\nArgs:\n    detailed: bool, if true, also return measureit sweep and qcodes default config.",
+      "title": "List Databases"
+    },
+    "database_list_experiments": {
+      "arguments": {
+        "database_path": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "scan_nested": {
+          "description": null
+        }
+      },
+      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    scan_nested: bool, if true, also scan nested Databases/ subdirectories\n    detailed: bool, If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
+      "title": "List Experiments"
+    },
+    "mcp_get_resource": {
+      "arguments": {
+        "uri": {
+          "description": null
+        }
+      },
+      "description": "Retrieve the content of a specific MCP resource by its URI.\n\nUse this tool to access resource content. \n\nArgs:\n    uri: string, resource URI (e.g., \"resource://measureit_sweep1d_template\")\n\nReturns:\n    Resource content as JSON or text.",
+      "title": "Get MCP Resource"
+    },
+    "mcp_list_resources": {
+      "arguments": {},
+      "description": "List all available MCP resources and guide.\n\nUse this tool to discover\nwhat context and documentation is available.",
+      "title": "List MCP Resources"
+    },
+    "measureit_get_status": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Check if any MeasureIt sweep is currently running.\n\nArgs:\n    detailed: bool, if false (default), if true, return adds sweep state and progress",
+      "title": "MeasureIt Status"
+    },
+    "measureit_kill_sweep": {
+      "arguments": {
+        "all": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "variable_name": {
+          "description": null
+        }
+      },
+      "description": "Kill running MeasureIt sweep(s) to release resources.\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\"). Required when all=false.\n    all: If true, kill all sweeps in namespace. If false (default),\n        kill only the sweep specified by variable_name.",
+      "title": "Kill Sweep"
+    },
+    "measureit_wait_for_sweep": {
+      "arguments": {
+        "all": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "kill": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        },
+        "variable_name": {
+          "description": null
+        }
+      },
+      "description": "Wait until MeasureIt sweep(s) finish.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    variable_name: Name of the sweep variable to wait for. Required when all=false.\n    all: If true, wait for all sweeps in namespace. If false (default),\n        wait only for the sweep specified by variable_name.\n    kill: If true (default), kill the sweep after waiting to release hardware\n        resources. If false, skip killing (useful for polling without cleanup).\n    detailed: If false (default), return only sweep state; if true, return full sweep information.",
+      "title": "Wait for Sweep"
+    },
+    "notebook_add_cell": {
+      "arguments": {
+        "cell_type": {
+          "description": null
+        },
+        "content": {
+          "description": null
+        },
+        "position": {
+          "description": null
+        }
+      },
+      "description": "Add a new cell in the notebook. Cursor will move to the new cell, and notebook_execute_active_cell tool will execute this new cell.\n\nArgs:\n    cell_type: \"code\", \"markdown\", \"raw\" - default: \"code\"\n    position: \"above\", \"below\", \"end\" - default: \"below\"\n    content: default: empty string\n\nReturns: {\"success\": true/false, \"error\": \"...\" if failed}",
+      "title": "Add Cell"
+    },
+    "notebook_apply_patch": {
+      "arguments": {
+        "new_text": {
+          "description": null
+        },
+        "old_text": {
+          "description": null
+        }
+      },
+      "description": "Apply a patch to the current cell content.\n\nMay require human consent.\n\nArgs:\n    old_text: Text to find and replace (must be unique in cell, cannot be empty)\n    new_text: Text to replace with (can be empty to delete text)\n\nReturns: {\"success\": true/false, \"error\": \"...\" if failed}",
+      "title": "Apply Patch"
+    },
+    "notebook_delete_cell": {
+      "arguments": {
+        "cell_id_notebooks": {
+          "description": null
+        }
+      },
+      "description": "Delete cell(s) from the notebook.\n\nMay require human consent.\n\nArgs:\n  no input: delete current editing cell. \n\n  cell_id_notebooks: (Optional) JSON string of position indices to delete (0-indexed). You must read them before deleting.\n  Example: \"[0, 2, 5]\" deletes cells at positions 0, 2, 5. \n\nReturns: {\"success\": true/false, \"error\": \"...\" if failed}",
+      "title": "Delete Cell"
+    },
+    "notebook_execute_active_cell": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        }
+      },
+      "description": "Execute the currently active cell and return the output.\n\nMay require human consent.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0). if 0, fire-and-forget.\n    detailed: bool, If false (default), return concise summary; if true, return full info\n\nReturns (concise mode):\n    - signal_success: Whether the execution request was sent successfully\n    - status: \"completed\", \"error\", \"timeout\", or \"no_wait\"\n    - executed: true if cell was executed\n    - has_output, has_error: Boolean flags\n    - outputs: List of cell outputs\n    - error_type, error_message, traceback: If error occurred\n\nReturns (detailed mode - adds):\n    - input: The code that was executed\n    - sweep_detected: true if .start() was detected\n    - suggestion: Hint to use wait tools if sweep detected\n    - the output will not be summarized.",
+      "title": "Execute Cell"
+    },
+    "notebook_list_variables": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "type_filter": {
+          "description": null
+        }
+      },
+      "description": "List variables in the Jupyter namespace.\n\nArgs:\n    type_filter: Optional type filter (e.g., \"array\", \"dict\", \"instrument\")",
+      "title": "List Notebook Variables"
+    },
+    "notebook_move_cursor": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "target": {
+          "description": null
+        }
+      },
+      "description": "Move cursor to a different cell in the notebook.\n\nChanges which cell is currently active (selected) in JupyterLab.\nThis is a SAFE operation as it only changes selection without modifying content.\n\nArgs:\n    target: Where to move the cursor:\n           - \"above\": Move to cell above current\n           - \"below\": Move to cell below current\n           - \"bottom\": Move to the last cell in the notebook (by file order)\n           - \"index:N\": Move to cell at position N (0-indexed). Works for ALL cells.\n                       Example: \"index:0\" moves to first cell, \"index:5\" to 6th cell.\n\nReturns: {\"success\": true/false}",
+      "title": "Move Cursor"
+    },
+    "notebook_read_active_cell": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "fresh_ms": {
+          "description": null
+        },
+        "line_end": {
+          "description": null
+        },
+        "line_start": {
+          "description": null
+        },
+        "max_lines": {
+          "description": null
+        }
+      },
+      "description": "Get the currently active cell content from JupyterLab frontend.\n\nThis captures the cell that is currently being edited in the frontend.\n\nArgs:\n    fresh_ms: Maximum age in milliseconds. If provided and cached data is older,\n             will request fresh data from frontend (default: 1000)\n    line_start: Optional starting line number (1-indexed).\n    line_end: Optional ending line number (1-indexed, inclusive).\n    max_lines: Maximum number of lines to return (default: 200).\n    detailed: bool, If false (default), return concise summary; if true, return full info",
+      "title": "Read Active Cell"
+    },
+    "notebook_read_active_cell_output": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Get the output of the currently active cell in JupyterLab.\n\nThis tool retrieves the output from the cell that is currently selected\nin JupyterLab, including any errors. If the cell hasn't been executed,\nit will indicate that status.\n\nArgs:\n    detailed: bool, If false (default), return concise summary; if true, return full info\n\nReturns:\n    - cell_id_notebook: Position in notebook (0-indexed)\n    - executed: true if cell has been executed, false otherwise\n    - status: \"completed\", \"error\", \"not_executed\", or \"not_code_cell\"\n    - has_output, has_error: Boolean flags\n    - outputs: Cell outputs (detailed mode)\n    - output_summary: Truncated output preview (concise mode)",
+      "title": "Read Cell Output"
+    },
+    "notebook_read_content": {
+      "arguments": {
+        "cell_id_notebooks": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "include_output": {
+          "description": null
+        },
+        "num_cells": {
+          "description": null
+        }
+      },
+      "description": "Read notebook cells around the active cell (cursor position).\nSupports ALL cells including markdown and unexecuted cells.\n\nArgs:\n    num_cells: Number of cells to retrieve around cursor (default: 2)\n    include_output: Include cell outputs and errors (default: true)\n    cell_id_notebooks: (Optional) JSON string of specific position indices to fetch.\n        Example: \"[0, 2, 5]\" fetches cells at positions 0, 2, 5 in the notebook.\n        If provided, num_cells is ignored. Works for ALL cells.\n    detailed: bool, If false (default), return concise summary; if true, return full info\n\nResponse fields:\n    - total_cells: Total number of cells in the notebook\n    - cells: List of cell objects with:\n        - cell_id_notebook: Position in notebook (0-indexed)\n        - cell_type: \"code\", \"markdown\", or \"raw\"\n        - executed: true if cell has been executed, false otherwise\n        - source: Cell source code/content\n        - has_output, has_error, status, outputs (when include_output=true)",
+      "title": "Read Notebook Content"
+    },
+    "notebook_read_variable": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "name": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a notebook variable.\n\nArgs:\n    name: Variable name\n    detailed: bool, If false (default), return concise summary; if true, return full info",
+      "title": "Read Variable"
+    },
+    "notebook_server_status": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Get server status and configuration.",
+      "title": "Server Status"
+    },
+    "qcodes_get_parameter_info": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "instrument": {
+          "description": null
+        },
+        "parameter": {
+          "description": null
+        }
+      },
+      "description": "Get metadata information about a specific QCodes parameter.\n\nArgs:\n    instrument: string, Instrument name in namespace\n    parameter: Parameter path (e.g., \"voltage\", \"ch01.voltage\")\n    detailed: bool. If true, return full data. \n\nReturns:\n    Parameter metadata including validator limits (vals).",
+      "title": "Get Parameter Info"
+    },
+    "qcodes_get_parameter_values": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "queries": {
+          "description": null
+        }
+      },
+      "description": "Get QCodes parameter values - supports both single parameter and batch queries.\n\nArgs:\n    queries: JSON string containing single query or list of queries\n             Single: {\"instrument\": \"name\", \"parameter\": \"param\", \"fresh\": false}\n             Batch: [{\"instrument\": \"name1\", \"parameter\": \"param1\"}, ...]\n    detailed: bool, If false (default), return concise {instrument, parameter, value};\n             if true, return full response with timestamps and source info",
+      "title": "Get Parameter Values"
+    },
+    "qcodes_instrument_info": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "name": {
+          "description": null
+        },
+        "with_values": {
+          "description": null
+        }
+      },
+      "description": "Get detailed information about a QCodes instrument.\n\nArgs:\n    name: Instrument name, or \"*\" to list all instruments\n    with_values: Include parameter values in the response (only for specific instruments, not with \"*\")\n    detailed: bool, If false (default), return concise summary; if true, return full response\n\nNote:\n    To get live parameter values, use qcodes_get_parameter_values with:\n    - \"{instrument}.{parameter}\" for direct parameters\n    - \"{instrument}.{channel}.{parameter}\" for multi-channel instruments\n    Example: \"lockin.X\" or \"dac.ch01.voltage\"",
+      "title": "Get Instrument Info"
+    }
+  }
+}

@@ -36,12 +36,10 @@ pytest -k "test_cache_initialization"               # Single test by name
 pytest tests/unit/test_cache.py::TestReadCache::test_cache_initialization  # Specific test
 ```
 
-**Server Management:**
+**CLI Utilities:**
 ```bash
-instrmcp jupyter --port 3000              # Start Jupyter MCP server
-instrmcp jupyter --port 3000 --unsafe     # With code execution
-instrmcp qcodes --port 3001               # QCodes station server
 instrmcp config                           # Show configuration
+instrmcp version                          # Show version
 ```
 
 **Version Management:**
@@ -64,25 +62,53 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 
 ### Key Directories
 - `instrmcp/servers/jupyter_qcodes/` - Main MCP server with QCodes + Jupyter integration
-- `instrmcp/servers/jupyter_qcodes/registrars/` - Tool registrars (qcodes, notebook, database, measureit)
-- `instrmcp/tools/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
-- `instrmcp/extensions/` - Jupyter extensions, MeasureIt templates, database resources
+- `instrmcp/servers/jupyter_qcodes/core/` - Always-available tools (qcodes, notebook, resources)
+- `instrmcp/servers/jupyter_qcodes/options/` - Optional features (measureit, database, dynamic_tool)
+- `instrmcp/utils/stdio_proxy.py` - STDIO↔HTTP proxy for Claude Desktop/Codex
+- `instrmcp/extensions/jupyterlab/` - JupyterLab frontend extension
 - `instrmcp/cli.py` - Command-line interface
 - `tools/version.py` - Unified version management script
 
 ### Key Files for Tool Changes
 When adding/removing MCP tools, update ALL of these:
-1. `instrmcp/servers/jupyter_qcodes/registrars/` - Add tool implementation
-2. `instrmcp/tools/stdio_proxy.py` - Add/remove tool proxy
-3. `docs/ARCHITECTURE.md` - Update tool documentation
-4. `README.md` - Update feature documentation
+1. `instrmcp/servers/jupyter_qcodes/core/` - Core tool implementation
+2. `instrmcp/servers/jupyter_qcodes/options/` - Optional feature tools
+3. `instrmcp/config/metadata_baseline.yaml` - Add tool/resource descriptions
+4. `instrmcp/utils/stdio_proxy.py` - Add/remove tool proxy
+5. `docs/ARCHITECTURE.md` - Update tool documentation
+6. `README.md` - Update feature documentation
+
+### Metadata Configuration
+Tool and resource descriptions are stored in YAML, not hardcoded in Python:
+- **Baseline**: `instrmcp/config/metadata_baseline.yaml` (single source of truth)
+- **User overrides**: `~/.instrmcp/metadata.yaml` (optional customizations)
+- **Config loader**: `instrmcp/utils/metadata_config.py`
+- **STDIO client**: `instrmcp/utils/stdio_proxy.py` - `StdioMCPClient` for validation
+
+When adding a new tool, add its description to `metadata_baseline.yaml`:
+```yaml
+tools:
+  my_new_tool:
+    title: "My Tool"
+    description: |
+      Tool description here.
+      Args:
+          param1: Description of param1
+```
+
+**CLI commands**: `instrmcp metadata init|edit|list|show|path|validate`
+
+**Validation** (`instrmcp metadata validate`) tests the full STDIO proxy path:
+```
+CLI → STDIO → stdio_proxy → HTTP → MCP Server (8123)
+```
 
 ### Safe vs Unsafe vs Dangerous Mode
 - **Safe Mode**: Read-only access to instruments and notebooks (default)
 - **Unsafe Mode**: Allows code execution (`--unsafe` flag or `%mcp_unsafe` magic)
 - **Dangerous Mode**: Unsafe mode with all consent dialogs auto-approved (`%mcp_dangerous` magic)
 
-Unsafe mode tools require user consent via dialog for: `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
+Unsafe mode tools require user consent via dialog for: `notebook_execute_active_cell`, `notebook_delete_cell`, `notebook_apply_patch`. In dangerous mode, all consents are automatically approved.
 
 **Dynamic Tools** (opt-in, requires dangerous mode): Enable with `%mcp_option dynamictool` while in dangerous mode. Tools: `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`. These tools allow runtime creation and execution of arbitrary code.
 
@@ -96,13 +122,13 @@ pip install -e . --force-reinstall --no-deps
 
 ## MCP Tools Reference
 
-All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_get_editing_cell`).
+All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_read_active_cell`).
 
 **Core Tools:** `mcp_list_resources`, `mcp_get_resource`
 **QCodes:** `qcodes_instrument_info`, `qcodes_get_parameter_values`
-**Notebook:** `notebook_list_variables`, `notebook_get_variable_info`, `notebook_get_editing_cell`, `notebook_get_editing_cell_output`, `notebook_get_notebook_cells`, `notebook_server_status`, `notebook_move_cursor`
-**Unsafe Notebook:** `notebook_update_editing_cell`, `notebook_execute_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_delete_cells`, `notebook_apply_patch`
-**MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_wait_for_all_sweeps`
+**Notebook:** `notebook_list_variables`, `notebook_read_variable`, `notebook_read_active_cell`, `notebook_read_active_cell_output`, `notebook_read_content`, `notebook_server_status`, `notebook_move_cursor`
+**Unsafe Notebook:** `notebook_execute_active_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_apply_patch`
+**MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_kill_sweep`
 **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
 **Dynamic Tools (opt-in via `dynamictool`, requires dangerous mode):** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
 
@@ -127,23 +153,25 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 
 ## Checklist When Modifying Tools
 
-- [ ] Update tool implementation in `registrars/`
-- [ ] Update `stdio_proxy.py` with tool proxy
+- [ ] Update tool implementation in `core/` or `options/`
+- [ ] Add tool description to `instrmcp/config/metadata_baseline.yaml`
+- [ ] Update `utils/stdio_proxy.py` with tool proxy
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
+- [ ] Update `tests/unit/test_stdio_proxy.py` with new tool tests (expected_tool list)
+- [ ] Run metadata e2e test: `python tests/playwright/run_metadata_e2e.py --mode snapshot` to update snapshot
 
 ## Version Management
 
 The project uses a unified version management script at `tools/version.py`. The canonical source of truth is `instrmcp/__init__.py`.
 
-**Version locations managed (8 files):**
+**Version locations managed (7 files):**
 
 - `pyproject.toml` - Package metadata
 - `instrmcp/__init__.py` - Main package (canonical source)
 - `instrmcp/servers/__init__.py` - Servers subpackage
-- `instrmcp/servers/qcodes/__init__.py` - QCodes server
 - `instrmcp/servers/jupyter_qcodes/__init__.py` - Jupyter QCodes server
 - `instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/__init__.py` - JupyterLab Python extension
 - `instrmcp/extensions/jupyterlab/package.json` - JupyterLab Node.js extension

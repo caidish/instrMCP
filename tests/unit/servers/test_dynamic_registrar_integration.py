@@ -4,8 +4,10 @@ import logging
 import pytest
 from unittest.mock import Mock, patch
 
-from instrmcp.servers.jupyter_qcodes.dynamic_registrar import DynamicToolRegistrar
-from instrmcp.tools.dynamic import create_tool_spec
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registrar import (
+    DynamicToolRegistrar,
+)
+from instrmcp.servers.jupyter_qcodes.options.dynamic_tool import create_tool_spec
 
 
 @pytest.fixture
@@ -37,7 +39,7 @@ def temp_registry(tmp_path):
 def registrar(mock_mcp, mock_ipython, temp_registry):
     """Create a DynamicToolRegistrar with mocked dependencies."""
     with patch(
-        "instrmcp.tools.dynamic.tool_registry.Path.home",
+        "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
         return_value=temp_registry.parent,
     ):
         registrar = DynamicToolRegistrar(mock_mcp, mock_ipython)
@@ -316,7 +318,7 @@ class TestDangerousModeBypassConsent:
     ):
         """Test registrar without bypass has an active consent manager."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(
@@ -333,7 +335,7 @@ class TestDangerousModeBypassConsent:
     ):
         """Test registrar with bypass has consent manager in bypass mode."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(
@@ -350,7 +352,7 @@ class TestDangerousModeBypassConsent:
     ):
         """Test registrar without require_consent has no consent manager."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(
@@ -365,7 +367,7 @@ class TestDangerousModeBypassConsent:
     def test_bypass_consent_stores_flag(self, mock_mcp, mock_ipython, temp_registry):
         """Test that bypass_consent flag is stored in registrar."""
         with patch(
-            "instrmcp.tools.dynamic.tool_registry.Path.home",
+            "instrmcp.servers.jupyter_qcodes.options.dynamic_tool.registry.Path.home",
             return_value=temp_registry.parent,
         ):
             registrar = DynamicToolRegistrar(

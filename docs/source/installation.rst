@@ -91,8 +91,14 @@ To verify your installation:
    # View configuration
    instrmcp config
 
-   # Test server startup
-   instrmcp jupyter --port 8123
+Then start JupyterLab and test the server:
+
+.. code-block:: python
+
+   # In a Jupyter notebook cell:
+   %load_ext instrmcp.extensions
+   %mcp_start
+   %mcp_status
 
 If everything is installed correctly, the server should start without errors.
 

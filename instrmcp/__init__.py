@@ -6,13 +6,13 @@ enabling Large Language Models to interact directly with physics instruments
 and measurement systems through standardized MCP interfaces.
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.1"
 __author__ = "Jiaqi Cai"
 __email__ = "jiaqic@mit.edu"
 __license__ = "MIT"
 
 # Lazy imports to avoid loading heavy dependencies at import time
-# Use: from instrmcp import servers, tools, config when needed
+# Use: from instrmcp import servers, tools when needed
 
 # Version info accessible as instrmcp.version_info
 version_info = tuple(int(x) for x in __version__.split("."))

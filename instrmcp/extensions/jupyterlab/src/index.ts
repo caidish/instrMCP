@@ -108,7 +108,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
         
         console.log(`MCP Active Cell Bridge: Updated cell content (${newContent.length} chars)`);
-        
+
+        // Send snapshot after successful update to keep backend in sync
+        await sendSnapshot(kernel);
+
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to update cell:', error);
         
@@ -202,7 +205,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Validate position
-        const validPositions = ['above', 'below'];
+        const validPositions = ['above', 'below', 'end'];
         if (!validPositions.includes(position)) {
           comm.send({
             type: 'add_cell_response',
@@ -216,6 +219,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Create new cell
         if (position === 'above') {
           await NotebookActions.insertAbove(panel.content);
+        } else if (position === 'end') {
+          // Move to last cell and insert below
+          const cellCount = panel.content.model?.cells.length ?? 0;
+          if (cellCount > 0) {
+            panel.content.activeCellIndex = cellCount - 1;
+          }
+          await NotebookActions.insertBelow(panel.content);
         } else {
           await NotebookActions.insertBelow(panel.content);
         }
@@ -249,6 +259,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log(`MCP Active Cell Bridge: Added ${cellType} cell ${position} with ${content.length} chars`);
+
+        // Send snapshot after successful add to keep backend in sync
+        await sendSnapshot(kernel);
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to add cell:', error);
@@ -301,6 +314,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log('MCP Active Cell Bridge: Cleared last cell content');
+
+          // Send snapshot after successful clear to keep backend in sync
+          await sendSnapshot(kernel);
         } else {
           // Delete the cell
           await NotebookActions.deleteCells(panel.content);
@@ -316,6 +332,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log('MCP Active Cell Bridge: Deleted cell');
+
+          // Send snapshot after successful delete to keep backend in sync
+          await sendSnapshot(kernel);
         }
 
       } catch (error) {
@@ -390,6 +409,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           });
 
           console.log(`MCP Active Cell Bridge: Applied patch (${oldText.length} -> ${newText.length} chars)`);
+
+          // Send snapshot after successful patch to keep backend in sync
+          await sendSnapshot(kernel);
         } else {
           // No replacement made
           comm.send({
@@ -422,7 +444,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Handle move cursor requests from kernel
     const handleMoveCursor = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
-      const target = data.target; // "above", "below", or cell execution count number
+      const target = data.target; // "above", "below", "bottom", or "index:N"
 
       try {
         const panel = notebooks.currentWidget;
@@ -458,42 +480,31 @@ const plugin: JupyterFrontEndPlugin<void> = {
         } else if (target === 'below') {
           targetIndex = currentIndex + 1;
         } else if (target === 'bottom') {
-          // Move to the last cell in the notebook (by file order, not execution count)
+          // Move to the last cell in the notebook (by file order)
           targetIndex = cells.length - 1;
+        } else if (target.startsWith('index:')) {
+          // Navigate by cell_id_notebook (position index)
+          const indexStr = target.substring(6);
+          const parsedIndex = parseInt(indexStr);
+          if (isNaN(parsedIndex) || parsedIndex < 0 || parsedIndex >= cells.length) {
+            comm.send({
+              type: 'move_cursor_response',
+              request_id: requestId,
+              success: false,
+              message: `Invalid index ${indexStr}. Must be 0-${cells.length - 1}`
+            });
+            return;
+          }
+          targetIndex = parsedIndex;
         } else {
-          // target is a cell execution count number
-          const targetCellNum = parseInt(target);
-          if (isNaN(targetCellNum)) {
-            comm.send({
-              type: 'move_cursor_response',
-              request_id: requestId,
-              success: false,
-              message: `Invalid target '${target}'. Must be 'above', 'below', 'bottom', or a cell number`
-            });
-            return;
-          }
-
-          // Map execution count to cell index
-          let found = false;
-          for (let i = 0; i < cells.length; i++) {
-            const cellModel = cells.get(i);
-            const execCount = (cellModel as any).executionCount;
-            if (execCount === targetCellNum) {
-              targetIndex = i;
-              found = true;
-              break;
-            }
-          }
-
-          if (!found) {
-            comm.send({
-              type: 'move_cursor_response',
-              request_id: requestId,
-              success: false,
-              message: `Cell with execution count ${targetCellNum} not found`
-            });
-            return;
-          }
+          // Invalid target
+          comm.send({
+            type: 'move_cursor_response',
+            request_id: requestId,
+            success: false,
+            message: `Invalid target '${target}'. Must be 'above', 'below', 'bottom', or 'index:N'`
+          });
+          return;
         }
 
         // Clamp target index to valid range
@@ -520,6 +531,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         console.log(`MCP Active Cell Bridge: Moved cursor from ${currentIndex} to ${targetIndex}`);
 
+        // Send snapshot after successful cursor move to keep backend in sync
+        await sendSnapshot(kernel);
+
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to move cursor:', error);
 
@@ -528,6 +542,223 @@ const plugin: JupyterFrontEndPlugin<void> = {
           request_id: requestId,
           success: false,
           message: `Failed to move cursor: ${error}`
+        });
+      }
+    };
+
+    // Handler 1: Get lightweight notebook structure (metadata only, no source code)
+    const handleGetNotebookStructure = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+
+      try {
+        const panel = notebooks.currentWidget;
+        const notebook = panel?.content;
+
+        if (!panel || !notebook) {
+          comm.send({
+            type: 'get_notebook_structure_response',
+            request_id: requestId,
+            success: false,
+            error: 'No active notebook'
+          });
+          return;
+        }
+
+        const cells = notebook.model?.cells;
+        if (!cells) {
+          comm.send({
+            type: 'get_notebook_structure_response',
+            request_id: requestId,
+            success: false,
+            error: 'Cannot access cells'
+          });
+          return;
+        }
+
+        const structure = [];
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells.get(i);
+          structure.push({
+            cell_id_notebook: i,
+            cell_type: cell.type,
+            cell_execution_number: (cell as any).executionCount || null,
+            // NO source - lightweight for performance
+          });
+        }
+
+        comm.send({
+          type: 'get_notebook_structure_response',
+          request_id: requestId,
+          success: true,
+          total_cells: cells.length,
+          active_cell_index: notebook.activeCellIndex,
+          cells: structure
+        });
+
+        console.log(`MCP Active Cell Bridge: Sent notebook structure (${cells.length} cells)`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to get notebook structure:', error);
+
+        comm.send({
+          type: 'get_notebook_structure_response',
+          request_id: requestId,
+          success: false,
+          error: `Failed to get notebook structure: ${error}`
+        });
+      }
+    };
+
+    // Handler 2: Get specific cells by index (with source code)
+    const handleGetCellsByIndex = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const indices = data.cell_id_notebooks;  // e.g., [0, 2, 5]
+
+      try {
+        // Input validation
+        if (!Array.isArray(indices)) {
+          comm.send({
+            type: 'get_cells_by_index_response',
+            request_id: requestId,
+            success: false,
+            error: 'cell_id_notebooks must be an array'
+          });
+          return;
+        }
+
+        const panel = notebooks.currentWidget;
+        const cells = panel?.content?.model?.cells;
+
+        if (!cells) {
+          comm.send({
+            type: 'get_cells_by_index_response',
+            request_id: requestId,
+            success: false,
+            error: 'Cannot access cells'
+          });
+          return;
+        }
+
+        const results = [];
+        for (const idx of indices) {
+          // Bounds checking (handles race condition gracefully)
+          if (typeof idx === 'number' && idx >= 0 && idx < cells.length) {
+            const cell = cells.get(idx);
+            results.push({
+              cell_id_notebook: idx,
+              cell_type: cell.type,
+              cell_execution_number: (cell as any).executionCount || null,
+              source: cell.sharedModel.getSource(),
+            });
+          }
+        }
+
+        comm.send({
+          type: 'get_cells_by_index_response',
+          request_id: requestId,
+          success: true,
+          cells: results
+        });
+
+        console.log(`MCP Active Cell Bridge: Sent ${results.length} cells by index`);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to get cells by index:', error);
+
+        comm.send({
+          type: 'get_cells_by_index_response',
+          request_id: requestId,
+          success: false,
+          error: `Failed to get cells by index: ${error}`
+        });
+      }
+    };
+
+    // Handler 3: Delete cells by index (position-based, works for unexecuted cells)
+    const handleDeleteCellsByIndex = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
+      const requestId = data.request_id;
+      const indices = data.cell_id_notebooks;  // e.g., [0, 2, 5]
+
+      try {
+        if (!Array.isArray(indices) || indices.length === 0) {
+          comm.send({
+            type: 'delete_cells_by_index_response',
+            request_id: requestId,
+            success: false,
+            message: 'cell_id_notebooks must be a non-empty array'
+          });
+          return;
+        }
+
+        const panel = notebooks.currentWidget;
+        const cells = panel?.content?.model?.cells;
+
+        if (!cells) {
+          comm.send({
+            type: 'delete_cells_by_index_response',
+            request_id: requestId,
+            success: false,
+            message: 'Cannot access notebook cells'
+          });
+          return;
+        }
+
+        // Collect execution counts BEFORE deletion for cache invalidation
+        const execCountsToInvalidate: number[] = [];
+        for (const idx of indices) {
+          if (idx >= 0 && idx < cells.length) {
+            const execCount = (cells.get(idx) as any).executionCount;
+            if (execCount != null) {
+              execCountsToInvalidate.push(execCount);
+            }
+          }
+        }
+
+        // Sort descending to avoid index shifting during deletion
+        const sortedIndices = [...indices].sort((a, b) => b - a);
+        let deletedCount = 0;
+        let clearedCount = 0;
+
+        for (const idx of sortedIndices) {
+          if (idx >= 0 && idx < cells.length) {
+            // Check if this is the last cell
+            if (cells.length === 1) {
+              // Clear content instead of deleting
+              const cellModel = cells.get(idx);
+              if (cellModel) {
+                cellModel.sharedModel.setSource('');
+                clearedCount++;
+              }
+            } else {
+              panel.content.model?.sharedModel.deleteCell(idx);
+              deletedCount++;
+            }
+          }
+        }
+
+        comm.send({
+          type: 'delete_cells_by_index_response',
+          request_id: requestId,
+          success: true,
+          deleted_count: deletedCount,
+          cleared_count: clearedCount,
+          invalidated_exec_counts: execCountsToInvalidate,  // For cache cleanup
+          message: `Deleted ${deletedCount} cell(s), cleared ${clearedCount} cell(s)`
+        });
+
+        console.log(`MCP Active Cell Bridge: Deleted ${deletedCount} cells by index`);
+
+        // Send snapshot after successful delete to keep backend in sync
+        await sendSnapshot(kernel);
+
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to delete cells by index:', error);
+
+        comm.send({
+          type: 'delete_cells_by_index_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to delete cells: ${error}`
         });
       }
     };
@@ -934,6 +1165,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         console.log(`MCP Active Cell Bridge: Deleted ${deletedCount} cells by number`);
+
+        // Send snapshot after successful delete to keep backend in sync
+        await sendSnapshot(kernel);
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to delete cells by number:', error);
@@ -1535,6 +1769,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleDeleteCell(kernel, comm, data);
               } else if (msgType === 'delete_cells_by_number') {
                 handleDeleteCellsByNumber(kernel, comm, data);
+              } else if (msgType === 'delete_cells_by_index') {
+                handleDeleteCellsByIndex(kernel, comm, data);
               } else if (msgType === 'move_cursor') {
                 handleMoveCursor(kernel, comm, data);
               } else if (msgType === 'get_cell_outputs') {
@@ -1543,6 +1779,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 handleGetActiveCellOutput(kernel, comm, data);
               } else if (msgType === 'apply_patch') {
                 handleApplyPatch(kernel, comm, data);
+              } else if (msgType === 'get_notebook_structure') {
+                handleGetNotebookStructure(kernel, comm, data);
+              } else if (msgType === 'get_cells_by_index') {
+                handleGetCellsByIndex(kernel, comm, data);
               } else {
                 console.warn(`MCP Active Cell Bridge: Unknown message type: ${msgType}`);
               }
