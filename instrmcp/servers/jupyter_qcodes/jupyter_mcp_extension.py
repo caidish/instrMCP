@@ -723,9 +723,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_start_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_start_server
-            pass
+        except Exception:
+            logger.debug("Start server failed (user notified)", exc_info=True)
 
     @line_magic
     def mcp_close(self, line):
@@ -736,9 +735,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_stop_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_stop_server
-            pass
+        except Exception:
+            logger.debug("Stop server failed (user notified)", exc_info=True)
 
     @line_magic
     def mcp_option(self, line):
@@ -872,9 +870,8 @@ class MCPMagics(Magics):
         """
         try:
             _do_restart_server(announce=True)
-        except Exception as e:
-            # Error already printed by _do_restart_server
-            pass
+        except Exception:
+            logger.debug("Restart server failed (user notified)", exc_info=True)
 
 
 def load_ipython_extension(ipython):
