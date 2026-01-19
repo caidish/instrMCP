@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green.svg)](https://github.com/anthropics/mcp)
 [![Documentation Status](https://readthedocs.org/projects/instrmcp/badge/?version=latest)](https://instrmcp.readthedocs.io/en/latest/?badge=latest)
+[![CodeFactor](https://www.codefactor.io/repository/github/caidish/instrmcp/badge)](https://www.codefactor.io/repository/github/caidish/instrmcp)
 [![Tests](https://github.com/caidish/instrMCP/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/caidish/instrMCP/actions/workflows/tests.yml)
 [![Lint](https://github.com/caidish/instrMCP/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/caidish/instrMCP/actions/workflows/lint.yml)
 
