@@ -35,8 +35,7 @@ def qcodes_test_database(tmp_path):
     cursor = conn.cursor()
 
     # Create experiments table (QCoDeS schema)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -45,12 +44,10 @@ def qcodes_test_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """
-    )
+    """)
 
     # Create runs table (QCoDeS schema)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -65,16 +62,13 @@ def qcodes_test_database(tmp_path):
             measureit TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """
-    )
+    """)
 
     # Insert test experiment
-    cursor.execute(
-        """
+    cursor.execute("""
         INSERT INTO experiments (exp_id, name, sample_name, format_string, start_time)
         VALUES (1, 'test_experiment', 'test_sample', '{name}', 1234567890.0)
-    """
-    )
+    """)
 
     # Insert test runs
     test_runs = [
@@ -131,15 +125,13 @@ def qcodes_test_database(tmp_path):
     # Create result tables for each run
     for run_id in [1, 2, 3]:
         table_name = f"results_{run_id}"
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE TABLE "{table_name}" (
                 id INTEGER PRIMARY KEY,
                 voltage REAL,
                 current REAL
             )
-        """
-        )
+        """)
         # Insert some test data
         for i in range(10):
             cursor.execute(
@@ -161,8 +153,7 @@ def empty_qcodes_database(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -171,11 +162,9 @@ def empty_qcodes_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """
-    )
+    """)
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -190,8 +179,7 @@ def empty_qcodes_database(tmp_path):
             measureit TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """
-    )
+    """)
 
     conn.commit()
     conn.close()

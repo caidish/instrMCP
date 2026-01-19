@@ -7,7 +7,6 @@ execution, and analysis features.
 
 from typing import Dict, List, Any
 
-
 # Sample cell contents for different scenarios
 CELL_IMPORT_QCODES = """import qcodes as qc
 import numpy as np

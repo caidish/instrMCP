@@ -92,15 +92,13 @@ def _get_all_runs_info(database_path: str) -> list[SweepInfo]:
         cursor = conn.cursor()
 
         # Get all runs with their metadata
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT r.run_id, r.exp_id, r.run_description, r.measureit,
                    e.name as exp_name, e.sample_name
             FROM runs r
             JOIN experiments e ON r.exp_id = e.exp_id
             ORDER BY r.run_id
-        """
-        )
+        """)
 
         for row in cursor.fetchall():
             # Access by column name thanks to Row factory

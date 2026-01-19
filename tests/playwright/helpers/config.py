@@ -121,11 +121,6 @@ def parse_e2e_args() -> argparse.Namespace:
         help="Wait time after running each cell in fallback mode.",
     )
     parser.add_argument(
-        "--clean",
-        action="store_true",
-        help="Kill existing processes on Jupyter and MCP ports before starting.",
-    )
-    parser.add_argument(
         "--mcp-port",
         type=int,
         default=DEFAULT_MCP_PORT,

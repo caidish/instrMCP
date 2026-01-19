@@ -14,6 +14,8 @@ from pathlib import Path
 try:
     from tests.playwright.helpers import (
         cleanup_working_notebook,
+        DEFAULT_JUPYTER_PORT,
+        DEFAULT_MCP_PORT,
         get_snapshot_path,
         has_user_config,
         is_port_free,
@@ -38,6 +40,8 @@ try:
 except ImportError:  # pragma: no cover - fallback for direct script execution
     from helpers import (  # type: ignore[no-redef]
         cleanup_working_notebook,
+        DEFAULT_JUPYTER_PORT,
+        DEFAULT_MCP_PORT,
         get_snapshot_path,
         has_user_config,
         is_port_free,
@@ -97,13 +101,12 @@ def main() -> int:
     mcp_port = args.mcp_port
     working_notebook = None
 
-    # Clean up existing processes if requested
-    if args.clean:
-        if kill_port(mcp_port):
-            print(f"Killed existing process on MCP port {mcp_port}.")
-        if kill_port(jupyter_port):
-            print(f"Killed existing process on Jupyter port {jupyter_port}.")
-        cleanup_working_notebook()
+    # Always kill existing processes on default ports to ensure clean state
+    if kill_port(DEFAULT_MCP_PORT):
+        print(f"Killed existing process on MCP port {DEFAULT_MCP_PORT}.")
+    if kill_port(DEFAULT_JUPYTER_PORT):
+        print(f"Killed existing process on Jupyter port {DEFAULT_JUPYTER_PORT}.")
+    cleanup_working_notebook()
 
     try:
         # Copy notebook to working directory to avoid modifying original

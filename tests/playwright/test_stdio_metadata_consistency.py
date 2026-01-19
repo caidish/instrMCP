@@ -221,13 +221,12 @@ def launch_mcp_server(args: argparse.Namespace) -> tuple:
     jupyter_base_url = f"http://127.0.0.1:{jupyter_port}"
     mcp_port = args.mcp_port
 
-    # Clean up existing processes if requested
-    if args.clean:
-        if kill_port(mcp_port):
-            print(f"Killed existing process on MCP port {mcp_port}.")
-        if kill_port(jupyter_port):
-            print(f"Killed existing process on Jupyter port {jupyter_port}.")
-        cleanup_working_notebook()
+    # Always kill existing processes on default ports to ensure clean state
+    if kill_port(DEFAULT_MCP_PORT):
+        print(f"Killed existing process on MCP port {DEFAULT_MCP_PORT}.")
+    if kill_port(DEFAULT_JUPYTER_PORT):
+        print(f"Killed existing process on Jupyter port {DEFAULT_JUPYTER_PORT}.")
+    cleanup_working_notebook()
 
     # Copy notebook to working directory
     working_notebook = prepare_working_notebook(original_notebook)
@@ -341,11 +340,6 @@ def main() -> int:
         help="Wait time after running each cell.",
     )
     parser.add_argument(
-        "--clean",
-        action="store_true",
-        help="Kill existing processes on Jupyter and MCP ports before starting.",
-    )
-    parser.add_argument(
         "--keep-jupyter",
         action="store_true",
         help="Leave JupyterLab running after the test.",
@@ -367,7 +361,7 @@ def main() -> int:
             if not verify_http_server_running(args.mcp_url):
                 print("ERROR: HTTP MCP server is not running.")
                 print(
-                    "Start it first with run_metadata_e2e.py "
+                    "Start it first with test_metadata_consistency.py"
                     "or remove --skip-launch flag"
                 )
                 return 2

@@ -370,17 +370,17 @@ instrmcp metadata validate --launcher-path /path/to/claude_launcher.py
 
 ### E2E Testing
 
-The metadata e2e test (`tests/playwright/run_metadata_e2e.py`) automatically detects user config:
+The metadata e2e test (`tests/playwright/test_metadata_consistency.py`) automatically detects user config:
 
 - **No user config**: Uses `metadata_snapshot.json` (baseline reference)
 - **With user config**: Uses `metadata_snapshot_user.json` (user-specific reference)
 
 ```bash
 # Verify metadata matches baseline
-python tests/playwright/run_metadata_e2e.py --mode verify
+python tests/playwright/test_metadata_consistency.py --mode verify
 
 # Create/update snapshot (auto-selects based on user config presence)
-python tests/playwright/run_metadata_e2e.py --mode snapshot
+python tests/playwright/test_metadata_consistency.py --mode snapshot
 ```
 
 ## Integration Patterns

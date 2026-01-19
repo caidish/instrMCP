@@ -9,6 +9,48 @@ from typing import Iterable
 from urllib.parse import quote
 
 
+def _reset_jupyterlab_workspace(page, base_url: str, token: str) -> None:
+    """Reset JupyterLab workspace to ensure clean state.
+
+    This closes all open tabs/notebooks and resets the workspace layout
+    to prevent interference from previous sessions.
+
+    Args:
+        page: Playwright page object
+        base_url: JupyterLab base URL
+        token: Authentication token
+    """
+    # Navigate to JupyterLab main page first
+    lab_url = f"{base_url}/lab?token={token}"
+    page.goto(lab_url, wait_until="domcontentloaded", timeout=120000)
+
+    # Wait for JupyterLab to be ready
+    page.wait_for_selector(".jp-LabShell", timeout=60000)
+    page.wait_for_timeout(2000)  # Give JupyterLab time to fully initialize
+
+    # Reset workspace via JavaScript - close all activities and reset layout
+    page.evaluate("""
+() => {
+    const app = window.jupyterapp || window.jupyterlab || window.jupyterApp || window.jupyterLab;
+    if (!app) return false;
+
+    // Close all open tabs/activities
+    if (app.shell && app.shell.widgets) {
+        const widgets = Array.from(app.shell.widgets('main'));
+        widgets.forEach(w => w.close());
+    }
+
+    // Reset workspace layout if command available
+    if (app.commands && app.commands.hasCommand('application:reset-layout')) {
+        app.commands.execute('application:reset-layout');
+    }
+
+    return true;
+}
+""")
+    page.wait_for_timeout(1000)  # Wait for workspace reset to complete
+
+
 def run_notebook_playwright(
     base_url: str,
     token: str,
@@ -34,13 +76,19 @@ def run_notebook_playwright(
         ) from exc
 
     notebook_rel = notebook_rel.replace(os.sep, "/")
-    url = f"{base_url}/lab/tree/{quote(notebook_rel)}?token={token}"
+    notebook_url = f"{base_url}/lab/tree/{quote(notebook_rel)}?token={token}"
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=120000)
+            # Reset JupyterLab workspace first to ensure clean state
+            print("  Resetting JupyterLab workspace...")
+            _reset_jupyterlab_workspace(page, base_url, token)
+
+            # Now open the notebook
+            print(f"  Opening notebook: {notebook_rel}")
+            page.goto(notebook_url, wait_until="domcontentloaded", timeout=120000)
             page.wait_for_selector(
                 ".jp-NotebookPanel:not(.lm-mod-hidden)", timeout=120000
             )
@@ -95,8 +143,7 @@ def _run_all_cells(page, cell_wait_ms: int) -> None:
     ran = False
     # Method 1: Try JavaScript command execution
     try:
-        ran = page.evaluate(
-            """
+        ran = page.evaluate("""
 () => {
   const app = window.jupyterapp || window.jupyterlab || window.jupyterApp || window.jupyterLab;
   if (!app || !app.commands) {
@@ -111,8 +158,7 @@ def _run_all_cells(page, cell_wait_ms: int) -> None:
   }
   return false;
 }
-"""
-        )
+""")
     except Exception:
         ran = False
 

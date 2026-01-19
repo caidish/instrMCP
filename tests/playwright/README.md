@@ -21,8 +21,8 @@ tests/playwright/
 │   ├── original/           # Source notebooks (immutable)
 │   │   └── metadata_e2e.ipynb
 │   └── _working/           # Working copies (auto-created, gitignored)
-├── run_metadata_e2e.py     # Main E2E test runner
-├── test_stdio_proxy_metadata.py  # Proxy metadata alignment test
+├── test_metadata_consistency.py     # Main E2E test runner
+├── test_stdio_metadata_consistency.py  # Proxy metadata alignment test
 ├── mcp_metadata_client.py  # MCP client utilities
 ├── metadata_snapshot.json  # Baseline snapshot
 └── README.md
@@ -34,7 +34,7 @@ This writes `tests/playwright/metadata_snapshot.json` with tool/resource
 descriptions captured from the running MCP server.
 
 ```
-python tests/playwright/run_metadata_e2e.py --mode snapshot
+python tests/playwright/test_metadata_consistency.py --mode snapshot
 ```
 
 ## Step 1: Run the E2E check
@@ -43,21 +43,21 @@ Runs the notebook with Playwright, waits for the MCP server, and compares the
 server metadata to the snapshot.
 
 ```
-python tests/playwright/run_metadata_e2e.py --mode verify
+python tests/playwright/test_metadata_consistency.py --mode verify
 ```
 
 ### Recommended options
 
 ```bash
-# Clean start - kill any existing processes on ports 8888/8123
-python tests/playwright/run_metadata_e2e.py --mode verify --clean
-
 # With longer cell wait time for slower systems
-python tests/playwright/run_metadata_e2e.py --mode verify --clean --cell-wait-ms 2000
+python tests/playwright/test_metadata_consistency.py --mode verify --cell-wait-ms 2000
 
 # Keep JupyterLab running after test (for debugging or proxy tests)
-python tests/playwright/run_metadata_e2e.py --mode verify --clean --keep-jupyter
+python tests/playwright/test_metadata_consistency.py --mode verify --keep-jupyter
 ```
+
+**Note:** The test always kills existing processes on ports 8888/8123 and resets
+the JupyterLab workspace before running to ensure a clean state.
 
 ## Step 2: Verify stdio_proxy metadata alignment
 
@@ -66,13 +66,13 @@ FastMCP proxy mirrors metadata correctly:
 
 ```bash
 # First start MCP server
-python tests/playwright/run_metadata_e2e.py --mode verify --clean --keep-jupyter
+python tests/playwright/test_metadata_consistency.py --mode verify --keep-jupyter
 
 # Then run proxy test
-python tests/playwright/test_stdio_proxy_metadata.py
+python tests/playwright/test_stdio_metadata_consistency.py
 
 # Or compare against snapshot
-python tests/playwright/test_stdio_proxy_metadata.py --compare-snapshot
+python tests/playwright/test_stdio_metadata_consistency.py --compare-snapshot
 ```
 
 This verifies that Claude Desktop/Code (which uses the stdio proxy) sees the
@@ -92,21 +92,23 @@ same tool/resource metadata as direct HTTP clients.
 | Option | Description |
 |--------|-------------|
 | `--mode {snapshot,verify}` | Create snapshot or verify against existing |
-| `--clean` | Kill processes on ports 8888/8123 before starting |
 | `--keep-jupyter` | Leave JupyterLab running after test |
 | `--skip-jupyter` | Assume JupyterLab is already running |
 | `--skip-playwright` | Skip notebook execution (MCP server already up) |
-| `--cell-wait-ms N` | Wait N ms between cell executions (default: 500) |
+| `--cell-wait-ms N` | Wait N ms between cell executions (default: 1000) |
 | `--jupyter-port N` | Use custom Jupyter port (default: 8888) |
 | `--mcp-port N` | MCP server port for cleanup (default: 8123) |
 | `--snapshot PATH` | Path to snapshot file |
+
+**Automatic cleanup:** The test always kills existing processes on ports 8888/8123
+and resets the JupyterLab workspace before running.
 
 ## Adding extra cells for future E2E flows
 
 You can extend the notebook directly, or pass extra cells via JSON:
 
 ```
-python tests/playwright/run_metadata_e2e.py --mode verify \
+python tests/playwright/test_metadata_consistency.py --mode verify \
   --extra-cells tests/playwright/extra_cells.json
 ```
 

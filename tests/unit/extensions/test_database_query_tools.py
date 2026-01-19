@@ -54,8 +54,7 @@ def qcodes_test_database(tmp_path):
     cursor = conn.cursor()
 
     # Create experiments table (QCoDeS schema)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -64,12 +63,10 @@ def qcodes_test_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """
-    )
+    """)
 
     # Create runs table (QCoDeS schema)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -85,12 +82,10 @@ def qcodes_test_database(tmp_path):
             snapshot TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """
-    )
+    """)
 
     # Create layouts table (for parameter info)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE layouts (
             layout_id INTEGER PRIMARY KEY,
             run_id INTEGER,
@@ -100,12 +95,10 @@ def qcodes_test_database(tmp_path):
             inferred_from TEXT,
             FOREIGN KEY (run_id) REFERENCES runs(run_id)
         )
-    """
-    )
+    """)
 
     # Create dependencies table
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE dependencies (
             id INTEGER PRIMARY KEY,
             dependent INTEGER,
@@ -114,22 +107,17 @@ def qcodes_test_database(tmp_path):
             FOREIGN KEY (dependent) REFERENCES layouts(layout_id),
             FOREIGN KEY (independent) REFERENCES layouts(layout_id)
         )
-    """
-    )
+    """)
 
     # Insert test experiments
-    cursor.execute(
-        """
+    cursor.execute("""
         INSERT INTO experiments (exp_id, name, sample_name, format_string, start_time)
         VALUES (1, 'test_experiment', 'test_sample', '{name}', 1234567890.0)
-    """
-    )
-    cursor.execute(
-        """
+    """)
+    cursor.execute("""
         INSERT INTO experiments (exp_id, name, sample_name, format_string, start_time)
         VALUES (2, 'second_experiment', 'sample2', '{name}', 1234567900.0)
-    """
-    )
+    """)
 
     # Insert test runs
     test_runs = [
@@ -184,39 +172,31 @@ def qcodes_test_database(tmp_path):
     )
 
     # Insert layouts (parameters) for run 1
-    cursor.execute(
-        """
+    cursor.execute("""
         INSERT INTO layouts (layout_id, run_id, parameter, label, unit, inferred_from)
         VALUES (1, 1, 'voltage', 'Gate Voltage', 'V', NULL)
-    """
-    )
-    cursor.execute(
-        """
+    """)
+    cursor.execute("""
         INSERT INTO layouts (layout_id, run_id, parameter, label, unit, inferred_from)
         VALUES (2, 1, 'current', 'Drain Current', 'A', NULL)
-    """
-    )
+    """)
 
     # Insert dependency (current depends on voltage)
-    cursor.execute(
-        """
+    cursor.execute("""
         INSERT INTO dependencies (dependent, independent, axis_num)
         VALUES (2, 1, 0)
-    """
-    )
+    """)
 
     # Create result tables for each run
     for run_id in [1, 2, 3]:
         table_name = f"results_{run_id}"
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE TABLE "{table_name}" (
                 id INTEGER PRIMARY KEY,
                 voltage REAL,
                 current REAL
             )
-        """
-        )
+        """)
         # Insert some test data
         for i in range(10):
             cursor.execute(
@@ -238,8 +218,7 @@ def empty_qcodes_database(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE experiments (
             exp_id INTEGER PRIMARY KEY,
             name TEXT,
@@ -248,11 +227,9 @@ def empty_qcodes_database(tmp_path):
             start_time REAL,
             end_time REAL
         )
-    """
-    )
+    """)
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE runs (
             run_id INTEGER PRIMARY KEY,
             exp_id INTEGER,
@@ -267,8 +244,7 @@ def empty_qcodes_database(tmp_path):
             measureit TEXT,
             FOREIGN KEY (exp_id) REFERENCES experiments(exp_id)
         )
-    """
-    )
+    """)
 
     conn.commit()
     conn.close()

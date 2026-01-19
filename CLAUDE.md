@@ -161,7 +161,7 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Run `black instrmcp/ tests/` before committing
 - [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
 - [ ] Update `tests/unit/test_stdio_proxy.py` with new tool tests (expected_tool list)
-- [ ] Run metadata e2e test: `python tests/playwright/run_metadata_e2e.py --mode snapshot` to update snapshot
+- [ ] Run metadata e2e test: `python tests/playwright/test_metadata_consistency.py --mode snapshot` to update snapshot
 
 ## Version Management
 

@@ -79,13 +79,11 @@ def _query_experiments_direct(db_path: str) -> List[Dict[str, Any]]:
     """
     with _thread_safe_db_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT exp_id, name, sample_name, format_string, start_time, end_time
             FROM experiments
             ORDER BY exp_id
-        """
-        )
+        """)
         return [dict(row) for row in cursor.fetchall()]
 
 
