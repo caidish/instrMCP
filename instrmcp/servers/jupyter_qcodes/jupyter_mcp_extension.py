@@ -6,6 +6,7 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 """
 
 import asyncio
+import threading
 import time
 from typing import Any, Dict, Optional
 
@@ -32,8 +33,6 @@ _enabled_options: set = set()  # Set of enabled option names
 # Note: We create a fresh comm for each broadcast to avoid stale socket issues
 
 # Toolbar control comms tracking (for safe sends)
-import threading
-
 _toolbar_comms: set = set()  # Active toolbar control comms
 _toolbar_comms_lock = threading.Lock()  # Lock for thread-safe access to _toolbar_comms
 
@@ -1072,7 +1071,7 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
             try:
                 # Use thread-safe method since we might be called from any thread
                 loop.call_soon_threadsafe(_do_broadcast_sends, payload, status)
-                logger.debug(f"broadcast_server_status: scheduled thread-safe on loop")
+                logger.debug("broadcast_server_status: scheduled thread-safe on loop")
                 return
             except RuntimeError as e:
                 # Loop was closed between our check and the call
@@ -1082,7 +1081,7 @@ def broadcast_server_status(status: str, details: Optional[dict] = None):
         else:
             # Loop exists but not running - call directly since call_soon would never execute
             # This is safe because we're in the same thread context (no async contention)
-            logger.debug(f"broadcast_server_status: loop not running, calling directly")
+            logger.debug("broadcast_server_status: loop not running, calling directly")
             _do_broadcast_sends(payload, status)
             return
 

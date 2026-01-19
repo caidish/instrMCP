@@ -6,10 +6,11 @@ resource metadata from the HTTP backend. This is critical because Claude
 Desktop/Code uses the stdio proxy interface.
 
 The test:
-1. Connects to the running HTTP MCP server
-2. Creates a FastMCP proxy pointing to the same server
-3. Compares tools and resources between HTTP and proxy
-4. Optionally compares against the baseline snapshot
+1. Starts JupyterLab and runs a notebook to start the MCP server (by default)
+2. Connects to the running HTTP MCP server
+3. Creates a FastMCP proxy pointing to the same server
+4. Compares tools and resources between HTTP and proxy
+5. Optionally compares against the baseline snapshot
 """
 
 from __future__ import annotations
@@ -23,22 +24,59 @@ from fastmcp import FastMCP
 from fastmcp.server.proxy import ProxyClient
 
 try:
-    from tests.playwright.mcp_metadata_client import (
+    from tests.playwright.helpers import (
+        cleanup_working_notebook,
+        DEFAULT_JUPYTER_LOG,
+        DEFAULT_JUPYTER_PORT,
+        DEFAULT_MCP_PORT,
+        DEFAULT_MCP_URL,
+        DEFAULT_NOTEBOOK,
+        DEFAULT_SNAPSHOT,
+        DEFAULT_TOKEN,
+        find_free_port,
+        is_port_free,
+        kill_port,
+        load_extra_cells,
+        prepare_working_notebook,
+        run_notebook_playwright,
+        start_jupyter_server,
+        stop_process,
+        wait_for_http,
+        wait_for_mcp,
+    )
+    from tests.playwright.metadata_client import (
         MCPMetadataClient,
         build_metadata_snapshot,
         compare_metadata,
         load_snapshot,
     )
 except ImportError:
-    from mcp_metadata_client import (
+    from helpers import (  # type: ignore[no-redef]
+        cleanup_working_notebook,
+        DEFAULT_JUPYTER_LOG,
+        DEFAULT_JUPYTER_PORT,
+        DEFAULT_MCP_PORT,
+        DEFAULT_MCP_URL,
+        DEFAULT_NOTEBOOK,
+        DEFAULT_SNAPSHOT,
+        DEFAULT_TOKEN,
+        find_free_port,
+        is_port_free,
+        kill_port,
+        load_extra_cells,
+        prepare_working_notebook,
+        run_notebook_playwright,
+        start_jupyter_server,
+        stop_process,
+        wait_for_http,
+        wait_for_mcp,
+    )
+    from metadata_client import (  # type: ignore[no-redef]
         MCPMetadataClient,
         build_metadata_snapshot,
         compare_metadata,
         load_snapshot,
     )
-
-DEFAULT_MCP_URL = "http://127.0.0.1:8123"
-DEFAULT_SNAPSHOT = Path(__file__).parent / "metadata_snapshot.json"
 
 
 def verify_http_server_running(mcp_url: str = DEFAULT_MCP_URL) -> bool:
@@ -164,6 +202,77 @@ async def get_proxy_metadata(mcp_url: str = DEFAULT_MCP_URL) -> dict:
     return {"tools": tool_map, "resources": resource_map}
 
 
+def launch_mcp_server(args: argparse.Namespace) -> tuple:
+    """Launch JupyterLab and run notebook to start MCP server.
+
+    Args:
+        args: Parsed arguments containing jupyter/notebook config
+
+    Returns:
+        Tuple of (jupyter_proc, mcp_port)
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+
+    original_notebook = args.notebook.resolve()
+    if not original_notebook.exists():
+        raise FileNotFoundError(f"Notebook not found: {original_notebook}")
+
+    jupyter_port = args.jupyter_port
+    jupyter_base_url = f"http://127.0.0.1:{jupyter_port}"
+    mcp_port = args.mcp_port
+
+    # Clean up existing processes if requested
+    if args.clean:
+        if kill_port(mcp_port):
+            print(f"Killed existing process on MCP port {mcp_port}.")
+        if kill_port(jupyter_port):
+            print(f"Killed existing process on Jupyter port {jupyter_port}.")
+        cleanup_working_notebook()
+
+    # Copy notebook to working directory
+    working_notebook = prepare_working_notebook(original_notebook)
+    try:
+        notebook_rel = working_notebook.relative_to(repo_root).as_posix()
+    except ValueError:
+        raise ValueError("Notebook must be under the repository root.")
+
+    # Start JupyterLab
+    if not is_port_free(jupyter_port):
+        new_port = find_free_port()
+        print(f"Port {jupyter_port} is in use; switching to {new_port}.")
+        jupyter_port = new_port
+        jupyter_base_url = f"http://127.0.0.1:{jupyter_port}"
+
+    jupyter_proc, _log_path = start_jupyter_server(
+        repo_root, jupyter_port, args.jupyter_token, args.jupyter_log
+    )
+
+    ready = wait_for_http(f"{jupyter_base_url}/lab?token={args.jupyter_token}")
+    if not ready:
+        stop_process(jupyter_proc)
+        cleanup_working_notebook()
+        raise RuntimeError("JupyterLab did not become ready in time.")
+
+    # Run notebook via Playwright
+    extra_cells = load_extra_cells(args.extra_cells)
+    run_notebook_playwright(
+        jupyter_base_url,
+        args.jupyter_token,
+        notebook_rel,
+        extra_cells,
+        args.cell_wait_ms,
+    )
+
+    # Wait for MCP server
+    if not wait_for_mcp(args.mcp_url):
+        stop_process(jupyter_proc)
+        kill_port(mcp_port)
+        cleanup_working_notebook()
+        raise RuntimeError("MCP server did not become ready in time.")
+
+    return jupyter_proc, mcp_port
+
+
 def main() -> int:
     """Run the stdio proxy metadata alignment test."""
     parser = argparse.ArgumentParser(
@@ -183,66 +292,143 @@ def main() -> int:
     parser.add_argument(
         "--compare-snapshot",
         action="store_true",
-        help="Compare proxy metadata against snapshot file instead of live HTTP.",
+        help="Compare proxy metadata against snapshot file.",
+    )
+    # Playwright launch options (launches by default)
+    parser.add_argument(
+        "--skip-launch",
+        action="store_true",
+        help="Skip launching MCP server (assume it's already running).",
+    )
+    parser.add_argument(
+        "--notebook",
+        type=Path,
+        default=DEFAULT_NOTEBOOK,
+        help="Notebook to execute in JupyterLab.",
+    )
+    parser.add_argument(
+        "--extra-cells",
+        type=Path,
+        help="JSON file with extra code cells to append and run.",
+    )
+    parser.add_argument(
+        "--jupyter-port",
+        type=int,
+        default=DEFAULT_JUPYTER_PORT,
+        help="JupyterLab port to use.",
+    )
+    parser.add_argument(
+        "--jupyter-token",
+        default=DEFAULT_TOKEN,
+        help="JupyterLab auth token to use.",
+    )
+    parser.add_argument(
+        "--jupyter-log",
+        type=Path,
+        default=DEFAULT_JUPYTER_LOG,
+        help="Log file path for the JupyterLab process.",
+    )
+    parser.add_argument(
+        "--mcp-port",
+        type=int,
+        default=DEFAULT_MCP_PORT,
+        help="MCP server port (used for cleanup).",
+    )
+    parser.add_argument(
+        "--cell-wait-ms",
+        type=int,
+        default=1000,
+        help="Wait time after running each cell.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Kill existing processes on Jupyter and MCP ports before starting.",
+    )
+    parser.add_argument(
+        "--keep-jupyter",
+        action="store_true",
+        help="Leave JupyterLab running after the test.",
     )
     args = parser.parse_args()
 
-    # Check HTTP server is running
-    print(f"Checking HTTP MCP server at {args.mcp_url}...")
-    if not verify_http_server_running(args.mcp_url):
-        print("ERROR: HTTP MCP server is not running.")
-        print("Start it first with the metadata_e2e notebook or run_metadata_e2e.py")
-        return 2
+    jupyter_proc = None
+    mcp_port = args.mcp_port
 
-    print("HTTP server is running. Getting metadata...")
-
-    # Get HTTP metadata
-    http_metadata = get_http_metadata(args.mcp_url)
-    print(
-        f"  HTTP: {len(http_metadata['tools'])} tools, "
-        f"{len(http_metadata['resources'])} resources"
-    )
-
-    # Get proxy metadata
-    print("Creating FastMCP proxy and getting metadata...")
     try:
-        proxy_metadata = asyncio.run(get_proxy_metadata(args.mcp_url))
+        # Launch MCP server via Playwright (by default)
+        if not args.skip_launch:
+            print("Launching MCP server via Playwright...")
+            jupyter_proc, mcp_port = launch_mcp_server(args)
+            print("MCP server is ready.")
+        else:
+            # Check HTTP server is running
+            print(f"Checking HTTP MCP server at {args.mcp_url}...")
+            if not verify_http_server_running(args.mcp_url):
+                print("ERROR: HTTP MCP server is not running.")
+                print(
+                    "Start it first with run_metadata_e2e.py "
+                    "or remove --skip-launch flag"
+                )
+                return 2
+
+        print("HTTP server is running. Getting metadata...")
+
+        # Get HTTP metadata
+        http_metadata = get_http_metadata(args.mcp_url)
         print(
-            f"  Proxy: {len(proxy_metadata['tools'])} tools, "
-            f"{len(proxy_metadata['resources'])} resources"
+            f"  HTTP: {len(http_metadata['tools'])} tools, "
+            f"{len(http_metadata['resources'])} resources"
         )
-    except Exception as e:
-        print(f"ERROR: Failed to get proxy metadata: {e}")
-        return 2
 
-    # Compare HTTP vs Proxy
-    print("\nComparing HTTP vs Proxy metadata...")
-    errors = compare_metadata(http_metadata, proxy_metadata)
-    if errors:
-        print("MISMATCH: HTTP and Proxy metadata differ:")
-        for error in errors:
-            print(f"  - {error}")
-        return 1
+        # Get proxy metadata
+        print("Creating FastMCP proxy and getting metadata...")
+        try:
+            proxy_metadata = asyncio.run(get_proxy_metadata(args.mcp_url))
+            print(
+                f"  Proxy: {len(proxy_metadata['tools'])} tools, "
+                f"{len(proxy_metadata['resources'])} resources"
+            )
+        except Exception as e:
+            print(f"ERROR: Failed to get proxy metadata: {e}")
+            return 2
 
-    print("OK: HTTP and Proxy metadata match!")
-
-    # Optionally compare against snapshot
-    if args.compare_snapshot:
-        if not args.snapshot.exists():
-            print(f"\nWARNING: Snapshot file not found: {args.snapshot}")
-            return 0
-
-        print(f"\nComparing Proxy metadata against snapshot...")
-        snapshot = load_snapshot(args.snapshot)
-        errors = compare_metadata(snapshot, proxy_metadata)
+        # Compare HTTP vs Proxy
+        print("\nComparing HTTP vs Proxy metadata...")
+        errors = compare_metadata(http_metadata, proxy_metadata)
         if errors:
-            print("MISMATCH: Proxy metadata differs from snapshot:")
+            print("MISMATCH: HTTP and Proxy metadata differ:")
             for error in errors:
                 print(f"  - {error}")
             return 1
-        print("OK: Proxy metadata matches snapshot!")
 
-    return 0
+        print("OK: HTTP and Proxy metadata match!")
+
+        # Optionally compare against snapshot
+        if args.compare_snapshot:
+            if not args.snapshot.exists():
+                print(f"\nWARNING: Snapshot file not found: {args.snapshot}")
+                return 0
+
+            print("\nComparing Proxy metadata against snapshot...")
+            snapshot = load_snapshot(args.snapshot)
+            errors = compare_metadata(snapshot, proxy_metadata)
+            if errors:
+                print("MISMATCH: Proxy metadata differs from snapshot:")
+                for error in errors:
+                    print(f"  - {error}")
+                return 1
+            print("OK: Proxy metadata matches snapshot!")
+
+        return 0
+
+    finally:
+        # Cleanup if we launched the server
+        if jupyter_proc and not args.keep_jupyter:
+            print("\nCleaning up...")
+            stop_process(jupyter_proc)
+            kill_port(mcp_port)
+            cleanup_working_notebook()
 
 
 if __name__ == "__main__":
