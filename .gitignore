@@ -157,3 +157,4 @@ tests/e2e/notebooks/_working/
 # Playwright test logs
 tests/playwright/jupyter_lab.log
 tests/playwright/metadata_snapshot_user.json
+/tests/e2e/test-results
