@@ -9,13 +9,13 @@ import time
 from typing import List, Optional
 
 from mcp.types import TextContent
-from ..active_cell_bridge import (
+from ..active_cell_bridge import (  # noqa: F401 - invalidate_cell_output_cache exposed for unsafe tools
     get_cell_outputs,
     get_cached_cell_output,
     get_active_cell_output,
     get_notebook_structure,
     get_cells_by_index,
-    invalidate_cell_output_cache,  # noqa: F401 - exposed for unsafe tools to clear stale state
+    invalidate_cell_output_cache,
 )
 from instrmcp.utils.logging_config import get_logger
 from instrmcp.utils.mcptool_logger import log_tool_call

@@ -35,6 +35,8 @@ pytest tests/unit/test_cache.py                     # Single file
 pytest -k "test_cache_initialization"               # Single test by name
 pytest tests/unit/test_cache.py::TestReadCache::test_cache_initialization  # Specific test
 ```
+Important note: some tests may stall indefinitely, set a reasonable timeout if needed.
+
 
 **CLI Utilities:**
 ```bash
