@@ -107,7 +107,11 @@ def setup_jupyter_config():
 
 
 def setup_all():
-    """Run all post-install setup tasks."""
+    """Run all post-install setup tasks.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+    """
     print("🚀 Setting up InstrMCP...")
 
     success = True
@@ -132,7 +136,8 @@ def setup_all():
         print("📝 Note: If JupyterLab extension failed, you can install manually with:")
         print("   jupyter labextension develop /path/to/extension --overwrite")
 
-    return success
+    # Return proper exit code: 0 for success, 1 for failure
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
