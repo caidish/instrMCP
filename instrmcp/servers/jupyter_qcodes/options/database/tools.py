@@ -173,7 +173,7 @@ class DatabaseToolRegistrar:
                 for inner_key in inner_dict.keys():
                     var_name = inner_key.replace(".", "_")
                     param_code_lines.append(
-                        f'{var_name} = d["{outer_key}"]["{inner_key}"]'
+                        f'{var_name}_{run_id} = d_{run_id}["{outer_key}"]["{inner_key}"]'
                     )
 
         param_code = (
@@ -183,11 +183,11 @@ class DatabaseToolRegistrar:
         return f"""from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db = "{database_path}"
-initialise_or_create_database_at(db)
+db_{run_id} = "{database_path}"
+initialise_or_create_database_at(db_{run_id})
 
-ds = load_by_id({run_id})
-d = ds.get_parameter_data()
+ds_{run_id} = load_by_id({run_id})
+d_{run_id} = ds_{run_id}.get_parameter_data()
 
 # Extract parameter arrays:
 {param_code}

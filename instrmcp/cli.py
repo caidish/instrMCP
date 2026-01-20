@@ -86,8 +86,6 @@ def _handle_metadata_command(args):
         DEFAULT_CONFIG_PATH,
         generate_default_config_yaml,
         load_config,
-        save_config,
-        MetadataConfig,
     )
 
     if args.metadata_command == "init":
@@ -287,7 +285,7 @@ def _handle_metadata_validate(args):
     print()
 
     # Connect to server via STDIO proxy
-    print(f"Connecting to MCP server via STDIO proxy...")
+    print("Connecting to MCP server via STDIO proxy...")
     print(f"  MCP URL: {args.mcp_url}")
 
     launcher_path = str(args.launcher_path) if args.launcher_path else None

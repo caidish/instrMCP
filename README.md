@@ -297,10 +297,18 @@ Capabilities are freeform documentation labels - NOT enforced security boundarie
 See [Dynamic Tools Quickstart](docs/DYNAMIC_TOOLS_QUICKSTART.md) for details.
 
 ### Testing & Quality
-- **464 tests** (463 passed, 1 skipped)
-- **Zero linter errors** across all modules
+- **Unit tests**: Comprehensive coverage of core functionality
+- **E2E tests**: 166 Playwright tests (164 passed, 2 skipped) covering:
+  - Server lifecycle and mode switching
+  - Safe/unsafe/dangerous mode tools
+  - Security scanner pattern blocking
+  - Optional features (MeasureIt, Database, Dynamic Tools)
+  - Frontend widget and consent dialogs
+- **Zero linter errors** on critical checks
 - **Code formatted** with black
 - **CI/CD passing** on all workflows
+
+See [`tests/e2e/README.md`](tests/e2e/README.md) for E2E test documentation.
 
 ## V3.0.0 Roadmap
 

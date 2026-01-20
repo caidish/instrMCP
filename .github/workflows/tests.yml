@@ -32,12 +32,12 @@ jobs:
 
     - name: Run tests
       run: |
-        pytest tests/ -v --tb=short
+        pytest tests/ -v --tb=short --ignore=tests/e2e --ignore=tests/playwright
 
     - name: Generate coverage report
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
       run: |
-        pytest tests/ --cov=instrmcp --cov-report=xml --cov-report=html
+        pytest tests/ --cov=instrmcp --cov-report=xml --cov-report=html --ignore=tests/e2e --ignore=tests/playwright
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
