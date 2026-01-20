@@ -23,7 +23,7 @@ from measureit.tools import ensure_qt, init_database
 
 # Configure time-based monitoring
 s = Sweep0D(
-    inter_delay=0.1,        # Delay between measurements (s)
+    inter_delay=0.1,        # Delay between measurements (s), min: 0.01s
     save_data=True,         # Save to database
     plot_bin=4,             # Plot every 4th point for performance
     max_time=100            # Maximum monitoring time (s)
@@ -49,8 +49,9 @@ s.start()
 # To pause: s.stop()
 """,
         "tips": [
-            "Always call init_database before s.start()",
+            "Always call init_database(db, exp, sample, sweep) before s.start() - positional args only, no kwargs",
             "`print(s.progressState)` to check the state",
+            "Only follow measured signals (e.g., lockin.x), never setpoint params",
         ],
     }
 
@@ -76,7 +77,7 @@ s = Sweep1D(
     start=-1.0,             # Start value
     stop=1.0,               # Stop value
     step=0.01,              # Step Size(*not step number!*) between measurements
-    inter_delay=0.1,        # Delay between measurements
+    inter_delay=0.1,        # Delay between measurements (s), min: 0.01s
     save_data=True,
     bidirectional=True,     # Sweep back and forth
     continual=False         # Stop after one sweep
@@ -102,9 +103,10 @@ s.start()
 # To pause: s.stop()
 """,
         "tips": [
-            "Always call init_database before s.start()",
+            "Always call init_database(db, exp, sample, sweep) before s.start() - positional args only, no kwargs",
             "`print(s.progressState)` to check the state",
             "continual=True will sweep for indefinite time until manual stop",
+            "Only follow measured signals (e.g., lockin.x), never setpoint params",
         ],
     }
 
@@ -139,8 +141,9 @@ outer_step = 0.05              # Step Size(*not step number!*)
 s = Sweep2D(
     [inner_param, inner_start, inner_end, inner_step],
     [outer_param, outer_start, outer_end, outer_step],
-    inter_delay=0.1,           # Delay between measurements
-    outer_delay=1.0,           # Delay when stepping outer parameter
+    inter_delay=0.1,           # Delay between measurements (s), min: 0.01s
+    outer_delay=1.0,           # Delay when stepping outer parameter (s), min: 0.1s
+    err=[0.5, 0.5],            # Tolerance [outer_err, inner_err], default 0.01 often too tight
     save_data=True,
     plot_data=True,
     plot_bin=5,                # Plotting performance
@@ -170,12 +173,14 @@ s.start()
 # To pause: s.stop()
 """,
         "tips": [
-            "Always call init_database before s.start()",
+            "Always call init_database(db, exp, sample, sweep) before s.start() - positional args only, no kwargs",
             "`print(s.progressState)` to check the state",
             "continual=True will sweep for indefinite time until manual stop",
             "Inner parameter is swept relatively rapidly back and forth",
             "back_multiplier speeds up return sweeps",
             "Large maps can take hours - plan accordingly",
+            "err requires list [outer_err, inner_err], not single float; use err=[0.5, 0.5] or [1.0, 1.0] for better error tolerance",
+            "Only follow measured signals (e.g., lockin.x), never setpoint params",
         ],
     }
 
@@ -207,7 +212,7 @@ sweep_args = {
     'plot_bin': 4,            # Plotting performance
     'continual': False,       # Stop after one sweep
     'save_data': True,
-    'inter_delay': 0.1        # Delay between measurements
+    'inter_delay': 0.1        # Delay between measurements (s), min: 0.01s
 }
 
 s = SimulSweep(parameter_dict, **sweep_args)
@@ -232,13 +237,14 @@ s.start()
 # To pause: s.stop()
 """,
         "tips": [
-            "Always call init_database before s.start()",
+            "Always call init_database(db, exp, sample, sweep) before s.start() - positional args only, no kwargs",
             "`print(s.progressState)` to check the state",
             "continual=True will sweep for indefinite time until manual stop",
             "All parameters must have same number of steps",
             "Calculate steps: (stop-start)/step should be equal for all parameters",
             "Useful for diagonal cuts through multi-dimensional parameter space",
             "Good for maintaining parameter relationships/ratios",
+            "Only follow measured signals (e.g., lockin.x), never setpoint params",
         ],
     }
 
@@ -277,7 +283,8 @@ exp_name = "measurement_sequence"
 # Step 1: Initial characterization sweep
 s1 = Sweep1D(
     gate.voltage, start=-1.0, stop=1.0, step=0.02,
-    inter_delay=0.1, save_data=True, bidirectional=True
+    inter_delay=0.1,  # min: 0.01s
+    save_data=True, bidirectional=True
 )
 s1.follow_param(*follow_params)
 db_entry1 = DatabaseEntry(db_path, exp_name, "initial_sweep")
@@ -295,7 +302,8 @@ sq += (adjust_settings,)
 # Step 3: Fine measurement at interesting region
 s2 = Sweep1D(
     gate.voltage, start=-0.1, stop=0.1, step=0.005,
-    inter_delay=0.2, save_data=True, bidirectional=False
+    inter_delay=0.2,  # min: 0.01s
+    save_data=True, bidirectional=False
 )
 s2.follow_param(*follow_params)
 db_entry2 = DatabaseEntry(db_path, exp_name, "fine_sweep")

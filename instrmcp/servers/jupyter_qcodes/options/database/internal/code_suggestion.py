@@ -92,13 +92,15 @@ def _get_all_runs_info(database_path: str) -> list[SweepInfo]:
         cursor = conn.cursor()
 
         # Get all runs with their metadata
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT r.run_id, r.exp_id, r.run_description, r.measureit,
                    e.name as exp_name, e.sample_name
             FROM runs r
             JOIN experiments e ON r.exp_id = e.exp_id
             ORDER BY r.run_id
-        """)
+        """
+        )
 
         for row in cursor.fetchall():
             # Access by column name thanks to Row factory
@@ -305,25 +307,26 @@ def _generate_sweep0d_code(sweep: SweepInfo, db_path: str) -> str:
     follow_comment = (
         f"# Measured: {follow_cols}" if follow_cols else "# Measured: (see df.columns)"
     )
+    rid = sweep.run_id
 
     return f"""# Load Sweep0D dataset (time-based measurement)
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({sweep.run_id})
-df = ds.to_pandas_dataframe().reset_index()
+ds_{rid} = load_by_id({rid})
+df_{rid} = ds_{rid}.to_pandas_dataframe().reset_index()
 
 # Columns: time + measured parameters
 {follow_comment}
-print("Columns:", df.columns.tolist())
-print(df.head())
+print("Columns:", df_{rid}.columns.tolist())
+print(df_{rid}.head())
 
 # Optional: Quick plot (uncomment to use)
 # import matplotlib.pyplot as plt
-# df.plot(x="time", y="{first_follow}")
+# df_{rid}.plot(x="time", y="{first_follow}")
 """
 
 
@@ -342,26 +345,27 @@ def _generate_sweep1d_code(sweep: SweepInfo, db_path: str) -> str:
     follow_comment = (
         f"# Measured: {follow_cols}" if follow_cols else "# Measured: (see df.columns)"
     )
+    rid = sweep.run_id
 
     return f"""# Load Sweep1D dataset
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({sweep.run_id})
-df = ds.to_pandas_dataframe().reset_index()
+ds_{rid} = load_by_id({rid})
+df_{rid} = ds_{rid}.to_pandas_dataframe().reset_index()
 
 # Columns: swept parameter + time + measured parameters
 {set_comment}
 {follow_comment}
-print("Columns:", df.columns.tolist())
-print(df.head())
+print("Columns:", df_{rid}.columns.tolist())
+print(df_{rid}.head())
 
 # Optional: Quick plot (uncomment to use)
 # import matplotlib.pyplot as plt
-# df.plot(x="{first_set}", y="{first_follow}")
+# df_{rid}.plot(x="{first_set}", y="{first_follow}")
 """
 
 
@@ -387,6 +391,7 @@ def _generate_sweep2d_code(sweep: SweepInfo, db_path: str) -> str:
     follow_comment = (
         f"# Measured: {follow_cols}" if follow_cols else "# Measured: (see df.columns)"
     )
+    rid = sweep.run_id
 
     return f"""# Load Sweep2D dataset (single run = one y-line)
 # NOTE: Each Sweep2D run contains only ONE y-value (outer sweep).
@@ -394,22 +399,22 @@ def _generate_sweep2d_code(sweep: SweepInfo, db_path: str) -> str:
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({sweep.run_id})
-df = ds.to_pandas_dataframe().reset_index()
+ds_{rid} = load_by_id({rid})
+df_{rid} = ds_{rid}.to_pandas_dataframe().reset_index()
 
 # Columns from metadata:
 {inner_comment}
 {outer_comment}
 {follow_comment}
-print("Columns:", df.columns.tolist())
-print(df.head())
+print("Columns:", df_{rid}.columns.tolist())
+print(df_{rid}.head())
 
 # Optional: Quick 1D line plot (uncomment to use)
 # import matplotlib.pyplot as plt
-# df.plot(x="{inner_col}", y="{first_follow}")
+# df_{rid}.plot(x="{inner_col}", y="{first_follow}")
 """
 
 
@@ -438,6 +443,8 @@ def _generate_sweep2d_parent_code(group: SweepGroup, db_path: str) -> str:
     )
 
     run_ids_str = ", ".join(str(r) for r in group.run_ids)
+    # Use first run_id as suffix to identify this combined dataset
+    gid = min(group.run_ids)
 
     return f"""# Load Sweep2D Parent - {len(group.run_ids)} runs in experiment "{group.exp_name}"
 # Sample: {group.sample_name}
@@ -446,31 +453,31 @@ from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 import pandas as pd
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{gid} = "{db_path}"
+initialise_or_create_database_at(db_path_{gid})
 
 # All run IDs in this Sweep2D parent (each run = one y-line)
-run_ids = [{run_ids_str}]
+run_ids_{gid} = [{run_ids_str}]
 
 # Combine all runs into one DataFrame
-dfs = []
-for run_id in run_ids:
-    ds = load_by_id(run_id)
-    df = ds.to_pandas_dataframe().reset_index()
-    dfs.append(df)
+dfs_{gid} = []
+for rid in run_ids_{gid}:
+    ds = load_by_id(rid)
+    df_tmp = ds.to_pandas_dataframe().reset_index()
+    dfs_{gid}.append(df_tmp)
 
-df = pd.concat(dfs, ignore_index=True)
+df_{gid} = pd.concat(dfs_{gid}, ignore_index=True)
 
 # Columns from metadata:
 {inner_comment}
 {outer_comment}
 {follow_comment}
-print("Columns:", df.columns.tolist())
-print("Shape:", df.shape)
+print("Columns:", df_{gid}.columns.tolist())
+print("Shape:", df_{gid}.shape)
 
 # Optional: Create 2D scatter plot (uncomment to use)
 # import matplotlib.pyplot as plt
-# plt.scatter(df["{inner_col}"], df["{outer_col}"], c=df["{first_follow}"], s=10, cmap='viridis')
+# plt.scatter(df_{gid}["{inner_col}"], df_{gid}["{outer_col}"], c=df_{gid}["{first_follow}"], s=10, cmap='viridis')
 # plt.colorbar(label="{first_follow}")
 # plt.xlabel("{inner_col}")
 # plt.ylabel("{outer_col}")
@@ -496,26 +503,27 @@ def _generate_simulsweep_code(sweep: SweepInfo, db_path: str) -> str:
     follow_comment = (
         f"# Measured: {follow_cols}" if follow_cols else "# Measured: (see df.columns)"
     )
+    rid = sweep.run_id
 
     return f"""# Load SimulSweep dataset (simultaneous parameter sweep)
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({sweep.run_id})
-df = ds.to_pandas_dataframe().reset_index()
+ds_{rid} = load_by_id({rid})
+df_{rid} = ds_{rid}.to_pandas_dataframe().reset_index()
 
 # Columns from metadata:
 {set_comment}
 {follow_comment}
-print("Columns:", df.columns.tolist())
-print(df.head())
+print("Columns:", df_{rid}.columns.tolist())
+print(df_{rid}.head())
 
 # Optional: Quick plot (uncomment to use)
 # import matplotlib.pyplot as plt
-# df.plot(x="{first_set}", y="{first_follow}")
+# df_{rid}.plot(x="{first_set}", y="{first_follow}")
 """
 
 
@@ -546,47 +554,51 @@ def _generate_sweep_queue_code(group: SweepGroup, db_path: str) -> str:
         set_comment = "# Swept: (see df.columns)"
         follow_comment = "# Measured: (see df.columns)"
 
+    # Use first run_id as suffix to identify this batch
+    gid = min(group.run_ids)
+
     return f"""# Load SweepQueue batch - {len(group.run_ids)} runs ({sweep_type_desc})
 # Experiment: "{group.exp_name}", Sample: {group.sample_name}
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{gid} = "{db_path}"
+initialise_or_create_database_at(db_path_{gid})
 
 # All run IDs in this SweepQueue batch
-run_ids = [{run_ids_str}]
+run_ids_{gid} = [{run_ids_str}]
 
 # Expected columns (from first sweep metadata):
 {set_comment}
 {follow_comment}
 
 # Load all datasets as DataFrames
-dfs = {{}}
-for run_id in run_ids:
-    ds = load_by_id(run_id)
-    dfs[run_id] = ds.to_pandas_dataframe().reset_index()
-    print(f"Run {{run_id}}: {{len(dfs[run_id])}} points, columns: {{dfs[run_id].columns.tolist()}}")
+dfs_{gid} = {{}}
+for rid in run_ids_{gid}:
+    ds = load_by_id(rid)
+    dfs_{gid}[rid] = ds.to_pandas_dataframe().reset_index()
+    print(f"Run {{rid}}: {{len(dfs_{gid}[rid])}} points, columns: {{dfs_{gid}[rid].columns.tolist()}}")
 
-# Access individual run: df = dfs[run_ids[0]]
+# Access individual run: df = dfs_{gid}[run_ids_{gid}[0]]
 """
 
 
 def _generate_qcodes_code(sweep: SweepInfo, db_path: str) -> str:
     """Generate code for loading a raw QCodes dataset (no MeasureIt metadata)."""
+    rid = sweep.run_id
     return f"""# Load QCodes dataset
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({sweep.run_id})
-df = ds.to_pandas_dataframe().reset_index()
+ds_{rid} = load_by_id({rid})
+df_{rid} = ds_{rid}.to_pandas_dataframe().reset_index()
 
 # DataFrame columns: setpoints (index) + measured parameters
-print("Columns:", df.columns.tolist())
-print(df.head())
+print("Columns:", df_{rid}.columns.tolist())
+print(df_{rid}.head())
 """
 
 
@@ -717,18 +729,19 @@ def generate_single_dataset_code(
 
 def _generate_fallback_code(db_path: str, run_id: int) -> str:
     """Generate basic fallback code when sweep type cannot be determined."""
+    rid = run_id
     return f"""# Load dataset
 from qcodes.dataset import load_by_id
 from qcodes.dataset.sqlite.database import initialise_or_create_database_at
 
-db_path = "{db_path}"
-initialise_or_create_database_at(db_path)
+db_path_{rid} = "{db_path}"
+initialise_or_create_database_at(db_path_{rid})
 
-ds = load_by_id({run_id})
-data = ds.get_parameter_data()
+ds_{rid} = load_by_id({rid})
+data_{rid} = ds_{rid}.get_parameter_data()
 
 # Explore available parameters
-print("Available parameters:", list(data.keys()))
-for param, values in data.items():
+print("Available parameters:", list(data_{rid}.keys()))
+for param, values in data_{rid}.items():
     print(f"  {{param}}: {{list(values.keys())}}")
 """
