@@ -362,6 +362,99 @@ class TestNotebookApplyPatch:
             ), f"Expected 'not found' error: {content}"
 
 
+class TestNotebookUpdateEditingCell:
+    """Test notebook_update_editing_cell tool."""
+
+    @pytest.mark.p0
+    def test_update_editing_cell_basic(self, mcp_server_dangerous):
+        """UM-060: notebook_update_editing_cell replaces cell content."""
+        page = mcp_server_dangerous["page"]
+
+        # Add new cell to work with
+        page.keyboard.press("Escape")
+        page.keyboard.press("B")  # Add cell below
+        page.keyboard.press("Enter")  # Enter edit mode
+        page.keyboard.type("original_content = 1")
+        # Stay in edit mode
+        page.wait_for_timeout(300)
+
+        # Update cell content
+        result = call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_update_editing_cell",
+            {"content": "new_content = 2"},
+        )
+        success, content = parse_tool_result(result)
+        assert success, f"Update failed: {content}"
+
+        page.keyboard.press("Escape")
+
+    @pytest.mark.p1
+    def test_update_editing_cell_detailed(self, mcp_server_dangerous):
+        """UM-061: notebook_update_editing_cell with detailed mode."""
+        page = mcp_server_dangerous["page"]
+
+        page.keyboard.press("Enter")
+        page.keyboard.type("x = 1")
+        # Stay in edit mode for the tool call
+        page.wait_for_timeout(200)
+
+        result = call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_update_editing_cell",
+            {"content": "x = 2", "detailed": True},
+        )
+        success, content = parse_tool_result(result)
+        assert success, f"Update failed: {content}"
+
+        page.keyboard.press("Escape")
+
+    @pytest.mark.p1
+    def test_update_editing_cell_markdown(self, mcp_server_dangerous):
+        """UM-062: notebook_update_editing_cell on markdown cell."""
+        page = mcp_server_dangerous["page"]
+
+        # Create markdown cell
+        page.keyboard.press("Escape")
+        page.keyboard.press("M")  # Convert to markdown
+        page.keyboard.press("Enter")
+        page.keyboard.type("# Original Header")
+        # Stay in edit mode for tool call
+        page.wait_for_timeout(200)
+
+        result = call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_update_editing_cell",
+            {"content": "# Updated Header"},
+        )
+        success, content = parse_tool_result(result)
+        assert success, f"Update markdown failed: {content}"
+
+        page.keyboard.press("Escape")
+
+    @pytest.mark.p1
+    def test_update_editing_cell_empty_content(self, mcp_server_dangerous):
+        """UM-063: notebook_update_editing_cell with empty content."""
+        page = mcp_server_dangerous["page"]
+
+        page.keyboard.press("Enter")
+        page.keyboard.type("some_content = 1")
+        # Stay in edit mode for tool call
+        page.wait_for_timeout(200)
+
+        # Update to empty content
+        result = call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_update_editing_cell",
+            {"content": ""},
+        )
+        # Should succeed - empty content is valid
+        success, content = parse_tool_result(result)
+        assert success, f"Update to empty failed: {content}"
+
+        page.keyboard.press("Escape")
+
+
 class TestUnsafeToolAvailability:
     """Test tool availability in unsafe mode."""
 

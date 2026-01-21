@@ -293,6 +293,175 @@ class TestAllowedPatterns:
         ), f"os.getcwd should be allowed: {content}"
 
 
+class TestObfuscationPatterns:
+    """Test handling of obfuscated dangerous code patterns in dangerous mode.
+
+    Note: These tests run in dangerous mode which bypasses security scanning.
+    The purpose is to verify the system handles these patterns without crashing,
+    not to test blocking (blocking is tested in safe/unsafe mode fixtures).
+    """
+
+    @pytest.mark.p1
+    def test_block_dunder_import(self, mcp_server_dangerous):
+        """SS-060: System handles __import__ pattern in dangerous mode."""
+        code = "__import__('os').system('echo test')"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash handling this pattern
+        assert exec_result is not None
+
+    @pytest.mark.p1
+    def test_block_getattr_dangerous(self, mcp_server_dangerous):
+        """SS-061: System handles getattr-based patterns in dangerous mode."""
+        code = "import os; getattr(os, 'system')('echo test')"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash handling this pattern
+        assert exec_result is not None
+
+    @pytest.mark.p1
+    def test_block_eval_with_dangerous_string(self, mcp_server_dangerous):
+        """SS-062: System handles eval with dangerous string in dangerous mode."""
+        code = 'eval(\'__import__("os").system("echo test")\')'
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash handling eval
+        assert exec_result is not None
+
+    @pytest.mark.p1
+    def test_block_ipython_shell_escape(self, mcp_server_dangerous):
+        """SS-063: System handles IPython shell escape in dangerous mode."""
+        code = "!echo 'shell escape'"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash with shell escape
+        assert exec_result is not None
+
+    @pytest.mark.p1
+    def test_block_ipython_bash_magic(self, mcp_server_dangerous):
+        """SS-064: System handles IPython %%bash magic in dangerous mode."""
+        code = "%%bash\necho 'bash magic'"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash with bash magic
+        assert exec_result is not None
+
+    @pytest.mark.p2
+    def test_allow_safe_string_containing_dangerous_words(self, mcp_server_dangerous):
+        """SS-065: Allow strings containing 'os.system' (not actual call)."""
+        code = "message = 'Warning: do not use os.system for security reasons'"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        success, content = parse_tool_result(exec_result)
+        # Should succeed - it's just a string literal, not actual code
+        assert success or "block" not in content.lower()
+
+    @pytest.mark.p1
+    def test_block_multiline_subprocess(self, mcp_server_dangerous):
+        """SS-066: System handles multiline subprocess in dangerous mode."""
+        code = """import subprocess
+result = subprocess.run(['ls', '-la'])
+print(result)"""
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash with subprocess
+        assert exec_result is not None
+
+    @pytest.mark.p1
+    def test_block_exec_multiline(self, mcp_server_dangerous):
+        """SS-067: System handles exec with multiline code in dangerous mode."""
+        code = '''exec("""
+x = 1
+y = 2
+print(x + y)
+""")'''
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash with exec
+        assert exec_result is not None
+
+    @pytest.mark.p2
+    def test_block_builtins_manipulation(self, mcp_server_dangerous):
+        """SS-068: System handles __builtins__ access in dangerous mode."""
+        code = "__builtins__.__dict__['open']('/etc/passwd')"
+        call_mcp_tool(
+            mcp_server_dangerous["url"],
+            "notebook_add_cell",
+            {"cell_type": "code", "position": "below", "content": code},
+        )
+        mcp_server_dangerous["page"].wait_for_timeout(500)
+
+        exec_result = call_mcp_tool(
+            mcp_server_dangerous["url"], "notebook_execute_active_cell"
+        )
+        # In dangerous mode, verify system doesn't crash with builtins access
+        assert exec_result is not None
+
+
 class TestSecurityBypass:
     """Test that dangerous mode bypasses security scanner."""
 

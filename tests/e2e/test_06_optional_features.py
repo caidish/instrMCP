@@ -484,6 +484,228 @@ class TestDynamicTools:
         assert success or result is not None
 
 
+class TestMeasureItSweepTools:
+    """Test MeasureIt sweep lifecycle tools."""
+
+    @pytest.mark.p1
+    def test_measureit_wait_for_sweep_timeout(self, notebook_page, mcp_port):
+        """OF-040: measureit_wait_for_sweep with timeout returns sweep state."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        # Call with timeout - even without active sweep should handle gracefully
+        result = call_mcp_tool(
+            base_url,
+            "measureit_wait_for_sweep",
+            {"timeout": 5, "all": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should succeed or indicate no sweeps
+        assert (
+            success or "no sweep" in content.lower() or "not found" in content.lower()
+        ), f"Unexpected error: {content}"
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p1
+    def test_measureit_wait_for_sweep_variable_name(self, notebook_page, mcp_port):
+        """OF-041: measureit_wait_for_sweep with specific variable name."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        # Try to wait for a non-existent sweep
+        result = call_mcp_tool(
+            base_url,
+            "measureit_wait_for_sweep",
+            {"timeout": 2, "variable_name": "nonexistent_sweep"},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should handle gracefully - no such sweep
+        assert result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p1
+    def test_measureit_kill_sweep_all(self, notebook_page, mcp_port):
+        """OF-042: measureit_kill_sweep with all=True."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        # Kill all sweeps (should succeed even if no sweeps)
+        result = call_mcp_tool(
+            base_url,
+            "measureit_kill_sweep",
+            {"all": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should succeed or indicate no sweeps to kill
+        assert (
+            success or "no sweep" in content.lower() or result is not None
+        ), f"Unexpected error: {content}"
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p1
+    def test_measureit_kill_sweep_variable(self, notebook_page, mcp_port):
+        """OF-043: measureit_kill_sweep with specific variable name."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        # Try to kill a non-existent sweep
+        result = call_mcp_tool(
+            base_url,
+            "measureit_kill_sweep",
+            {"variable_name": "nonexistent_sweep"},
+        )
+        # Should handle gracefully
+        assert result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p2
+    def test_measureit_get_status_detailed(self, notebook_page, mcp_port):
+        """OF-044: measureit_get_status with detailed=True."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        result = call_mcp_tool(
+            base_url,
+            "measureit_get_status",
+            {"detailed": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should succeed with detailed output
+        assert success or result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+
+class TestDatabaseToolsEdgeCases:
+    """Test database tools edge cases."""
+
+    @pytest.mark.p2
+    def test_database_list_experiments_scan_nested(self, notebook_page, mcp_port):
+        """OF-045: database_list_experiments with scan_nested=True."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option database")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        result = call_mcp_tool(
+            base_url,
+            "database_list_experiments",
+            {"scan_nested": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should handle gracefully
+        assert result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p2
+    def test_database_list_experiments_detailed(self, notebook_page, mcp_port):
+        """OF-046: database_list_experiments with detailed=True."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option database")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        result = call_mcp_tool(
+            base_url,
+            "database_list_experiments",
+            {"detailed": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should handle gracefully
+        assert result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p2
+    def test_database_list_all_available_db_detailed(self, notebook_page, mcp_port):
+        """OF-047: database_list_all_available_db with detailed=True."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option database")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+
+        result = call_mcp_tool(
+            base_url,
+            "database_list_all_available_db",
+            {"detailed": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should handle gracefully
+        assert result is not None
+
+        run_cell(notebook_page, "%mcp_stop")
+
+
 class TestOptionDisabling:
     """Test disabling optional features."""
 

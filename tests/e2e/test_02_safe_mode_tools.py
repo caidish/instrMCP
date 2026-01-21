@@ -187,10 +187,11 @@ class TestNotebookTools:
         code = "# Line 1\n# Line 2\n# Line 3\n# Line 4\n# Line 5"
         run_cell(page, code, wait_for_output=False)
 
+        # FIXED: Use correct parameter names (line_start/line_end not start_line/end_line)
         result = call_mcp_tool(
             mcp_server["url"],
             "notebook_read_active_cell",
-            {"start_line": 2, "end_line": 4},
+            {"line_start": 2, "line_end": 4},
         )
         success, content = parse_tool_result(result)
         assert success, f"Tool call failed: {content}"
@@ -550,3 +551,54 @@ class TestToolAvailability:
             assert (
                 tool not in tool_names
             ), f"Unsafe tool {tool} should not be in safe mode"
+
+
+class TestResourceTemplates:
+    """Test MCP resource template retrieval."""
+
+    @pytest.mark.p1
+    def test_list_resources_returns_list(self, mcp_server):
+        """SM-100: mcp_list_resources returns a list of resources."""
+        resources = list_mcp_resources(mcp_server["url"])
+        assert isinstance(resources, list), "Expected list of resources"
+
+    @pytest.mark.p1
+    def test_resources_have_uri(self, mcp_server):
+        """SM-101: Resources have URI field."""
+        resources = list_mcp_resources(mcp_server["url"])
+        # Check all resources that are dicts have URI
+        for i, resource in enumerate(resources):
+            if isinstance(resource, dict):
+                assert (
+                    "uri" in resource
+                ), f"Resource {i} missing 'uri' field: {resource}"
+
+    @pytest.mark.p1
+    def test_get_available_instruments_resource(self, mcp_server):
+        """SM-102: Get available_instruments resource."""
+        resource = get_mcp_resource(
+            mcp_server["url"], "resource://available_instruments"
+        )
+        # Should return something (may be empty if no instruments)
+        assert resource is not None
+
+    @pytest.mark.p2
+    def test_resources_not_empty(self, mcp_server):
+        """SM-103: Resources list has at least one resource in safe mode."""
+        resources = list_mcp_resources(mcp_server["url"])
+        # Should have at least some core resources
+        assert isinstance(resources, list), "Expected list"
+        assert len(resources) > 0, "Expected at least one resource in the list"
+
+    @pytest.mark.p2
+    def test_get_nonexistent_resource_error(self, mcp_server):
+        """SM-104: Getting non-existent resource returns error or empty content."""
+        resource = get_mcp_resource(
+            mcp_server["url"], "resource://definitely_nonexistent_resource_xyz"
+        )
+        # Should return a response (error or empty), verify it's returned
+        assert resource is not None
+        # If it's a dict with error info or empty content, that's valid
+        if isinstance(resource, dict):
+            # Either has content key or error key
+            assert "contents" in resource or "error" in resource or len(resource) == 0
