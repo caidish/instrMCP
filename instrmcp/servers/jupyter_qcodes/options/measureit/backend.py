@@ -661,6 +661,7 @@ class MeasureItBackend(BaseBackend):
             return {
                 "sweep": target,
                 "not_started": True,
+                "killed": False,
                 "message": (
                     f"SweepQueue '{var_name}' has {target.get('queue_length', 0)} items "
                     f"queued but has not been started. Call {var_name}.start() to start."
@@ -821,18 +822,20 @@ class MeasureItBackend(BaseBackend):
 
         # Helper to categorize sweep state
         def _categorize_sweep(sweep_info):
-            """Returns 'running', 'error', or 'done'."""
+            """Returns 'running', 'pending', 'error', or 'done'."""
             state = sweep_info["state"]
             is_sweep_queue = sweep_info.get("type") == "SweepQueue"
             if is_sweep_queue:
                 # SweepQueue: only "running" is active
-                # "pending" means queue has items but isn't started - treat as done
+                # "pending" means queue has items but isn't started - separate category
                 # "paused" is "done" - return so caller can decide what to do
                 if state == "running":
                     return "running"
+                elif state == "pending":
+                    return "pending"
                 elif state in ("error", "stopped"):
                     return "error"
-                else:  # "idle", "paused", "pending"
+                else:  # "idle", "paused"
                     return "done"
             else:
                 # Regular sweep
@@ -872,16 +875,22 @@ class MeasureItBackend(BaseBackend):
                 )
                 all_kill_results[name] = await self.kill_sweep(name)
 
+        # Handle SweepQueues in pending state (items queued but not started)
+        # Don't kill these - just report them with not_started info
+        pending_queues = {
+            k: v for k, v in sweeps.items() if _categorize_sweep(v) == "pending"
+        }
+
         initial_running = {
             k: v for k, v in sweeps.items() if _categorize_sweep(v) == "running"
         }
 
         # If no running sweeps, return results from already-handled sweeps
         if not initial_running:
-            if not already_errored and not already_done:
+            if not already_errored and not already_done and not pending_queues:
                 return {"sweeps": None}
             # Return combined results
-            all_sweeps = {**already_errored, **already_done}
+            all_sweeps = {**already_errored, **already_done, **pending_queues}
             result = {"sweeps": all_sweeps}
             if kill and all_kill_results:
                 all_killed = all(
@@ -891,6 +900,12 @@ class MeasureItBackend(BaseBackend):
                 result["kill_results"] = all_kill_results
             else:
                 result["killed"] = False
+            if pending_queues:
+                result["not_started"] = list(pending_queues.keys())
+                result["not_started_message"] = (
+                    "Some SweepQueues have items queued but have not been started. "
+                    "Call .start() on them to begin processing."
+                )
             if errored_sweeps:
                 result["error"] = "; ".join(error_messages)
                 result["sweep_error"] = True
@@ -962,7 +977,12 @@ class MeasureItBackend(BaseBackend):
                 ]
 
                 # Combine all sweeps and include already-killed results
-                all_sweeps = {**already_errored, **already_done, **initial_running}
+                all_sweeps = {
+                    **already_errored,
+                    **already_done,
+                    **pending_queues,
+                    **initial_running,
+                }
                 result = {
                     "sweeps": all_sweeps,
                     "error": f"Timeout after {timeout}s waiting for sweeps to complete",
@@ -982,6 +1002,12 @@ class MeasureItBackend(BaseBackend):
                     )
                 else:
                     result["killed"] = False
+                if pending_queues:
+                    result["not_started"] = list(pending_queues.keys())
+                    result["not_started_message"] = (
+                        "Some SweepQueues have items queued but have not been started. "
+                        "Call .start() on them to begin processing."
+                    )
                 if errored_sweeps:
                     result["sweep_error"] = True
                     result["errored_sweeps"] = errored_sweeps
@@ -1000,7 +1026,12 @@ class MeasureItBackend(BaseBackend):
                     all_kill_results[name] = await self.kill_sweep(name)
 
         # Combine all results
-        all_sweeps = {**already_errored, **already_done, **initial_running}
+        all_sweeps = {
+            **already_errored,
+            **already_done,
+            **pending_queues,
+            **initial_running,
+        }
         result = {"sweeps": all_sweeps}
 
         if kill and all_kill_results:
@@ -1009,6 +1040,13 @@ class MeasureItBackend(BaseBackend):
             result["kill_results"] = all_kill_results
         else:
             result["killed"] = False
+
+        if pending_queues:
+            result["not_started"] = list(pending_queues.keys())
+            result["not_started_message"] = (
+                "Some SweepQueues have items queued but have not been started. "
+                "Call .start() on them to begin processing."
+            )
 
         if errored_sweeps:
             result["error"] = "; ".join(error_messages)
