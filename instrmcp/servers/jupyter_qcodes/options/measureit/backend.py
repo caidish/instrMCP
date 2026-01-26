@@ -54,7 +54,8 @@ def _get_progress_state(sweep: Any) -> Optional[Any]:
     """Get the progress state from a sweep object.
 
     Handles both BaseSweep (direct progressState attribute) and SweepQueue
-    (current_sweep.progressState via state() delegation).
+    (accesses current_sweep.progressState; note that SweepQueue also has a
+    state() method that returns the same value).
 
     Args:
         sweep: A BaseSweep or SweepQueue instance
@@ -254,27 +255,34 @@ class MeasureItBackend(BaseBackend):
                     # Qt kill failed - check state and report
                     logger.debug(f"Qt kill on stopped sweep '{var_name}' failed: {e}")
                     progress_state = _get_progress_state(sweep)
-                    if progress_state:
-                        current_state = progress_state.state.value
-                        if current_state not in SWEEP_STATE_RUNNING:
-                            # Sweep is still stopped - no need to kill
-                            return {
-                                "success": True,
-                                "sweep_name": var_name,
-                                "sweep_type": type(sweep).__name__,
-                                "previous_state": previous_state,
-                                "new_state": current_state,
-                                "message": f"Sweep '{var_name}' was already stopped (state: {current_state}). No kill needed.",
-                            }
-                        else:
-                            # Sweep somehow started running - fall through to retry loop
-                            logger.warning(
-                                "Sweep '%s' state changed from '%s' to '%s' during kill attempt",
-                                var_name,
-                                previous_state,
-                                current_state,
-                            )
-                            previous_state = current_state
+                    if not progress_state:
+                        # Can't access state, assume sweep is stuck
+                        return {
+                            "success": False,
+                            "sweep_name": var_name,
+                            "error": f"Cannot access progress state for '{var_name}' after kill attempt",
+                        }
+
+                    current_state = progress_state.state.value
+                    if current_state not in SWEEP_STATE_RUNNING:
+                        # Sweep is still stopped - no need to kill
+                        return {
+                            "success": True,
+                            "sweep_name": var_name,
+                            "sweep_type": type(sweep).__name__,
+                            "previous_state": previous_state,
+                            "new_state": current_state,
+                            "message": f"Sweep '{var_name}' was already stopped (state: {current_state}). No kill needed.",
+                        }
+                    else:
+                        # Sweep somehow started running - fall through to retry loop
+                        logger.warning(
+                            "Sweep '%s' state changed from '%s' to '%s' during kill attempt",
+                            var_name,
+                            previous_state,
+                            current_state,
+                        )
+                        previous_state = current_state
 
             # Retry kill with verification - Qt event loop may need time to process
             max_retries = 5
