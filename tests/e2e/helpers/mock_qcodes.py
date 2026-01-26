@@ -203,3 +203,46 @@ MEASUREIT_CHECK_QUEUE_STATE = """
 print(f"sweep_queue.state() = {sweep_queue.state()}")
 print(f"sweep_queue.current_sweep = {sweep_queue.current_sweep}")
 """
+
+# Setup code for MeasureIt SweepQueue with Sweep2D and save_data=True
+# This tests a more realistic scenario with 2D sweeps that save data
+MEASUREIT_SWEEP2D_QUEUE_SETUP = """
+import time
+from qcodes.instrument_drivers.mock_instruments import MockParabola
+from qcodes.instrument import Instrument
+from measureit import Sweep2D
+from measureit.tools import ensure_qt
+from measureit.tools.sweep_queue import SweepQueue, DatabaseEntry
+from measureit.config import get_path
+ensure_qt()
+Instrument.close_all()
+instr = MockParabola(name=f"test_instr_{int(time.time())}")
+# 3 Sweep2D with save_data=True - small sweeps for faster testing
+# Sweep2D expects: in_params=[param, start, stop, step], out_params=[param, start, stop, step]
+# outer: 3 points, inner: 3 points, total 9 points per sweep
+s1 = Sweep2D([instr.x, 0, 2, 1], [instr.y, 0, 2, 1], inter_delay=0.05, save_data=True)
+s2 = Sweep2D([instr.x, 0, 2, 1], [instr.y, 0, 2, 1], inter_delay=0.05, save_data=True)
+s3 = Sweep2D([instr.x, 0, 2, 1], [instr.y, 0, 2, 1], inter_delay=0.05, save_data=True)
+# Setup database entries for each sweep (save_data=True requires DatabaseEntry)
+db_name = "e2e_test_sweep2d.db"
+db_path = str(get_path("databases") / db_name)
+exp_name = f"e2e_test_{int(time.time())}"
+db_entry1 = DatabaseEntry(db_path, exp_name, "sweep2d_s1")
+db_entry2 = DatabaseEntry(db_path, exp_name, "sweep2d_s2")
+db_entry3 = DatabaseEntry(db_path, exp_name, "sweep2d_s3")
+sweep_queue = SweepQueue()
+# Each sweep needs its own database entry
+sweep_queue += (db_entry1, s1)
+sweep_queue += (db_entry2, s2)
+sweep_queue += (db_entry3, s3)
+print("Sweep2D SweepQueue setup complete")
+print(f"s1.progressState.is_queued = {s1.progressState.is_queued}")
+print(f"s2.progressState.is_queued = {s2.progressState.is_queued}")
+print(f"s3.progressState.is_queued = {s3.progressState.is_queued}")
+"""
+
+# Code to start the sweep2D queue (run after MEASUREIT_SWEEP2D_QUEUE_SETUP)
+MEASUREIT_START_SWEEP2D_QUEUE = """
+sweep_queue.start()
+print("Sweep2D SweepQueue started")
+"""

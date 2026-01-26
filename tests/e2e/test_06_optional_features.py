@@ -20,6 +20,8 @@ from tests.e2e.helpers.mock_qcodes import (
     DYNAMIC_TOOLS,
     MEASUREIT_SWEEP_QUEUE_SETUP,
     MEASUREIT_START_QUEUE,
+    MEASUREIT_SWEEP2D_QUEUE_SETUP,
+    MEASUREIT_START_SWEEP2D_QUEUE,
 )
 
 
@@ -918,3 +920,89 @@ class TestSweepQueueQueuedSweeps:
         assert (
             "sweep_queue" in content or success
         ), f"wait_for_sweep should find sweep_queue: {content}"
+
+    @pytest.mark.p1
+    def test_sweep2d_queue_wait_for_sweep_no_early_exit(
+        self, mcp_server_measureit_sweepqueue
+    ):
+        """OF-054: Test wait_for_sweep does not exit early with 3 Sweep2D (save_data=True).
+
+        This test verifies that wait_for_sweep correctly waits for all 3 Sweep2D
+        operations to complete when using save_data=True, and does not exit
+        prematurely after the first or second sweep finishes.
+
+        The test:
+        1. Sets up 3 Sweep2D with save_data=True
+        2. Starts the SweepQueue
+        3. Calls wait_for_sweep with sufficient timeout
+        4. Verifies the queue completed all sweeps (state should be "idle" or "done")
+        5. Verifies no premature exit (timed_out should be False)
+        """
+        page = mcp_server_measureit_sweepqueue["page"]
+        base_url = mcp_server_measureit_sweepqueue["url"]
+
+        # Create 3 Sweep2D with save_data=True
+        run_cell(page, MEASUREIT_SWEEP2D_QUEUE_SETUP)
+        page.wait_for_timeout(1000)
+
+        # Verify setup completed
+        output = get_cell_output(page)
+        assert "is_queued = True" in output, f"is_queued not set properly: {output}"
+
+        # Start the sweep queue and IMMEDIATELY call wait_for_sweep (no delay)
+        # This tests the race condition where the queue might still be in "pending" state
+        # when wait_for_sweep checks the status for the first time
+        run_cell(page, MEASUREIT_START_SWEEP2D_QUEUE)
+        # NO delay here - we want to catch the timing bug where "pending" is misinterpreted
+
+        # Wait for sweep with sufficient timeout (30s should be enough for 3 small sweeps)
+        # Each Sweep2D has 9 points with 0.05s delay = ~0.45s per sweep
+        # Plus save_data overhead, 30s is generous
+        result = call_mcp_tool(
+            base_url,
+            "measureit_wait_for_sweep",
+            {
+                "variable_name": "sweep_queue",
+                "timeout": 30,
+                "kill": True,
+                "detailed": True,
+            },
+        )
+        success, content = parse_tool_result(result)
+
+        # Verify wait_for_sweep did not timeout (no early exit)
+        assert (
+            "timed_out" not in content or '"timed_out": false' in content.lower()
+        ), f"wait_for_sweep should not timeout - may have exited early: {content}"
+
+        # Verify the queue completed (state should be idle after completion and kill)
+        # The sweep should have finished successfully
+        assert (
+            success or "sweep_queue" in content
+        ), f"wait_for_sweep should complete successfully: {content}"
+
+        # Verify no error occurred during the sweep
+        if "sweep_error" in content:
+            # If there's a sweep_error, this is a different issue (not early exit)
+            assert (
+                '"sweep_error": false' in content.lower()
+                or "sweep_error" not in content
+            ), f"Sweep completed with error (not early exit issue): {content}"
+
+        # CRITICAL: Verify no premature exit by checking the final state
+        # If wait_for_sweep exited early with "pending" state, it would show that
+        assert (
+            '"state": "pending"' not in content.lower()
+        ), f"wait_for_sweep exited with 'pending' state - this indicates early exit bug: {content}"
+
+        # Also check that not_started is not in the response
+        assert (
+            "not_started" not in content.lower()
+        ), f"wait_for_sweep returned not_started - queue was not properly waited for: {content}"
+
+        # Verify the queue is now idle (all sweeps completed)
+        # After all sweeps complete and kill is called, state should be "idle" or "killed"
+        assert (
+            '"state": "idle"' in content.lower()
+            or '"state": "killed"' in content.lower()
+        ), f"Queue should be idle/killed after completion, got: {content}"
