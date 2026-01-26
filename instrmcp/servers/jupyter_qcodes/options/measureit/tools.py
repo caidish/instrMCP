@@ -4,6 +4,7 @@ MeasureIt integration tool registrar.
 Registers tools for interacting with MeasureIt sweep objects (optional feature).
 """
 
+import asyncio
 import json
 import logging
 from typing import List, Optional
@@ -253,10 +254,14 @@ class MeasureItToolRegistrar:
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+            # Internal timeout to prevent hanging
+            KILL_TIMEOUT = 5.0
             try:
                 # If all=True, kill all sweeps
                 if all:
-                    result = await self.tools.kill_all_sweeps()
+                    result = await asyncio.wait_for(
+                        self.tools.kill_all_sweeps(), timeout=KILL_TIMEOUT
+                    )
                 else:
                     # Require variable_name when all=False
                     if not variable_name:
@@ -273,11 +278,24 @@ class MeasureItToolRegistrar:
                                 ),
                             )
                         ]
-                    result = await self.tools.kill_sweep(variable_name)
+                    result = await asyncio.wait_for(
+                        self.tools.kill_sweep(variable_name), timeout=KILL_TIMEOUT
+                    )
 
                 return [
                     TextContent(
                         type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except asyncio.TimeoutError:
+                logger.error("measureit/kill_sweep timed out after 5s")
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {"error": "Kill operation timed out after 5 seconds"},
+                            indent=2,
+                        ),
                     )
                 ]
             except Exception as e:
