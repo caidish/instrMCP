@@ -99,8 +99,10 @@ class ResourceRegistrar:
                 "openWorldHint": False,
             },
         )
-        async def list_resources():
+        async def list_resources(detailed: bool = False):
             # Description loaded from metadata_baseline.yaml
+            # detailed parameter reserved for future use
+            _ = detailed
             # Dynamically query registered resources to reflect metadata overrides
             try:
                 registered = await self.mcp.get_resources()
