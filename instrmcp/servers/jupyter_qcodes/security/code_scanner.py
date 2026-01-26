@@ -885,6 +885,214 @@ class SleepVisitor(BaseSecurityVisitor):
         self.generic_visit(node)
 
 
+class NestedSweepStartVisitor(BaseSecurityVisitor):
+    """Detect .start() calls inside loops - indicates nested sweep antipattern.
+
+    When .start() is called inside a for/while loop body, it typically indicates
+    the user is trying to run multiple sweeps sequentially by looping.
+    This is an antipattern because:
+    1. Each sweep.start() is non-blocking, so the loop will start all sweeps simultaneously
+    2. This leads to race conditions and unpredictable behavior
+    3. The correct approach is to use SweepQueue for sequential sweeps
+
+    WRONG usage (antipattern):
+        for param in params:
+            sweep = Sweep(...)
+            sweep.start()  # All sweeps start at once!
+
+        while condition:
+            sweep.start()  # Multiple concurrent sweeps
+
+    CORRECT usage:
+        # Use SweepQueue for sequential sweeps
+        queue = SweepQueue()
+        for param in params:
+            queue.append(Sweep(...))
+        queue.start()  # Runs sweeps sequentially
+
+    Note: This visitor carefully handles:
+    - Only flags .start() in loop BODY (not iterator/test/else blocks)
+    - Resets depth for new scopes (functions, lambdas, classes)
+    - Catches chained calls like Sweep(...).start()
+    """
+
+    def __init__(self, alias_tracker: AliasTracker):
+        super().__init__(alias_tracker)
+        self.loop_depth = 0  # Track nested loop depth
+
+    def _visit_loop_body(self, body: List[ast.stmt]):
+        """Visit loop body statements with incremented loop depth."""
+        self.loop_depth += 1
+        for stmt in body:
+            self.visit(stmt)
+        self.loop_depth -= 1
+
+    def _visit_body_new_scope(self, body: List[ast.stmt]):
+        """Visit body statements with reset loop depth (new scope)."""
+        prev_depth = self.loop_depth
+        self.loop_depth = 0
+        for stmt in body:
+            self.visit(stmt)
+        self.loop_depth = prev_depth
+
+    def visit_For(self, node: ast.For):
+        """Visit for loop - only flag .start() in body, not iterator/else."""
+        # Visit target and iterator outside loop context
+        self.visit(node.target)
+        self.visit(node.iter)
+        # Visit body with loop context
+        self._visit_loop_body(node.body)
+        # Visit else block outside loop context (runs once after loop completes)
+        for stmt in node.orelse:
+            self.visit(stmt)
+
+    def visit_While(self, node: ast.While):
+        """Visit while loop - only flag .start() in body, not test/else."""
+        # Visit test outside loop context
+        self.visit(node.test)
+        # Visit body with loop context
+        self._visit_loop_body(node.body)
+        # Visit else block outside loop context
+        for stmt in node.orelse:
+            self.visit(stmt)
+
+    def visit_AsyncFor(self, node: ast.AsyncFor):
+        """Visit async for loop - only flag .start() in body."""
+        self.visit(node.target)
+        self.visit(node.iter)
+        self._visit_loop_body(node.body)
+        for stmt in node.orelse:
+            self.visit(stmt)
+
+    def _visit_comprehension_generators(self, generators: List[ast.comprehension]):
+        """Visit comprehension generators with proper loop depth tracking.
+
+        For nested comprehensions like `[x for x in xs for y in ys]`:
+        - First iterator (xs) is outside loop context (runs once)
+        - Second+ iterators (ys) run per outer iteration (inside loop context)
+        - All targets and ifs are per-iteration
+        """
+        base_depth = self.loop_depth
+        for idx, gen in enumerate(generators):
+            # First iterator at base depth, subsequent at accumulated depth
+            self.loop_depth = base_depth + idx
+            self.visit(gen.iter)
+            # Target and ifs are inside this generator's loop
+            self.loop_depth = base_depth + idx + 1
+            self.visit(gen.target)
+            for if_clause in gen.ifs:
+                self.visit(if_clause)
+        # Reset to base depth (element expr will add its own +1)
+        self.loop_depth = base_depth
+
+    def visit_ListComp(self, node: ast.ListComp):
+        """Track list comprehensions - element expr inside all generator loops."""
+        base_depth = self.loop_depth
+        self._visit_comprehension_generators(node.generators)
+        # Element expression is inside all nested loops
+        self.loop_depth = base_depth + len(node.generators)
+        self.visit(node.elt)
+        self.loop_depth = base_depth
+
+    def visit_SetComp(self, node: ast.SetComp):
+        """Track set comprehensions - element expr inside all generator loops."""
+        base_depth = self.loop_depth
+        self._visit_comprehension_generators(node.generators)
+        self.loop_depth = base_depth + len(node.generators)
+        self.visit(node.elt)
+        self.loop_depth = base_depth
+
+    def visit_DictComp(self, node: ast.DictComp):
+        """Track dict comprehensions - key/value inside all generator loops."""
+        base_depth = self.loop_depth
+        self._visit_comprehension_generators(node.generators)
+        self.loop_depth = base_depth + len(node.generators)
+        self.visit(node.key)
+        self.visit(node.value)
+        self.loop_depth = base_depth
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp):
+        """Track generator expressions - element inside all generator loops."""
+        base_depth = self.loop_depth
+        self._visit_comprehension_generators(node.generators)
+        self.loop_depth = base_depth + len(node.generators)
+        self.visit(node.elt)
+        self.loop_depth = base_depth
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        """Visit function def - decorators/defaults at current depth, body at reset depth."""
+        # Decorators execute at definition time (in loop context)
+        for deco in node.decorator_list:
+            self.visit(deco)
+        # Python 3.12+ type_params (PEP 695) evaluate at definition time
+        for tp in getattr(node, "type_params", []):
+            self.visit(tp)
+        # Return annotation evaluates at definition time
+        if node.returns:
+            self.visit(node.returns)
+        # Default args and annotations evaluate at definition time
+        self.visit(node.args)
+        # Function body is a new scope (reset depth)
+        self._visit_body_new_scope(node.body)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        """Visit async function def - decorators/defaults at current depth, body at reset depth."""
+        for deco in node.decorator_list:
+            self.visit(deco)
+        # Python 3.12+ type_params (PEP 695)
+        for tp in getattr(node, "type_params", []):
+            self.visit(tp)
+        if node.returns:
+            self.visit(node.returns)
+        self.visit(node.args)
+        self._visit_body_new_scope(node.body)
+
+    def visit_Lambda(self, node: ast.Lambda):
+        """Visit lambda - defaults at current depth, body at reset depth."""
+        # Lambda args (defaults) evaluate at definition time
+        self.visit(node.args)
+        # Lambda body is a new scope
+        prev_depth = self.loop_depth
+        self.loop_depth = 0
+        self.visit(node.body)
+        self.loop_depth = prev_depth
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        """Visit class def - decorators/bases at current depth, body at reset depth."""
+        # Decorators execute at definition time
+        for deco in node.decorator_list:
+            self.visit(deco)
+        # Python 3.12+ type_params (PEP 695)
+        for tp in getattr(node, "type_params", []):
+            self.visit(tp)
+        # Base classes and metaclass keywords evaluate at definition time
+        for base in node.bases:
+            self.visit(base)
+        for kw in node.keywords:
+            self.visit(kw)
+        # Class body is a new scope
+        self._visit_body_new_scope(node.body)
+
+    def visit_Call(self, node: ast.Call):
+        """Detect .start() calls inside loops."""
+        if self.loop_depth > 0:
+            # Check for .start() method call - handles both:
+            # - sweep.start() (Attribute with Name value)
+            # - Sweep(...).start() (Attribute with Call value)
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "start":
+                self.add_issue(
+                    "SWEEP001",
+                    "Nested sweep .start() detected inside loop - use SweepQueue instead",
+                    RiskLevel.CRITICAL,
+                    node,
+                    "NEVER call .start() inside a loop. This starts multiple sweeps "
+                    "simultaneously, causing race conditions. Use SweepQueue instead. "
+                    "See resource://measureit_sweepqueue_template for the correct pattern.",
+                )
+
+        self.generic_visit(node)
+
+
 class PickleVisitor(BaseSecurityVisitor):
     """Detect pickle deserialization (arbitrary code execution risk)."""
 
@@ -1027,6 +1235,7 @@ class CodeScanner:
             PickleVisitor(alias_tracker),
             ThreadingVisitor(alias_tracker),
             SleepVisitor(alias_tracker),
+            NestedSweepStartVisitor(alias_tracker),
         ]
 
         for visitor in visitors:
