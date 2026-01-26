@@ -6,7 +6,7 @@ enabling Large Language Models to interact directly with physics instruments
 and measurement systems through standardized MCP interfaces.
 """
 
-__version__ = "2.3.3"
+__version__ = "2.3.4"
 __author__ = "Jiaqi Cai"
 __email__ = "jiaqic@mit.edu"
 __license__ = "MIT"

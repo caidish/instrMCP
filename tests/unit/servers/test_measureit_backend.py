@@ -437,3 +437,34 @@ class TestMeasureItBackend:
             assert result["sweep"] is not None
             assert result["sweep"]["variable_name"] == "my_queue"
             assert result["killed"] is True
+
+    @pytest.mark.asyncio
+    async def test_wait_for_sweep_with_pending_queue_returns_immediately(
+        self, backend, mock_state
+    ):
+        """Test wait_for_sweep() returns immediately for SweepQueue in pending state.
+
+        A SweepQueue in "pending" state has items queued but hasn't been started.
+        wait_for_sweep should return immediately with not_started=True rather than
+        waiting forever.
+        """
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
+            MockSweepQueue,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
+            MockBaseSweep,
+        ):
+            # Create a queue with items but not started (pending state)
+            queue = MockSweepQueue(state="idle")
+            queue.queue = ["sweep1", "sweep2"]  # Add items to queue
+            queue.current_sweep = None  # No current sweep running
+            mock_state.namespace["my_queue"] = queue
+
+            result = await backend.wait_for_sweep("my_queue", timeout=30.0, kill=True)
+
+            # Should return immediately with not_started=True
+            assert result["sweep"] is not None
+            assert result.get("not_started") is True
+            assert "has not been started" in result.get("message", "")
+            assert "my_queue.start()" in result.get("message", "")

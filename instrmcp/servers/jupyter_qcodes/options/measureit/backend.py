@@ -655,11 +655,22 @@ class MeasureItBackend(BaseBackend):
                 result["killed"] = False
             return result
 
+        # If SweepQueue is "pending" (has items but not started), return immediately
+        # because there's no active sweep to wait for - the queue needs to be started first
+        if is_sweep_queue and state == "pending":
+            return {
+                "sweep": target,
+                "not_started": True,
+                "message": (
+                    f"SweepQueue '{var_name}' has {target.get('queue_length', 0)} items "
+                    f"queued but has not been started. Call {var_name}.start() to start."
+                ),
+            }
+
         # If sweep is already done (not running, not error)
-        # For SweepQueue, also check for "pending" state (queue has items)
         if is_sweep_queue:
             # "paused" is considered done - return so caller can decide what to do
-            is_done = state not in ("running", "pending")
+            is_done = state != "running"
         else:
             is_done = state not in SWEEP_STATE_RUNNING
 
@@ -733,15 +744,14 @@ class MeasureItBackend(BaseBackend):
                 }
 
             # Check if sweep is done
-            # For SweepQueue, effective_state handles race condition automatically:
-            # "running", "pending" = still active
+            # For SweepQueue: only "running" is active
+            # "pending" means queue has items but isn't started - return immediately
             # "idle", "paused", "error", "stopped" = done (return so caller can decide)
             state = target["state"]
             is_sweep_queue = target.get("type") == "SweepQueue"
             if is_sweep_queue:
-                # SweepQueue uses effective_state which includes pending items
-                # "paused" returns so caller can decide what to do
-                is_active = state in ("running", "pending")
+                # Only "running" is considered active for SweepQueue
+                is_active = state == "running"
             else:
                 # Regular sweep just checks running states
                 is_active = state in SWEEP_STATE_RUNNING
@@ -815,13 +825,14 @@ class MeasureItBackend(BaseBackend):
             state = sweep_info["state"]
             is_sweep_queue = sweep_info.get("type") == "SweepQueue"
             if is_sweep_queue:
-                # SweepQueue uses effective_state
+                # SweepQueue: only "running" is active
+                # "pending" means queue has items but isn't started - treat as done
                 # "paused" is "done" - return so caller can decide what to do
-                if state in ("running", "pending"):
+                if state == "running":
                     return "running"
                 elif state in ("error", "stopped"):
                     return "error"
-                else:  # "idle", "paused"
+                else:  # "idle", "paused", "pending"
                     return "done"
             else:
                 # Regular sweep
@@ -910,9 +921,9 @@ class MeasureItBackend(BaseBackend):
 
                     # Determine if sweep is active
                     if is_sweep_queue:
-                        # SweepQueue uses effective_state
-                        # "paused" is not active - return so caller can decide
-                        is_active = state in ("running", "pending")
+                        # SweepQueue: only "running" is active
+                        # "pending" means queue has items but isn't started
+                        is_active = state == "running"
                         is_error = state in ("error", "stopped")
                     else:
                         # Regular sweep

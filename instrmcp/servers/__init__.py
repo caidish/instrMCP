@@ -3,7 +3,7 @@
 MCP server implementations for instrument control.
 """
 
-__version__ = "2.3.3"
+__version__ = "2.3.4"
 
 # Import servers
 from .jupyter_qcodes.mcp_server import JupyterMCPServer
