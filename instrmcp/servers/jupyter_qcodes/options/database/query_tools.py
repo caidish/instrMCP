@@ -373,11 +373,22 @@ def _find_nested_databases(base_dir: Path) -> list[Path]:
     try:
         # Use glob with explicit depth: */Databases/*.db
         # Then filter out Databases/Databases/ pattern to prevent confusion
-        return [
-            db_path
-            for db_path in base_dir.glob("*/Databases/*.db")
-            if db_path.parent.parent.name != "Databases"
-        ]
+        results = []
+        for db_path in base_dir.glob("*/Databases/*.db"):
+            # Safety check: ensure path has sufficient depth
+            # Pattern */Databases/*.db guarantees at least 3 parts relative to base_dir
+            try:
+                # Get the parent directory name (should be "Databases")
+                # and its parent (should be the experiment directory, not "Databases")
+                if len(db_path.parts) >= 3:
+                    parent_name = db_path.parent.name  # Should be "Databases"
+                    grandparent_name = db_path.parent.parent.name  # Should NOT be "Databases"
+                    if parent_name == "Databases" and grandparent_name != "Databases":
+                        results.append(db_path)
+            except (AttributeError, IndexError):
+                # Skip paths with unexpected structure
+                continue
+        return results
     except Exception:
         return []
 
