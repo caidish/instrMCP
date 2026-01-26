@@ -348,9 +348,36 @@ def _select_default_database(db_files: list[Path]) -> Optional[Path]:
 
 
 def _find_nested_databases(base_dir: Path) -> list[Path]:
-    """Find database files under nested Databases/ directories."""
+    """
+    Find database files under nested Databases/ directories.
+    
+    Searches for *.db files in Databases/ subdirectories that are one level
+    deep under base_dir (e.g., base_dir/experiment1/Databases/*.db).
+    
+    This prevents matching deeply nested structures like Databases/Databases/
+    which can occur when paths are incorrectly specified.
+    
+    Args:
+        base_dir: Base directory to search from
+        
+    Returns:
+        List of Path objects to .db files found in */Databases/ subdirectories
+        
+    Example:
+        If base_dir contains:
+            - experiment1/Databases/data.db      ✓ matches
+            - Databases/data.db                   ✗ does not match (not nested)
+            - Databases/Databases/data.db         ✗ does not match (avoid nesting)
+            - experiment1/sub/Databases/data.db   ✗ does not match (too deep)
+    """
     try:
-        return list(base_dir.rglob("Databases/*.db"))
+        # Use glob with explicit depth: */Databases/*.db
+        # Then filter out Databases/Databases/ pattern to prevent confusion
+        return [
+            db_path
+            for db_path in base_dir.glob("*/Databases/*.db")
+            if db_path.parent.parent.name != "Databases"
+        ]
     except Exception:
         return []
 
