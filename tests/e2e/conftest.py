@@ -25,6 +25,7 @@ from tests.e2e.helpers import (
     UNSAFE_MODE_NOTEBOOK,
     DANGEROUS_MODE_NOTEBOOK,
     DANGEROUS_DYNAMICTOOL_NOTEBOOK,
+    MEASUREIT_SWEEPQUEUE_NOTEBOOK,
     TEST_RESULTS_DIR,
     prepare_working_notebook,
     cleanup_working_notebook,
@@ -260,6 +261,26 @@ def mcp_server_dynamictool(
         repo_root,
         DANGEROUS_DYNAMICTOOL_NOTEBOOK,
         "dangerous+dynamictool",
+    )
+
+
+@pytest.fixture(scope="function")
+def mcp_server_measureit_sweepqueue(
+    page, jupyter_server, mcp_port, cell_wait_ms, repo_root
+) -> Generator[dict, None, None]:
+    """Start MCP server in dangerous mode with MeasureIt and SweepQueue setup.
+
+    Yields:
+        Dictionary with page, port, url, and mode
+    """
+    yield from _setup_mcp_server(
+        page,
+        jupyter_server,
+        mcp_port,
+        cell_wait_ms,
+        repo_root,
+        MEASUREIT_SWEEPQUEUE_NOTEBOOK,
+        "dangerous+measureit",
     )
 
 

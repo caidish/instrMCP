@@ -75,6 +75,22 @@ def _get_progress_state(sweep: Any) -> Optional[Any]:
     return None
 
 
+def _get_sweep_queue_status(sweep: Any) -> Optional[Dict[str, Any]]:
+    """Get comprehensive status from a SweepQueue using its status() method.
+
+    Returns:
+        Dict with effective_state, queue_length, last_error, etc., or None if not a SweepQueue
+        or if status() is unavailable.
+    """
+    if SweepQueue is None or not isinstance(sweep, SweepQueue):
+        return None
+
+    if hasattr(sweep, "status"):
+        return sweep.status()
+
+    return None
+
+
 class MeasureItBackend(BaseBackend):
     """Backend for MeasureIt sweep operations."""
 
@@ -116,19 +132,91 @@ class MeasureItBackend(BaseBackend):
                     continue
 
                 if _is_sweep(var_value):
+                    progress_state = _get_progress_state(var_value)
+
+                    # Skip individual sweeps (BaseSweep) managed by a SweepQueue
+                    # Don't skip SweepQueue objects themselves
+                    is_base_sweep = BaseSweep is not None and isinstance(
+                        var_value, BaseSweep
+                    )
+                    if is_base_sweep and progress_state:
+                        if getattr(progress_state, "is_queued", False):
+                            continue
+
                     sweep_info = {
                         "variable_name": var_name,
                         "module": getattr(var_value, "__module__", ""),
                     }
-                    progress_state = _get_progress_state(var_value)
-                    if progress_state:
+
+                    # Check if this is a SweepQueue
+                    is_sweep_queue = SweepQueue is not None and isinstance(
+                        var_value, SweepQueue
+                    )
+
+                    if is_sweep_queue:
+                        # Use SweepQueue.status() for comprehensive state
+                        queue_status = _get_sweep_queue_status(var_value)
+                        if queue_status:
+                            sweep_info["type"] = "SweepQueue"
+                            sweep_info["state"] = queue_status.get(
+                                "effective_state", "idle"
+                            )
+                            sweep_info["queue_length"] = queue_status.get(
+                                "queue_length", 0
+                            )
+                            sweep_info["current_sweep_state"] = queue_status.get(
+                                "current_sweep_state"
+                            )
+                            if queue_status.get("last_error"):
+                                sweep_info["error_message"] = queue_status["last_error"]
+
+                            # Add progress from current sweep if available
+                            if progress_state:
+                                sweep_info["progress"] = progress_state.progress
+                                sweep_info["time_elapsed"] = progress_state.time_elapsed
+                                sweep_info["time_remaining"] = (
+                                    progress_state.time_remaining
+                                )
+
+                            queue_active = sweep_info["state"] in (
+                                "running",
+                                "pending",
+                                "paused",
+                            )
+                            result["active"] = result["active"] or queue_active
+                            result["sweeps"][var_name] = sweep_info
+                        elif progress_state:
+                            # Fallback for older MeasureIt without status()
+                            sweep_info["type"] = "SweepQueue"
+                            sweep_info["state"] = progress_state.state.value
+                            sweep_info["progress"] = progress_state.progress
+                            sweep_info["time_elapsed"] = progress_state.time_elapsed
+                            sweep_info["time_remaining"] = progress_state.time_remaining
+
+                            # In fallback mode, treat running states as active
+                            # Note: can't detect "pending" without status(), so may
+                            # misclassify idle queue with pending items as inactive
+                            result["active"] = result["active"] or (
+                                sweep_info["state"] in SWEEP_STATE_RUNNING
+                            )
+
+                            error_message = getattr(
+                                progress_state, "error_message", None
+                            )
+                            if error_message:
+                                sweep_info["error_message"] = error_message
+
+                            result["sweeps"][var_name] = sweep_info
+                    elif progress_state:
+                        # Regular BaseSweep
                         sweep_info["state"] = progress_state.state.value
-                        result["active"] = result["active"] or (
-                            sweep_info["state"] in SWEEP_STATE_RUNNING
-                        )
                         sweep_info["progress"] = progress_state.progress
                         sweep_info["time_elapsed"] = progress_state.time_elapsed
                         sweep_info["time_remaining"] = progress_state.time_remaining
+
+                        result["active"] = result["active"] or (
+                            sweep_info["state"] in SWEEP_STATE_RUNNING
+                        )
 
                         # Capture error information if present
                         error_message = getattr(progress_state, "error_message", None)
@@ -187,17 +275,29 @@ class MeasureItBackend(BaseBackend):
                     "error": f"Variable '{var_name}' is not a MeasureIt sweep (got {type(sweep).__name__})",
                 }
 
+            # Check if this is a SweepQueue
+            is_sweep_queue = SweepQueue is not None and isinstance(sweep, SweepQueue)
+
             # Get progress state (handles both BaseSweep and SweepQueue)
             progress_state = _get_progress_state(sweep)
-            if not progress_state:
-                return {
-                    "success": False,
-                    "sweep_name": var_name,
-                    "error": f"Could not access progress state for '{var_name}' (type: {type(sweep).__name__})",
-                }
 
-            # Get state before kill
-            previous_state = progress_state.state.value
+            # For SweepQueue without current_sweep, use status() to get state
+            if not progress_state:
+                if is_sweep_queue:
+                    queue_status = _get_sweep_queue_status(sweep)
+                    if queue_status:
+                        previous_state = queue_status.get("effective_state", "idle")
+                    else:
+                        previous_state = "idle"
+                else:
+                    return {
+                        "success": False,
+                        "sweep_name": var_name,
+                        "error": f"Could not access progress state for '{var_name}' (type: {type(sweep).__name__})",
+                    }
+            else:
+                # Get state before kill
+                previous_state = progress_state.state.value
 
             # Execute sweep.kill() via Qt's thread-safe mechanism
             #
@@ -224,20 +324,31 @@ class MeasureItBackend(BaseBackend):
             if proxy is None:
 
                 class _KillProxy(QObject):
-                    def __init__(self, target_sweep):
+                    def __init__(self, target_sweep, use_kill_all=False):
                         super().__init__()
                         self._sweep = target_sweep
+                        self._use_kill_all = use_kill_all
 
                     @pyqtSlot()
                     def do_kill(self):
-                        self._sweep.kill()
+                        # For SweepQueue, use kill_all() to kill current AND clear queue
+                        if self._use_kill_all and hasattr(self._sweep, "kill_all"):
+                            self._sweep.kill_all()
+                        else:
+                            self._sweep.kill()
 
-                proxy = _KillProxy(sweep)
+                proxy = _KillProxy(sweep, use_kill_all=is_sweep_queue)
                 proxy.moveToThread(sweep.thread())
                 sweep._mcp_kill_proxy = proxy
 
             # If sweep is already not running, try to call kill via Qt proxy to release resources
-            if previous_state not in SWEEP_STATE_RUNNING:
+            # For SweepQueue, check effective_state; for BaseSweep, check state
+            if is_sweep_queue:
+                is_not_running = previous_state not in ("running", "pending", "paused")
+            else:
+                is_not_running = previous_state not in SWEEP_STATE_RUNNING
+
+            if is_not_running:
                 try:
                     # Queue the kill on the sweep's Qt thread
                     QMetaObject.invokeMethod(proxy, "do_kill", QueuedConnection)
@@ -296,34 +407,69 @@ class MeasureItBackend(BaseBackend):
                 await asyncio.sleep(retry_delay)
 
                 # Check if sweep actually stopped
+                # For SweepQueue, also verify queue is empty (kill_all clears it)
                 progress_state = _get_progress_state(sweep)
-                if progress_state:
-                    new_state = progress_state.state.value
-                    if new_state not in SWEEP_STATE_RUNNING:
-                        # Kill successful - sweep is no longer running
-                        return {
-                            "success": True,
-                            "sweep_name": var_name,
-                            "sweep_type": type(sweep).__name__,
-                            "previous_state": previous_state,
-                            "new_state": new_state,
-                            "message": f"Sweep '{var_name}' killed successfully. Resources released.",
-                            "warning": "UNSAFE: Sweep was terminated. Instruments may need re-initialization.",
-                        }
-
-                    # Log retry attempt
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            "Kill attempt %d/%d for sweep '%s' - still in state '%s', retrying...",
-                            attempt + 1,
-                            max_retries,
-                            var_name,
-                            new_state,
+                if is_sweep_queue:
+                    # Always use status() for SweepQueue to check queue_length
+                    queue_status = _get_sweep_queue_status(sweep)
+                    if queue_status:
+                        new_state = queue_status.get("effective_state", "idle")
+                        queue_length = queue_status.get("queue_length", 0)
+                        # Stopped means: not active AND queue is empty
+                        is_stopped = (
+                            new_state not in ("running", "pending", "paused")
+                            and queue_length == 0
                         )
+                    elif progress_state:
+                        # Fallback: use progress_state
+                        new_state = progress_state.state.value
+                        is_stopped = new_state not in ("running", "ramping")
+                    else:
+                        new_state = "idle"
+                        is_stopped = True
+                elif progress_state:
+                    new_state = progress_state.state.value
+                    is_stopped = new_state not in SWEEP_STATE_RUNNING
+                else:
+                    # BaseSweep without progress_state - shouldn't happen
+                    new_state = "unknown"
+                    is_stopped = False
+
+                if is_stopped:
+                    # Kill successful - sweep is no longer running
+                    return {
+                        "success": True,
+                        "sweep_name": var_name,
+                        "sweep_type": type(sweep).__name__,
+                        "previous_state": previous_state,
+                        "new_state": new_state,
+                        "message": f"Sweep '{var_name}' killed successfully. Resources released.",
+                        "warning": "UNSAFE: Sweep was terminated. Instruments may need re-initialization.",
+                    }
+
+                # Log retry attempt
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Kill attempt %d/%d for sweep '%s' - still in state '%s', retrying...",
+                        attempt + 1,
+                        max_retries,
+                        var_name,
+                        new_state,
+                    )
 
             # All retries exhausted - sweep is still running
             progress_state = _get_progress_state(sweep)
-            final_state = progress_state.state.value if progress_state else "unknown"
+            if progress_state:
+                final_state = progress_state.state.value
+            elif is_sweep_queue:
+                queue_status = _get_sweep_queue_status(sweep)
+                final_state = (
+                    queue_status.get("effective_state", "unknown")
+                    if queue_status
+                    else "unknown"
+                )
+            else:
+                final_state = "unknown"
             logger.error(
                 "Failed to kill sweep '%s' after %d attempts. State: %s -> %s",
                 var_name,
@@ -377,12 +523,23 @@ class MeasureItBackend(BaseBackend):
                     "errors": ["MeasureIt library not available"],
                 }
 
-            # Find all sweep objects in namespace
+            # Find all sweep objects in namespace (skip queued sweeps)
             sweep_vars = []
             for var_name, var_value in self.namespace.items():
                 if var_name.startswith("_"):
                     continue
                 if _is_sweep(var_value):
+                    # Skip individual sweeps (BaseSweep) managed by a SweepQueue
+                    # Don't skip SweepQueue objects themselves
+                    is_base_sweep = BaseSweep is not None and isinstance(
+                        var_value, BaseSweep
+                    )
+                    if is_base_sweep:
+                        progress_state = _get_progress_state(var_value)
+                        if progress_state and getattr(
+                            progress_state, "is_queued", False
+                        ):
+                            continue
                     sweep_vars.append(var_name)
 
             if not sweep_vars:
@@ -468,7 +625,15 @@ class MeasureItBackend(BaseBackend):
             return {"sweep": None}
 
         # Check if sweep is already in error state
-        if target["state"] == SWEEP_STATE_ERROR:
+        # For SweepQueue, also check "stopped" state (indicates previous error)
+        state = target["state"]
+        is_sweep_queue = target.get("type") == "SweepQueue"
+        if is_sweep_queue:
+            is_error = state in ("error", "stopped")
+        else:
+            is_error = state == SWEEP_STATE_ERROR
+
+        if is_error:
             error_msg = target.get(
                 "error_message", f"Sweep '{var_name}' is already in error state"
             )
@@ -491,13 +656,20 @@ class MeasureItBackend(BaseBackend):
             return result
 
         # If sweep is already done (not running, not error)
-        if target["state"] not in SWEEP_STATE_RUNNING:
+        # For SweepQueue, also check for "pending" state (queue has items)
+        if is_sweep_queue:
+            # "paused" is considered done - return so caller can decide what to do
+            is_done = state not in ("running", "pending")
+        else:
+            is_done = state not in SWEEP_STATE_RUNNING
+
+        if is_done:
             result = {"sweep": target}
             if kill:
                 logger.info(
                     "Sweep '%s' already done (state: %s). Killing to release resources.",
                     var_name,
-                    target["state"],
+                    state,
                 )
                 kill_result = await self.kill_sweep(var_name)
                 result["killed"] = kill_result.get("success", False)
@@ -523,7 +695,15 @@ class MeasureItBackend(BaseBackend):
                 return {"sweep": None}
 
             # Check for error state FIRST - kill before returning timeout
-            if target["state"] == SWEEP_STATE_ERROR:
+            # For SweepQueue, also check "stopped" state (indicates previous error)
+            loop_state = target["state"]
+            loop_is_sweep_queue = target.get("type") == "SweepQueue"
+            if loop_is_sweep_queue:
+                loop_is_error = loop_state in ("error", "stopped")
+            else:
+                loop_is_error = loop_state == SWEEP_STATE_ERROR
+
+            if loop_is_error:
                 error_msg = target.get("error_message", "Sweep ended with error")
                 result = {
                     "sweep": target,
@@ -552,7 +732,20 @@ class MeasureItBackend(BaseBackend):
                     "kill_suggestion": f"Use measureit_kill_sweep('{var_name}') to stop the sweep and release resources",
                 }
 
-            if target["state"] not in SWEEP_STATE_RUNNING:
+            # Check if sweep is done
+            # For SweepQueue, effective_state handles race condition automatically:
+            # "running", "pending" = still active
+            # "idle", "paused", "error", "stopped" = done (return so caller can decide)
+            state = target["state"]
+            is_sweep_queue = target.get("type") == "SweepQueue"
+            if is_sweep_queue:
+                # SweepQueue uses effective_state which includes pending items
+                # "paused" returns so caller can decide what to do
+                is_active = state in ("running", "pending")
+            else:
+                # Regular sweep just checks running states
+                is_active = state in SWEEP_STATE_RUNNING
+            if not is_active:
                 break
 
         # Sweep finished successfully
@@ -616,9 +809,32 @@ class MeasureItBackend(BaseBackend):
         error_messages = []
         errored_sweeps = []
 
+        # Helper to categorize sweep state
+        def _categorize_sweep(sweep_info):
+            """Returns 'running', 'error', or 'done'."""
+            state = sweep_info["state"]
+            is_sweep_queue = sweep_info.get("type") == "SweepQueue"
+            if is_sweep_queue:
+                # SweepQueue uses effective_state
+                # "paused" is "done" - return so caller can decide what to do
+                if state in ("running", "pending"):
+                    return "running"
+                elif state in ("error", "stopped"):
+                    return "error"
+                else:  # "idle", "paused"
+                    return "done"
+            else:
+                # Regular sweep
+                if state in SWEEP_STATE_RUNNING:
+                    return "running"
+                elif state == SWEEP_STATE_ERROR:
+                    return "error"
+                else:
+                    return "done"
+
         # Handle sweeps already in error state
         already_errored = {
-            k: v for k, v in sweeps.items() if v["state"] == SWEEP_STATE_ERROR
+            k: v for k, v in sweeps.items() if _categorize_sweep(v) == "error"
         }
         for name, sweep_info in already_errored.items():
             error_msg = sweep_info.get(
@@ -636,9 +852,7 @@ class MeasureItBackend(BaseBackend):
 
         # Handle sweeps already in done state
         already_done = {
-            k: v
-            for k, v in sweeps.items()
-            if v["state"] not in SWEEP_STATE_RUNNING and v["state"] != SWEEP_STATE_ERROR
+            k: v for k, v in sweeps.items() if _categorize_sweep(v) == "done"
         }
         if kill:
             for name in already_done.keys():
@@ -648,7 +862,7 @@ class MeasureItBackend(BaseBackend):
                 all_kill_results[name] = await self.kill_sweep(name)
 
         initial_running = {
-            k: v for k, v in sweeps.items() if v["state"] in SWEEP_STATE_RUNNING
+            k: v for k, v in sweeps.items() if _categorize_sweep(v) == "running"
         }
 
         # If no running sweeps, return results from already-handled sweeps
@@ -690,11 +904,24 @@ class MeasureItBackend(BaseBackend):
             for k in initial_running.keys():
                 if k in current_sweeps:
                     initial_running[k] = current_sweeps[k]
-                    state = current_sweeps[k]["state"]
+                    sweep_info = current_sweeps[k]
+                    state = sweep_info["state"]
+                    is_sweep_queue = sweep_info.get("type") == "SweepQueue"
 
-                    if state in SWEEP_STATE_RUNNING:
+                    # Determine if sweep is active
+                    if is_sweep_queue:
+                        # SweepQueue uses effective_state
+                        # "paused" is not active - return so caller can decide
+                        is_active = state in ("running", "pending")
+                        is_error = state in ("error", "stopped")
+                    else:
+                        # Regular sweep
+                        is_active = state in SWEEP_STATE_RUNNING
+                        is_error = state == SWEEP_STATE_ERROR
+
+                    if is_active:
                         still_running = True
-                    elif state == SWEEP_STATE_ERROR:
+                    elif is_error:
                         loop_errored.append(k)
 
             # Handle errored sweeps (do this BEFORE timeout check)
@@ -720,7 +947,7 @@ class MeasureItBackend(BaseBackend):
                 running_names = [
                     k
                     for k, v in initial_running.items()
-                    if v["state"] in SWEEP_STATE_RUNNING
+                    if _categorize_sweep(v) == "running"
                 ]
 
                 # Combine all sweeps and include already-killed results

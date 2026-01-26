@@ -24,6 +24,9 @@ DANGEROUS_MODE_NOTEBOOK = ORIGINAL_NOTEBOOKS_DIR / "e2e_dangerous_mode.ipynb"
 DANGEROUS_DYNAMICTOOL_NOTEBOOK = (
     ORIGINAL_NOTEBOOKS_DIR / "e2e_dangerous_with_dynamictool.ipynb"
 )
+MEASUREIT_SWEEPQUEUE_NOTEBOOK = (
+    ORIGINAL_NOTEBOOKS_DIR / "e2e_measureit_sweepqueue.ipynb"
+)
 
 # Test results
 TEST_RESULTS_DIR = Path(__file__).parent.parent / "test-results"

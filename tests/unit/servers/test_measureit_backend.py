@@ -16,13 +16,14 @@ from instrmcp.servers.jupyter_qcodes.options.measureit.backend import (
 class MockProgressState:
     """Mock progress state for testing."""
 
-    def __init__(self, state_value="running", progress=0.5):
+    def __init__(self, state_value="running", progress=0.5, is_queued=False):
         self.state = MagicMock()
         self.state.value = state_value
         self.progress = progress
         self.time_elapsed = 10.0
         self.time_remaining = 10.0
         self.error_message = None
+        self.is_queued = is_queued
 
 
 class MockBaseSweep:
@@ -45,10 +46,50 @@ class MockSweepQueue:
     def __init__(self, state="running"):
         self.current_sweep = MockBaseSweep(state)
         self.__module__ = "measureit.tools.sweep_queue"
+        self.queue = []  # Empty queue by default
+        self._last_error = None
+        self._effective_state = state  # Track the effective state
+
+    def status(self):
+        """Return comprehensive status dict like real SweepQueue."""
+        current_state = None
+        if self.current_sweep and hasattr(self.current_sweep, "progressState"):
+            current_state = self.current_sweep.progressState.state.value
+
+        # Determine effective state
+        if self._last_error:
+            effective_state = "stopped"
+        elif current_state in ("running", "ramping"):
+            effective_state = "running"
+        elif current_state == "paused":
+            effective_state = "paused"
+        elif current_state == "error":
+            effective_state = "error"
+        elif self.queue:
+            effective_state = "pending"
+        else:
+            effective_state = "idle"
+
+        return {
+            "effective_state": effective_state,
+            "current_sweep_state": current_state,
+            "queue_length": len(self.queue),
+            "current_sweep_type": (
+                type(self.current_sweep).__name__ if self.current_sweep else None
+            ),
+            "last_error": self._last_error,
+        }
 
     def kill(self):
         if self.current_sweep:
             self.current_sweep.kill()
+
+    def kill_all(self):
+        """Kill current sweep and clear queue."""
+        if self.current_sweep:
+            self.current_sweep.kill()
+        self.queue.clear()
+        self._last_error = None
 
     def thread(self):
         return MagicMock()
@@ -212,13 +253,79 @@ class TestMeasureItBackend:
 
             result = await backend.get_measureit_status()
 
-            # Queue without current sweep should not be included
+            # Queue without current sweep is now shown with "idle" effective_state
             assert result["active"] is False
-            assert "my_queue" not in result["sweeps"]
+            assert "my_queue" in result["sweeps"]
+            assert result["sweeps"]["my_queue"]["state"] == "idle"
+
+    @pytest.mark.asyncio
+    async def test_get_measureit_status_skips_queued_sweeps(self, backend, mock_state):
+        """Test that sweeps with is_queued=True are excluded from status."""
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
+            MockSweepQueue,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
+            MockBaseSweep,
+        ):
+            # Create a queue and individual sweeps
+            queue = MockSweepQueue(state="running")
+            sweep1 = MockBaseSweep(state="running")  # Current sweep in queue
+            sweep2 = MockBaseSweep(state="idle")  # Queued, waiting
+            sweep3 = MockBaseSweep(state="idle")  # Queued, waiting
+
+            # Mark sweep2 and sweep3 as queued
+            sweep2.progressState.is_queued = True
+            sweep3.progressState.is_queued = True
+
+            mock_state.namespace["sweep_queue"] = queue
+            mock_state.namespace["s1"] = sweep1
+            mock_state.namespace["s2"] = sweep2
+            mock_state.namespace["s3"] = sweep3
+
+            result = await backend.get_measureit_status()
+
+            # Only sweep_queue and s1 should be in results, not s2 or s3
+            assert "sweep_queue" in result["sweeps"]
+            assert "s1" in result["sweeps"]
+            assert "s2" not in result["sweeps"]
+            assert "s3" not in result["sweeps"]
+
+    @pytest.mark.asyncio
+    async def test_kill_all_sweeps_skips_queued_sweeps(self, backend, mock_state):
+        """Test that kill_all_sweeps() skips sweeps with is_queued=True.
+
+        This test only verifies that queued sweeps are excluded from the kill list.
+        It doesn't test actual killing (which requires Qt mocking).
+        """
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
+            MockSweepQueue,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
+            MockBaseSweep,
+        ):
+            # Create only queued sweeps (no queue object to avoid Qt kill logic)
+            sweep1 = MockBaseSweep(state="idle")  # Queued, waiting
+            sweep2 = MockBaseSweep(state="idle")  # Queued, waiting
+
+            # Mark both sweeps as queued
+            sweep1.progressState.is_queued = True
+            sweep2.progressState.is_queued = True
+
+            mock_state.namespace["s1"] = sweep1
+            mock_state.namespace["s2"] = sweep2
+
+            result = await backend.kill_all_sweeps()
+
+            # No sweeps should be killed since they're all queued
+            assert result["success"] is True
+            assert result["killed_count"] == 0
+            assert result["message"] == "No sweeps found in namespace"
 
     @pytest.mark.asyncio
     async def test_kill_sweep_with_sweep_queue(self, backend, mock_state):
-        """Test kill_sweep() with SweepQueue."""
+        """Test kill_sweep() with SweepQueue (already stopped state)."""
         with patch(
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
             MockSweepQueue,
@@ -226,11 +333,16 @@ class TestMeasureItBackend:
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
             MockBaseSweep,
         ), patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QMetaObject"
+            "PyQt5.QtCore.QMetaObject", create=True
         ) as mock_qmeta, patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QObject"
+            "PyQt5.QtCore.QObject", create=True
+        ), patch(
+            "PyQt5.QtCore.Qt", create=True
+        ), patch(
+            "PyQt5.QtCore.pyqtSlot", lambda: lambda x: x
         ):
-            queue = MockSweepQueue()
+            # Create a queue that's already stopped (skip the running path)
+            queue = MockSweepQueue(state="stopped")
             mock_state.namespace["my_queue"] = queue
 
             # Mock QMetaObject.invokeMethod to simulate successful kill
@@ -238,7 +350,7 @@ class TestMeasureItBackend:
 
             result = await backend.kill_sweep("my_queue")
 
-            # Should successfully kill the queue
+            # Should successfully kill the queue (already stopped)
             assert result["success"] is True
             assert result["sweep_name"] == "my_queue"
 
@@ -261,7 +373,7 @@ class TestMeasureItBackend:
 
     @pytest.mark.asyncio
     async def test_kill_all_sweeps_with_mixed_sweeps(self, backend, mock_state):
-        """Test kill_all_sweeps() with both BaseSweep and SweepQueue."""
+        """Test kill_all_sweeps() with both BaseSweep and SweepQueue (stopped state)."""
         with patch(
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
             MockSweepQueue,
@@ -269,12 +381,17 @@ class TestMeasureItBackend:
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
             MockBaseSweep,
         ), patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QMetaObject"
+            "PyQt5.QtCore.QMetaObject", create=True
         ) as mock_qmeta, patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QObject"
+            "PyQt5.QtCore.QObject", create=True
+        ), patch(
+            "PyQt5.QtCore.Qt", create=True
+        ), patch(
+            "PyQt5.QtCore.pyqtSlot", lambda: lambda x: x
         ):
-            sweep = MockBaseSweep()
-            queue = MockSweepQueue()
+            # Create stopped sweeps to avoid running Qt code path
+            sweep = MockBaseSweep(state="stopped")
+            queue = MockSweepQueue(state="stopped")
             mock_state.namespace["my_sweep"] = sweep
             mock_state.namespace["my_queue"] = queue
 
@@ -291,7 +408,7 @@ class TestMeasureItBackend:
 
     @pytest.mark.asyncio
     async def test_wait_for_sweep_with_sweep_queue(self, backend, mock_state):
-        """Test wait_for_sweep() with SweepQueue."""
+        """Test wait_for_sweep() with SweepQueue (already done)."""
         with patch(
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.SweepQueue",
             MockSweepQueue,
@@ -299,12 +416,16 @@ class TestMeasureItBackend:
             "instrmcp.servers.jupyter_qcodes.options.measureit.backend.BaseSweep",
             MockBaseSweep,
         ), patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QMetaObject"
+            "PyQt5.QtCore.QMetaObject", create=True
         ) as mock_qmeta, patch(
-            "instrmcp.servers.jupyter_qcodes.options.measureit.backend.QObject"
+            "PyQt5.QtCore.QObject", create=True
+        ), patch(
+            "PyQt5.QtCore.Qt", create=True
+        ), patch(
+            "PyQt5.QtCore.pyqtSlot", lambda: lambda x: x
         ):
-            # Create a queue that's already done
-            queue = MockSweepQueue(state="done")
+            # Create a queue that's already done (idle state)
+            queue = MockSweepQueue(state="stopped")
             mock_state.namespace["my_queue"] = queue
 
             # Mock QMetaObject.invokeMethod to simulate successful kill

@@ -157,3 +157,49 @@ DYNAMIC_TOOLS = [
     "dynamic_inspect_tool",
     "dynamic_registry_stats",
 ]
+
+# Cleanup code to run before SweepQueue tests
+MEASUREIT_CLEANUP = """
+from qcodes.instrument import Instrument
+Instrument.close_all()
+for name in list(globals().keys()):
+    if name.startswith(('s1', 's2', 's3', 'sweep_queue', 'instr')):
+        del globals()[name]
+print("Cleanup complete")
+"""
+
+# Setup code for MeasureIt SweepQueue testing with real Qt
+# Note: Avoids try/except to prevent JupyterLab auto-indent issues when typing
+# Uses unique instrument name based on timestamp to avoid conflicts
+MEASUREIT_SWEEP_QUEUE_SETUP = """
+import time
+from qcodes.instrument_drivers.mock_instruments import MockParabola
+from qcodes.instrument import Instrument
+from measureit import Sweep1D
+from measureit.tools import ensure_qt
+from measureit.tools.sweep_queue import SweepQueue
+ensure_qt()
+Instrument.close_all()
+instr = MockParabola(name=f"test_instr_{int(time.time())}")
+s1 = Sweep1D(instr.x, 0, 5, 0.5, inter_delay=0.1, save_data=False)
+s2 = Sweep1D(instr.x, 0, 5, 0.5, inter_delay=0.1, save_data=False)
+s3 = Sweep1D(instr.x, 0, 5, 0.5, inter_delay=0.1, save_data=False)
+sweep_queue = SweepQueue()
+sweep_queue.append(s1, s2, s3)
+print("SweepQueue setup complete")
+print(f"s1.progressState.is_queued = {s1.progressState.is_queued}")
+print(f"s2.progressState.is_queued = {s2.progressState.is_queued}")
+print(f"s3.progressState.is_queued = {s3.progressState.is_queued}")
+"""
+
+# Code to start the sweep queue (run after MEASUREIT_SWEEP_QUEUE_SETUP)
+MEASUREIT_START_QUEUE = """
+sweep_queue.start()
+print("SweepQueue started")
+"""
+
+# Code to check sweep queue state
+MEASUREIT_CHECK_QUEUE_STATE = """
+print(f"sweep_queue.state() = {sweep_queue.state()}")
+print(f"sweep_queue.current_sweep = {sweep_queue.current_sweep}")
+"""

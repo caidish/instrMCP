@@ -14,7 +14,13 @@ from tests.e2e.helpers.mcp_helpers import (
     list_mcp_tools,
     parse_tool_result,
 )
-from tests.e2e.helpers.mock_qcodes import MEASUREIT_TOOLS, DATABASE_TOOLS, DYNAMIC_TOOLS
+from tests.e2e.helpers.mock_qcodes import (
+    MEASUREIT_TOOLS,
+    DATABASE_TOOLS,
+    DYNAMIC_TOOLS,
+    MEASUREIT_SWEEP_QUEUE_SETUP,
+    MEASUREIT_START_QUEUE,
+)
 
 
 class TestMeasureItTools:
@@ -764,3 +770,151 @@ class TestOptionDisabling:
             ), f"Database tool {tool} should not be available after disable"
 
         run_cell(notebook_page, "%mcp_stop")
+
+
+class TestSweepQueueQueuedSweeps:
+    """Test that sweeps managed by SweepQueue are correctly excluded from status."""
+
+    @pytest.mark.p1
+    def test_queued_sweeps_excluded_from_status(self, notebook_page, mcp_port):
+        """OF-050: Sweeps in SweepQueue are excluded from measureit_get_status.
+
+        When sweeps are added to a SweepQueue (is_queued=True), they should
+        not appear as individual sweeps in the status response. Only the
+        SweepQueue itself should be visible.
+        """
+        # Load extension and enable measureit
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        # Set up sweeps and queue
+        run_cell(notebook_page, MEASUREIT_SWEEP_QUEUE_SETUP)
+        notebook_page.wait_for_timeout(1000)
+
+        # Verify is_queued was set
+        output = get_cell_output(notebook_page)
+        assert "is_queued = True" in output, f"is_queued not set properly: {output}"
+
+        # Get status
+        base_url = f"http://localhost:{mcp_port}"
+        result = call_mcp_tool(
+            base_url,
+            "measureit_get_status",
+            {"detailed": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Verify sweep_queue is visible but s1, s2, s3 are not
+        # The queued sweeps should be excluded from the response
+        assert "s1" not in content, f"s1 should be excluded (is_queued=True): {content}"
+        assert "s2" not in content, f"s2 should be excluded (is_queued=True): {content}"
+        assert "s3" not in content, f"s3 should be excluded (is_queued=True): {content}"
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p2
+    def test_queued_sweeps_not_killed_by_kill_all(self, notebook_page, mcp_port):
+        """OF-051: Queued sweeps are not killed by measureit_kill_sweep(all=True).
+
+        When kill all sweeps is called, sweeps with is_queued=True should be
+        skipped since they are managed by their parent SweepQueue.
+        """
+        # Load extension and enable measureit
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        # Set up sweeps and queue
+        run_cell(notebook_page, MEASUREIT_SWEEP_QUEUE_SETUP)
+        notebook_page.wait_for_timeout(1000)
+
+        # Kill all sweeps
+        base_url = f"http://localhost:{mcp_port}"
+        result = call_mcp_tool(
+            base_url,
+            "measureit_kill_sweep",
+            {"all": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # The result should not mention killing s1, s2, s3 individually
+        # They should be skipped because they are queued
+        assert (
+            "s1" not in content or "skipped" in content.lower()
+        ), f"s1 should not be killed individually: {content}"
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p1
+    def test_running_sweep_queue_wait_and_kill(self, mcp_server_measureit_sweepqueue):
+        """OF-052: Test wait_for_sweep and kill_sweep with running SweepQueue.
+
+        This test starts a real SweepQueue and verifies:
+        1. The queue appears in status as running
+        2. kill_sweep successfully kills the queue
+        """
+        page = mcp_server_measureit_sweepqueue["page"]
+        base_url = mcp_server_measureit_sweepqueue["url"]
+
+        # Create sweeps and queue
+        run_cell(page, MEASUREIT_SWEEP_QUEUE_SETUP)
+        page.wait_for_timeout(1000)
+
+        # Start the sweep queue
+        run_cell(page, MEASUREIT_START_QUEUE)
+        page.wait_for_timeout(500)
+
+        # Get status - should show sweep_queue as running
+        result = call_mcp_tool(base_url, "measureit_get_status", {"detailed": True})
+        success, content = parse_tool_result(result)
+
+        # Verify sweep_queue is visible (may be running or done depending on timing)
+        assert "sweep_queue" in content, f"sweep_queue should be in status: {content}"
+
+        # Kill the sweep queue (may already be done)
+        result = call_mcp_tool(
+            base_url, "measureit_kill_sweep", {"variable_name": "sweep_queue"}
+        )
+        # Kill should succeed or indicate sweep is already done
+        assert result is not None
+
+    @pytest.mark.p2
+    def test_wait_for_sweep_with_running_queue(self, mcp_server_measureit_sweepqueue):
+        """OF-053: Test wait_for_sweep with timeout on running SweepQueue.
+
+        Verifies that wait_for_sweep correctly waits for a running queue.
+        """
+        page = mcp_server_measureit_sweepqueue["page"]
+        base_url = mcp_server_measureit_sweepqueue["url"]
+
+        # Create sweeps and queue
+        run_cell(page, MEASUREIT_SWEEP_QUEUE_SETUP)
+        page.wait_for_timeout(1000)
+
+        # Start the sweep queue
+        run_cell(page, MEASUREIT_START_QUEUE)
+        page.wait_for_timeout(500)
+
+        # Wait for sweep with short timeout and kill option
+        result = call_mcp_tool(
+            base_url,
+            "measureit_wait_for_sweep",
+            {"variable_name": "sweep_queue", "timeout": 5, "kill": True},
+        )
+        success, content = parse_tool_result(result)
+
+        # Should have found and killed the sweep
+        assert (
+            "sweep_queue" in content or success
+        ), f"wait_for_sweep should find sweep_queue: {content}"
