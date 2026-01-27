@@ -46,7 +46,11 @@ tools:
 
       Args:
           database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
-          scan_nested: bool, if true, also scan nested Databases/ subdirectories
+              Use absolute paths like "/path/to/data.db" or relative paths like "measurements.db".
+              AVOID "Databases/file.db" pattern which can create Databases/Databases/ nesting.
+          scan_nested: bool, if true, search nested Databases/ subdirectories (e.g., */Databases/*.db).
+              Finds databases in experiment-specific folders like experiment1/Databases/data.db.
+              Automatically excludes problematic Databases/Databases/ nesting patterns.
           detailed: bool, If true, add path_resolved_via, experiment_count, per-experiment metadata
               (experiment_id, name, sample_name, start/end time, run_ids summary like "6-16(11)", (*) means total counts),
               and sweep_groups when detected.

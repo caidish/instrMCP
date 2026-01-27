@@ -348,9 +348,47 @@ def _select_default_database(db_files: list[Path]) -> Optional[Path]:
 
 
 def _find_nested_databases(base_dir: Path) -> list[Path]:
-    """Find database files under nested Databases/ directories."""
+    """
+    Find database files under nested Databases/ directories.
+    
+    Searches for *.db files in Databases/ subdirectories that are one level
+    deep under base_dir (e.g., base_dir/experiment1/Databases/*.db).
+    
+    This prevents matching deeply nested structures like Databases/Databases/
+    which can occur when paths are incorrectly specified.
+    
+    Args:
+        base_dir: Base directory to search from
+        
+    Returns:
+        List of Path objects to .db files found in */Databases/ subdirectories
+        
+    Example:
+        If base_dir contains:
+            - experiment1/Databases/data.db      ✓ matches
+            - Databases/data.db                   ✗ does not match (not nested)
+            - Databases/Databases/data.db         ✗ does not match (avoid nesting)
+            - experiment1/sub/Databases/data.db   ✗ does not match (too deep)
+    """
     try:
-        return list(base_dir.rglob("Databases/*.db"))
+        # Use glob with explicit depth: */Databases/*.db
+        # Then filter out Databases/Databases/ pattern to prevent confusion
+        results = []
+        for db_path in base_dir.glob("*/Databases/*.db"):
+            # Safety check: ensure path has sufficient depth
+            # Pattern */Databases/*.db guarantees at least 3 parts relative to base_dir
+            try:
+                # Get the parent directory name (should be "Databases")
+                # and its parent (should be the experiment directory, not "Databases")
+                if len(db_path.parts) >= 3:
+                    parent_name = db_path.parent.name  # Should be "Databases"
+                    grandparent_name = db_path.parent.parent.name  # Should NOT be "Databases"
+                    if parent_name == "Databases" and grandparent_name != "Databases":
+                        results.append(db_path)
+            except (AttributeError, IndexError):
+                # Skip paths with unexpected structure
+                continue
+        return results
     except Exception:
         return []
 
@@ -374,12 +412,29 @@ def resolve_database_path(
     function from other modules instead of duplicating the logic.
 
     Args:
-        database_path: Explicit database path
+        database_path: Explicit database path (absolute or relative).
+                      Examples:
+                        - "/abs/path/to/measurements.db" (absolute)
+                        - "measurements.db" (relative to data_dir)
+                        - "experiment1/Databases/data.db" (relative with subdirs)
+                      
+                      IMPORTANT: Avoid creating nested "Databases/Databases/"
+                      structures. When using relative paths with init_database(),
+                      use either:
+                        - Just the filename: "measurements.db"
+                        - Or full relative path: "experiment1/Databases/measurements.db"
+                      But NOT: "Databases/measurements.db" (creates nesting)
+                      
         data_dir: If set, restricts database search to this directory only
                   (no fallback to environment paths). If None, checks
                   INSTRMCP_DATA_DIR environment variable.
+                  
         scan_nested: If True, search nested "Databases" directories when
-                     resolving a default database.
+                     resolving a default database. Looks for patterns like:
+                       data_dir/experiment1/Databases/*.db
+                       data_dir/experiment2/Databases/*.db
+                     But excludes problematic patterns like:
+                       data_dir/Databases/Databases/*.db (nested structure)
 
     Returns:
         tuple: (resolved_path, resolution_info)
@@ -388,6 +443,19 @@ def resolve_database_path(
 
     Raises:
         FileNotFoundError: If database path doesn't exist, with helpful suggestions
+        
+    Examples:
+        # Use default database (MeasureIt or QCodes config)
+        path, info = resolve_database_path()
+        
+        # Use specific database by absolute path
+        path, info = resolve_database_path("/home/user/data/measurements.db")
+        
+        # Use relative path from data_dir
+        path, info = resolve_database_path("measurements.db", data_dir=Path("/data"))
+        
+        # Search nested Databases directories
+        path, info = resolve_database_path(scan_nested=True)
     """
     resolution_info = {"source": None, "available_databases": [], "tried_path": None}
 

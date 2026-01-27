@@ -97,6 +97,84 @@ Database Resources
 Database resources are not exposed. Use the database tools instead, e.g.
 ``database_list_experiments`` and ``database_get_dataset_info``.
 
+Database Path Resolution
+-------------------------
+
+Understanding how database paths are resolved is crucial for avoiding common issues.
+
+Resolution Priority
+~~~~~~~~~~~~~~~~~~~
+
+When no explicit path is provided, databases are resolved in this order:
+
+1. **Explicit path parameter**: If ``database_path`` is provided in the tool call
+2. **MeasureIt default**: ``$MeasureItHome/Databases/Example_database.db`` (if available)
+3. **QCodes config**: From ``qcodes.config.core.db_location``
+
+When ``INSTRMCP_DATA_DIR`` environment variable is set, fallback to MeasureIt and QCodes
+paths is DISABLED to ensure isolation in sandboxed environments.
+
+Path Format Examples
+~~~~~~~~~~~~~~~~~~~~
+
+**Correct path formats:**
+
+.. code-block:: python
+
+   # Absolute path (always works)
+   database_list_experiments(database_path="/home/user/data/measurements.db")
+   
+   # Relative filename (creates in data directory root)
+   database_list_experiments(database_path="measurements.db")
+   
+   # Relative path with subdirectories
+   database_list_experiments(database_path="experiment1/Databases/data.db")
+   
+   # Use default database (no path specified)
+   database_list_experiments()
+
+**Avoid these patterns** that can create ``Databases/Databases/`` nesting:
+
+.. code-block:: python
+
+   # ✗ DON'T: This creates Databases/Databases/ when used with init_database()
+   database_path="Databases/measurements.db"
+   
+   # ✓ DO: Use just the filename or full relative path instead
+   database_path="measurements.db"  # Creates in data_dir root
+   # or
+   database_path="experiment1/Databases/measurements.db"  # Full relative path
+
+Nested Database Search (scan_nested)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``scan_nested`` parameter allows searching for databases in nested directory structures:
+
+.. code-block:: python
+
+   # Search for databases in experiment subdirectories
+   database_list_experiments(scan_nested=True)
+
+This searches for databases matching the pattern ``*/Databases/*.db`` under the data directory:
+
+- ✓ Finds: ``data_dir/experiment1/Databases/data.db``
+- ✓ Finds: ``data_dir/experiment2/Databases/measurements.db``
+- ✗ Excludes: ``data_dir/Databases/root.db`` (not nested)
+- ✗ Excludes: ``data_dir/Databases/Databases/nested.db`` (problematic nesting)
+- ✗ Excludes: ``data_dir/exp/sub/Databases/deep.db`` (too deep)
+
+**Use scan_nested when:**
+
+- Working with multiple experiments in separate subdirectories
+- Each experiment has its own ``Databases/`` folder
+- You want to discover all available databases
+
+**Don't use scan_nested when:**
+
+- Databases are in the root data directory
+- You know the exact database path
+- Performance is critical (scanning is slower)
+
 Default Database Location
 --------------------------
 
@@ -296,6 +374,47 @@ If database path is incorrect:
 2. Verify file exists: ``ls /path/to/database.db``
 3. Use explicit path in tool calls
 4. Check file permissions
+
+"Databases/Databases/ nested directories created"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This happens when using relative paths incorrectly with ``init_database()``:
+
+**Problem**: Using ``database_path="Databases/measurements.db"`` creates nested structure
+
+.. code-block:: bash
+
+   # This creates the wrong structure:
+   data_dir/
+     Databases/
+       Databases/           # ✗ Nested (confusing)
+         measurements.db
+
+**Solution 1**: Use just the filename
+
+.. code-block:: python
+
+   # Creates database in data_dir root
+   init_database("measurements.db")
+   # Result: data_dir/measurements.db
+
+**Solution 2**: Use full relative path
+
+.. code-block:: python
+
+   # Creates proper nested structure
+   init_database("experiment1/Databases/measurements.db")
+   # Result: data_dir/experiment1/Databases/measurements.db
+
+**Solution 3**: Use absolute path
+
+.. code-block:: python
+
+   # Explicit control over location
+   init_database("/full/path/to/measurements.db")
+
+**Prevention**: The ``database_list_experiments`` tool with ``scan_nested=True`` now
+automatically excludes ``Databases/Databases/`` patterns to avoid confusion.
 
 "No datasets returned"
 ~~~~~~~~~~~~~~~~~~~~~~
