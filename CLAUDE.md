@@ -28,14 +28,28 @@ mypy instrmcp/ --ignore-missing-imports           # Type check (non-blocking)
 
 **Testing:** (Only perform it when explicitly asked)
 ```bash
-pytest                                              # All tests
+# Unit tests (fast, no hardware required - all mocked)
+pytest tests/unit/                                  # All unit tests
 pytest -v                                           # Verbose
 pytest --cov=instrmcp --cov-report=html             # With coverage
 pytest tests/unit/test_cache.py                     # Single file
 pytest -k "test_cache_initialization"               # Single test by name
 pytest tests/unit/test_cache.py::TestReadCache::test_cache_initialization  # Specific test
+
+# E2E tests (requires Playwright and browser automation)
+pytest tests/e2e/ -v                                # All E2E tests
+pytest tests/e2e/test_01_server_lifecycle.py -v     # Specific E2E test file
+pytest tests/e2e/ -v -m p0                          # Priority 0 (critical) tests only
+
+# Playwright tests (metadata consistency checks)
+pytest tests/playwright/ -v                         # Playwright-based tests
+python tests/playwright/test_metadata_consistency.py --mode snapshot  # Update metadata snapshot
 ```
-Important note: some tests may stall indefinitely, set a reasonable timeout if needed.
+Important notes:
+- Some tests may stall indefinitely, set a reasonable timeout if needed
+- E2E tests launch real JupyterLab servers and use browser automation
+- CI excludes E2E and Playwright tests (they run separately or locally)
+- Supported Python versions: 3.11, 3.12, 3.13
 
 
 **CLI Utilities:**
@@ -55,11 +69,21 @@ python tools/version.py --bump major # Bump major (2.1.0 → 3.0.0)
 python tools/version.py --set 2.2.0  # Set specific version
 ```
 
+**E2E Test Prerequisites:**
+```bash
+# Install Playwright browsers (one-time setup for E2E tests)
+playwright install chromium
+```
+
 ## Architecture Overview
 
 ### Communication Flow
 ```
 Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
+                              (claudedesktopsetting/)     (utils/)              (servers/jupyter_qcodes/)
+
+Codex CLI          ←→ STDIO ←→ codex_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
+                              (codexsetting/)
 ```
 
 ### Key Directories
@@ -161,9 +185,10 @@ See `docs/ARCHITECTURE.md` for detailed tool parameters and resources.
 - [ ] Update `docs/ARCHITECTURE.md`
 - [ ] Update `README.md` if user-facing
 - [ ] Run `black instrmcp/ tests/` before committing
-- [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82` (must pass for CI)
+- [ ] Run `flake8 instrmcp/ tests/ --select=E9,F63,F7,F82 --extend-ignore=F824` (must pass for CI)
 - [ ] Update `tests/unit/test_stdio_proxy.py` with new tool tests (expected_tool list)
-- [ ] Run metadata e2e test: `python tests/playwright/test_metadata_consistency.py --mode snapshot` to update snapshot
+- [ ] Update metadata snapshot: `python tests/playwright/test_metadata_consistency.py --mode snapshot`
+- [ ] Verify metadata: `instrmcp metadata validate` (tests STDIO → HTTP → MCP Server path)
 
 ## Version Management
 
@@ -180,3 +205,17 @@ The project uses a unified version management script at `tools/version.py`. The 
 - `docs/source/conf.py` - Sphinx documentation
 
 **Before releasing:** Always run `python tools/version.py --check` to verify all versions are in sync.
+
+## CI/CD
+
+**Workflows:**
+
+- `.github/workflows/tests.yml` - Unit tests on Ubuntu, macOS, Windows with Python 3.11, 3.12, 3.13
+- `.github/workflows/lint.yml` - Black formatting, Flake8 linting, MyPy type checking
+
+**Key CI notes:**
+
+- Unit tests exclude E2E and Playwright tests: `pytest tests/ --ignore=tests/e2e --ignore=tests/playwright`
+- Critical lint errors must pass: `flake8 --select=E9,F63,F7,F82 --extend-ignore=F824`
+- MyPy type checking continues on error (non-blocking)
+- Coverage reports generated on Ubuntu 3.11 and uploaded to Codecov
