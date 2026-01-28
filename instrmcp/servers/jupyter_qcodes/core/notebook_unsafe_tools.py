@@ -187,6 +187,9 @@ class UnsafeToolRegistrar:
             concise["sweep_names"] = result.get("sweep_names", [])
             concise["suggestion"] = result.get("suggestion")
 
+        if result.get("image_paths"):
+            concise["image_paths"] = result["image_paths"]
+
         return concise
 
     def _to_concise_success_only(self, result: dict) -> dict:

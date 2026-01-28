@@ -143,6 +143,9 @@ class NotebookToolRegistrar:
             result["error_type"] = info["error"].get("type")
             result["error_message"] = info["error"].get("message")
 
+        if info.get("image_paths"):
+            result["image_paths"] = info["image_paths"]
+
         return result
 
     def _to_concise_notebook_cells(
@@ -170,6 +173,8 @@ class NotebookToolRegistrar:
                 concise_cell["has_output"] = cell.get("has_output", False)
                 concise_cell["has_error"] = cell.get("has_error", False)
                 concise_cell["status"] = cell.get("status")
+                if cell.get("image_paths"):
+                    concise_cell["image_paths"] = cell["image_paths"]
             concise_cells.append(concise_cell)
         return {
             "total_cells": result.get("total_cells"),
@@ -491,6 +496,8 @@ class NotebookToolRegistrar:
                         cell_info["message"] = message
                     if error_info:
                         cell_info["error"] = error_info
+                    if frontend_result.get("image_paths"):
+                        cell_info["image_paths"] = frontend_result["image_paths"]
 
                     return format_response(cell_info)
 
@@ -789,6 +796,10 @@ class NotebookToolRegistrar:
                                 cell_info["has_output"] = has_output
                                 cell_info["has_error"] = has_error_output
                                 cell_info["outputs"] = outputs
+                                if frontend_output.get("image_paths"):
+                                    cell_info["image_paths"] = frontend_output[
+                                        "image_paths"
+                                    ]
 
                                 if has_error_output:
                                     cell_info["status"] = "error"

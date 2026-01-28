@@ -365,6 +365,8 @@ class NotebookUnsafeBackend(BaseBackend):
 
                 combined_result["has_output"] = has_output
                 combined_result["outputs"] = outputs
+                if output_result.get("image_paths"):
+                    combined_result["image_paths"] = output_result["image_paths"]
 
                 # Check for errors in frontend output (may have been missed by sys.last_*)
                 if has_error:

@@ -1245,47 +1245,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return div.innerHTML;
     };
 
-    // Image MIME types that should be sanitized (replaced with placeholder)
-    const IMAGE_MIME_TYPES = [
-      'image/png',
-      'image/jpeg',
-      'image/gif',
-      'image/svg+xml',
-      'image/webp',
-      'image/bmp',
-      'image/tiff'
-    ];
-
-    // Sanitize output data by replacing large images with placeholders
+    // Pass through all output data including image base64.
+    // Image data is saved to temp files by the Python backend (image_utils.py).
     const sanitizeOutputData = (data: Record<string, any>): Record<string, any> => {
-      const sanitized: Record<string, any> = {};
-
-      for (const [mimeType, content] of Object.entries(data)) {
-        if (IMAGE_MIME_TYPES.includes(mimeType)) {
-          // Replace image with placeholder
-          let sizeInfo = 'unknown size';
-          if (typeof content === 'string') {
-            // Base64 encoded - estimate actual size (base64 is ~4/3 of original)
-            const estimatedBytes = Math.floor(content.length * 0.75);
-            if (estimatedBytes >= 1024 * 1024) {
-              sizeInfo = `${(estimatedBytes / (1024 * 1024)).toFixed(2)} MB`;
-            } else if (estimatedBytes >= 1024) {
-              sizeInfo = `${(estimatedBytes / 1024).toFixed(1)} KB`;
-            } else {
-              sizeInfo = `${estimatedBytes} bytes`;
-            }
-          }
-
-          // Extract format from MIME type
-          const format = mimeType.split('/')[1]?.toUpperCase() || 'IMAGE';
-          sanitized[mimeType] = `[${format} image, ${sizeInfo} - content omitted to save tokens]`;
-        } else {
-          // Keep non-image content as-is
-          sanitized[mimeType] = content;
-        }
-      }
-
-      return sanitized;
+      return { ...data };
     };
 
     // Handle patch consent request from kernel

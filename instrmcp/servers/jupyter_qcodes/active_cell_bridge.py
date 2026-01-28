@@ -160,6 +160,8 @@ def _on_comm_open(comm, open_msg):
 
         elif msg_type == "get_cell_outputs_response":
             # Response from frontend with cell outputs
+            from .image_utils import process_outputs_list
+
             outputs = data.get("outputs", {})
             current_time = time.time()
             kernel_id = getattr(comm, "_mcp_kernel_id", "unknown")
@@ -169,6 +171,14 @@ def _on_comm_open(comm, open_msg):
                 for cell_num_str, output_data in outputs.items():
                     try:
                         cell_num = int(cell_num_str)
+                        # Process images: save to temp files, replace base64 with paths
+                        cell_outputs = output_data.get("outputs", [])
+                        if cell_outputs:
+                            processed, image_paths = process_outputs_list(cell_outputs)
+                            output_data = dict(output_data)
+                            output_data["outputs"] = processed
+                            if image_paths:
+                                output_data["image_paths"] = image_paths
                         _CELL_OUTPUTS_CACHE[cell_num] = {
                             "data": output_data,
                             "timestamp": current_time,
@@ -992,12 +1002,22 @@ def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
         - has_output (bool): Whether the cell has any output
         - has_error (bool): Whether the cell output contains an error
         - outputs (list): List of output objects (stream, execute_result, error, etc.)
+        - image_paths (list): File paths of saved images (if any)
         - message (str): Status message
     """
+    from .image_utils import process_outputs_list
+
     result = _send_and_wait(
         {"type": "get_active_cell_output"},
         timeout_s=timeout_s,
     )
+
+    # Process images: save to temp files, replace base64 with paths
+    if result.get("success") and "outputs" in result:
+        processed, image_paths = process_outputs_list(result["outputs"])
+        result["outputs"] = processed
+        if image_paths:
+            result["image_paths"] = image_paths
 
     return result
 
