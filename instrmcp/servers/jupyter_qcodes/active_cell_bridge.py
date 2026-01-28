@@ -979,7 +979,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     return result
 
 
-def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
+def get_active_cell_output(timeout_s: float = 10.0) -> Dict[str, Any]:
     """
     Get the output of the currently active cell directly from JupyterLab frontend.
 
@@ -991,7 +991,7 @@ def get_active_cell_output(timeout_s: float = 2.0) -> Dict[str, Any]:
     frontend for the active cell's current outputs.
 
     Args:
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend (default 10.0s)
 
     Returns:
         Dictionary with:

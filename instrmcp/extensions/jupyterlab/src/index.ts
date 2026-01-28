@@ -1245,10 +1245,43 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return div.innerHTML;
     };
 
-    // Pass through all output data including image base64.
-    // Image data is saved to temp files by the Python backend (image_utils.py).
+    // Maximum size for image data in bytes (10MB base64 ≈ 7.5MB raw image)
+    // Images larger than this will be replaced with a fallback message
+    const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+
+    // Image MIME types to check for size limits
+    const IMAGE_MIME_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/svg+xml',
+      'image/webp',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    // Pass through output data, but replace overly large images with fallback message.
+    // Normal-sized images are saved to temp files by the Python backend (image_utils.py).
     const sanitizeOutputData = (data: Record<string, any>): Record<string, any> => {
-      return { ...data };
+      const result: Record<string, any> = {};
+
+      for (const [mimeType, content] of Object.entries(data)) {
+        if (IMAGE_MIME_TYPES.includes(mimeType) && typeof content === 'string') {
+          const sizeBytes = content.length;
+          if (sizeBytes > MAX_IMAGE_SIZE_BYTES) {
+            // Calculate approximate raw image size (base64 is ~1.33x raw size)
+            const rawSizeMB = (sizeBytes * 0.75) / (1024 * 1024);
+            result[mimeType] = `[IMAGE TOO LARGE: ~${rawSizeMB.toFixed(1)}MB - Use plt.savefig('/tmp/my_plot.png') to save large images to disk, then reference the file path]`;
+            console.log(`MCP Active Cell Bridge: Image too large (${rawSizeMB.toFixed(1)}MB), replaced with fallback message`);
+          } else {
+            result[mimeType] = content;
+          }
+        } else {
+          result[mimeType] = content;
+        }
+      }
+
+      return result;
     };
 
     // Handle patch consent request from kernel

@@ -143,6 +143,7 @@ Located in `instrmcp/extensions/jupyterlab/`. After modifying TypeScript:
 ```bash
 cd instrmcp/extensions/jupyterlab && jlpm run build
 pip install -e . --force-reinstall --no-deps
+instrmcp-setup  # Link extension to Jupyter data directory
 # Restart JupyterLab completely
 ```
 

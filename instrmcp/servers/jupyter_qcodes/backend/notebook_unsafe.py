@@ -346,7 +346,7 @@ class NotebookUnsafeBackend(BaseBackend):
 
             # 6. Fetch output using shared logic from get_active_cell_output
             # This is the same path used by notebook_read_active_cell_output
-            output_result = self.bridge.get_active_cell_output(timeout_s=2.0)
+            output_result = self.bridge.get_active_cell_output(timeout_s=10.0)
 
             # 7. Build combined result
             combined_result = {
