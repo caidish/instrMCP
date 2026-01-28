@@ -159,3 +159,4 @@ tests/playwright/jupyter_lab.log
 tests/playwright/metadata_snapshot_user.json
 /tests/e2e/test-results
 /paper
+/Databases

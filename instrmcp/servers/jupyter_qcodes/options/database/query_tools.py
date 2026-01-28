@@ -350,44 +350,30 @@ def _select_default_database(db_files: list[Path]) -> Optional[Path]:
 def _find_nested_databases(base_dir: Path) -> list[Path]:
     """
     Find database files under nested Databases/ directories.
-    
-    Searches for *.db files in Databases/ subdirectories that are one level
-    deep under base_dir (e.g., base_dir/experiment1/Databases/*.db).
-    
-    This prevents matching deeply nested structures like Databases/Databases/
-    which can occur when paths are incorrectly specified.
-    
+
+    Searches for *.db files in any Databases/ subdirectory under base_dir,
+    including nested patterns like Databases/Databases/ which can occur
+    when paths are incorrectly specified during init_database().
+
+    The tool's job is discovery - it finds ALL databases regardless of
+    directory structure, letting the user decide how to handle them.
+
     Args:
         base_dir: Base directory to search from
-        
+
     Returns:
-        List of Path objects to .db files found in */Databases/ subdirectories
-        
+        List of Path objects to .db files found in */Databases/*.db pattern
+
     Example:
         If base_dir contains:
-            - experiment1/Databases/data.db      ✓ matches
-            - Databases/data.db                   ✗ does not match (not nested)
-            - Databases/Databases/data.db         ✗ does not match (avoid nesting)
-            - experiment1/sub/Databases/data.db   ✗ does not match (too deep)
+            - experiment1/Databases/data.db       ✓ matches
+            - Databases/Databases/data.db         ✓ matches (user may have data here)
+            - project/Databases/measurements.db   ✓ matches
     """
     try:
-        # Use glob with explicit depth: */Databases/*.db
-        # Then filter out Databases/Databases/ pattern to prevent confusion
-        results = []
-        for db_path in base_dir.glob("*/Databases/*.db"):
-            # Safety check: ensure path has sufficient depth
-            # Pattern */Databases/*.db guarantees at least 3 parts relative to base_dir
-            try:
-                # Get the parent directory name (should be "Databases")
-                # and its parent (should be the experiment directory, not "Databases")
-                if len(db_path.parts) >= 3:
-                    parent_name = db_path.parent.name  # Should be "Databases"
-                    grandparent_name = db_path.parent.parent.name  # Should NOT be "Databases"
-                    if parent_name == "Databases" and grandparent_name != "Databases":
-                        results.append(db_path)
-            except (AttributeError, IndexError):
-                # Skip paths with unexpected structure
-                continue
+        # Use glob to find databases in */Databases/*.db pattern
+        # This includes Databases/Databases/ which may contain user data
+        results = list(base_dir.glob("*/Databases/*.db"))
         return results
     except Exception:
         return []
@@ -417,24 +403,23 @@ def resolve_database_path(
                         - "/abs/path/to/measurements.db" (absolute)
                         - "measurements.db" (relative to data_dir)
                         - "experiment1/Databases/data.db" (relative with subdirs)
-                      
+
                       IMPORTANT: Avoid creating nested "Databases/Databases/"
                       structures. When using relative paths with init_database(),
                       use either:
                         - Just the filename: "measurements.db"
                         - Or full relative path: "experiment1/Databases/measurements.db"
                       But NOT: "Databases/measurements.db" (creates nesting)
-                      
+
         data_dir: If set, restricts database search to this directory only
                   (no fallback to environment paths). If None, checks
                   INSTRMCP_DATA_DIR environment variable.
-                  
+
         scan_nested: If True, search nested "Databases" directories when
                      resolving a default database. Looks for patterns like:
                        data_dir/experiment1/Databases/*.db
                        data_dir/experiment2/Databases/*.db
-                     But excludes problematic patterns like:
-                       data_dir/Databases/Databases/*.db (nested structure)
+                       data_dir/Databases/Databases/*.db (also discovered)
 
     Returns:
         tuple: (resolved_path, resolution_info)
@@ -443,17 +428,17 @@ def resolve_database_path(
 
     Raises:
         FileNotFoundError: If database path doesn't exist, with helpful suggestions
-        
+
     Examples:
         # Use default database (MeasureIt or QCodes config)
         path, info = resolve_database_path()
-        
+
         # Use specific database by absolute path
         path, info = resolve_database_path("/home/user/data/measurements.db")
-        
+
         # Use relative path from data_dir
         path, info = resolve_database_path("measurements.db", data_dir=Path("/data"))
-        
+
         # Search nested Databases directories
         path, info = resolve_database_path(scan_nested=True)
     """
@@ -993,7 +978,7 @@ def _format_file_size(size_bytes: int) -> str:
     return f"{size_bytes:.1f} TB"
 
 
-def list_available_databases() -> str:
+def list_available_databases(scan_nested: bool = True) -> str:
     """
     List all available QCodes databases across common locations.
 
@@ -1002,7 +987,12 @@ def list_available_databases() -> str:
 
     Searches:
     - MeasureIt databases directory (via measureit.get_path("databases"))
+    - Nested */Databases/*.db patterns (when scan_nested=True)
     - QCodes config location
+
+    Args:
+        scan_nested: If True, also search nested Databases directories.
+                    Default is True to discover all databases.
 
     Returns:
         JSON string with available databases, their locations, and metadata
@@ -1011,7 +1001,7 @@ def list_available_databases() -> str:
         return json.dumps({"error": "QCodes not available"}, indent=2)
 
     try:
-        databases = _list_available_databases()
+        databases = _list_available_databases(scan_nested=scan_nested)
 
         # Try to get experiment counts for each database using direct SQLite
         for db_info in databases:

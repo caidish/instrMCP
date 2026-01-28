@@ -33,8 +33,7 @@ tools:
     description: |
       List all available QCodes databases.
 
-      Searches common locations including MeasureIt databases directory
-      and QCodes configuration paths.
+      Searches common locations for databases.
 
       Args:
           detailed: bool, if true, also return measureit sweep and qcodes default config.

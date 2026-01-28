@@ -468,11 +468,12 @@ d_{run_id} = ds_{run_id}.get_parameter_data()
             },
         )
         async def list_available_databases(
+            scan_nested: bool = True,
             detailed: bool = False,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
             try:
-                result_str = self.db.list_available_databases()
+                result_str = self.db.list_available_databases(scan_nested=scan_nested)
                 result = json.loads(result_str)
 
                 # Apply concise mode filtering
