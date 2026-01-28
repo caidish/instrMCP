@@ -461,9 +461,9 @@ if "_temp_dir_for_cleanup" in dir():
         # The parameter should be accepted without error
         # It will use MeasureIt's default database since no INSTRMCP_DATA_DIR is set
         assert result is not None, "Tool should return a result"
-        assert "error" not in content.lower() or "not found" in content.lower(), (
-            f"scan_nested parameter should be accepted. Got: {content}"
-        )
+        assert (
+            "error" not in content.lower() or "not found" in content.lower()
+        ), f"scan_nested parameter should be accepted. Got: {content}"
 
         run_cell(notebook_page, "%mcp_stop")
 
