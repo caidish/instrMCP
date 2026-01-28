@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.abspath("../.."))
 project = "InstrMCP"
 copyright = "2025, Jiaqi Cai"
 author = "Jiaqi Cai"
-release = "2.3.4"
-version = "2.3.4"
+release = "2.3.5"
+version = "2.3.5"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
