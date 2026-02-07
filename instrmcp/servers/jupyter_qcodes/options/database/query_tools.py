@@ -13,6 +13,7 @@ Thread Safety Fix:
 """
 
 import json
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -319,8 +320,6 @@ def _get_data_dir_constraint() -> Optional[Path]:
     Returns:
         Path to data directory if INSTRMCP_DATA_DIR is set, None otherwise.
     """
-    import os
-
     data_dir = os.environ.get("INSTRMCP_DATA_DIR")
     if data_dir:
         return Path(data_dir)
@@ -388,7 +387,8 @@ def resolve_database_path(
     Resolve the database path using the following priority:
     1. Provided database_path parameter
     2. MeasureIt get_path("databases") -> Example_database.db (unless data_dir is set)
-    3. QCodes default configuration (unless data_dir is set)
+    3. Jupyter working directory (os.getcwd()) -> newest *.db file
+    4. QCodes default configuration (unless data_dir is set)
 
     When data_dir is set (explicitly or via INSTRMCP_DATA_DIR environment variable),
     fallback to MeasureIt and QCodes environment paths is DISABLED. This ensures
@@ -562,7 +562,20 @@ def resolve_database_path(
         except Exception:
             pass
 
-    # Case 3: Fall back to QCodes config (only if not constrained)
+    # Case 3: Try Jupyter working directory (only if not constrained)
+    try:
+        cwd = Path(os.getcwd())
+        cwd_db_files = list(cwd.glob("*.db"))
+        if cwd_db_files:
+            selected_db = _select_default_database(cwd_db_files)
+            if selected_db:
+                resolution_info["source"] = "jupyter_cwd"
+                resolution_info["tried_path"] = str(selected_db)
+                return str(selected_db), resolution_info
+    except Exception:
+        pass
+
+    # Case 4: Fall back to QCodes config (only if not constrained)
     qcodes_db = Path(qc.config.core.db_location)
     resolution_info["tried_path"] = str(qcodes_db)
 
@@ -585,7 +598,8 @@ def resolve_database_path(
     except Exception:
         tried_paths.append("  1. MeasureIt default: N/A (MeasureIt not available)")
 
-    tried_paths.append(f"  2. QCodes config: {qcodes_db}")
+    tried_paths.append(f"  2. Jupyter working directory: {os.getcwd()}")
+    tried_paths.append(f"  3. QCodes config: {qcodes_db}")
 
     raise FileNotFoundError(
         "No database found yet. Searched:\n"
@@ -604,7 +618,7 @@ def _list_available_databases(
     List available databases by searching common locations.
 
     When data_dir is specified, ONLY searches within that directory.
-    When data_dir is None, searches MeasureIt and QCodes locations.
+    When data_dir is None, searches MeasureIt, Jupyter CWD, and QCodes locations.
 
     Args:
         data_dir: If set, restricts search to this directory only.
@@ -669,6 +683,14 @@ def _list_available_databases(
             except Exception:
                 pass
     except (ImportError, ValueError, Exception):
+        pass
+
+    # Check Jupyter working directory
+    try:
+        cwd = Path(os.getcwd())
+        for db_file in cwd.glob("*.db"):
+            add_database(db_file, "jupyter_cwd")
+    except Exception:
         pass
 
     # Check QCodes config location
@@ -988,6 +1010,7 @@ def list_available_databases(scan_nested: bool = True) -> str:
     Searches:
     - MeasureIt databases directory (via measureit.get_path("databases"))
     - Nested */Databases/*.db patterns (when scan_nested=True)
+    - Jupyter working directory (os.getcwd()) for *.db files
     - QCodes config location
 
     Args:
