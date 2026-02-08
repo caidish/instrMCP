@@ -10,7 +10,10 @@ Handles all MeasureIt-related operations including:
 import asyncio
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Callable, Coroutine, Dict, Any, Optional
+
+# Async callback: (progress, total, message) -> None
+ProgressCallback = Callable[[float, float, str], Coroutine[Any, Any, None]]
 
 from ...backend.base import BaseBackend, SharedState
 
@@ -582,7 +585,11 @@ class MeasureItBackend(BaseBackend):
             }
 
     async def wait_for_sweep(
-        self, var_name: str, timeout: Optional[float] = None, kill: bool = True
+        self,
+        var_name: str,
+        timeout: Optional[float] = None,
+        kill: bool = True,
+        progress_callback: Optional[ProgressCallback] = None,
     ) -> Dict[str, Any]:
         """Wait for a measureit sweep with a given variable name to finish.
 
@@ -691,8 +698,21 @@ class MeasureItBackend(BaseBackend):
             return result
 
         start_time = time.time()
+        poll_count = 0
         while True:
             await asyncio.sleep(WAIT_DELAY)
+            poll_count += 1
+
+            # Send progress notification to keep client connection alive
+            if progress_callback:
+                elapsed = time.time() - start_time
+                total = timeout if timeout else 0
+                try:
+                    await progress_callback(
+                        elapsed, total, f"Waiting for '{var_name}'..."
+                    )
+                except Exception:
+                    pass  # Don't let notification failures break the wait
 
             # Refresh status FIRST, then check timeout (so we have accurate state)
             status = await self.get_measureit_status()
@@ -771,7 +791,10 @@ class MeasureItBackend(BaseBackend):
         return result
 
     async def wait_for_all_sweeps(
-        self, timeout: Optional[float] = None, kill: bool = True
+        self,
+        timeout: Optional[float] = None,
+        kill: bool = True,
+        progress_callback: Optional[ProgressCallback] = None,
     ) -> Dict[str, Any]:
         """Wait until all running measureit sweeps finish.
 
@@ -915,6 +938,22 @@ class MeasureItBackend(BaseBackend):
         start_time = time.time()
         while True:
             await asyncio.sleep(WAIT_DELAY)
+
+            # Send progress notification to keep client connection alive
+            if progress_callback:
+                elapsed = time.time() - start_time
+                total = timeout if timeout else 0
+                running_names = [
+                    k
+                    for k, v in initial_running.items()
+                    if _categorize_sweep(v) == "running"
+                ]
+                try:
+                    await progress_callback(
+                        elapsed, total, f"Waiting for {len(running_names)} sweep(s)..."
+                    )
+                except Exception:
+                    pass
 
             # Refresh status FIRST, then check timeout (so we have accurate state)
             status = await self.get_measureit_status()

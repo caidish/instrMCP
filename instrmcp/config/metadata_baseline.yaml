@@ -14,7 +14,7 @@ tools:
       Check database exists and return health/stats.
 
       Args:
-          database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.
+          database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default, Jupyter working directory, or QCoDeS config.
 
   database_get_dataset_info:
     title: "Get Dataset Info"
@@ -23,9 +23,9 @@ tools:
 
       Args:
           id: Dataset run ID to load
-          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt, Jupyter working directory, or QCoDeS config.
           detailed: bool, if `true`, return full info
-          code_suggestion: dataset-loading code; 
+          code_suggestion: dataset-loading code;
           unsafe/dangerous mode -> auto-inserts+executes, safe returns a suggestion.
 
   database_list_all_available_db:
@@ -33,7 +33,7 @@ tools:
     description: |
       List all available QCodes databases.
 
-      Searches common locations for databases.
+      Searches common locations for databases (MeasureIt, Jupyter working directory, QCoDeS config).
 
       Args:
           detailed: bool, if true, also return measureit sweep and qcodes default config.
@@ -44,7 +44,7 @@ tools:
       List all experiments in the specified QCoDeS database.
 
       Args:
-          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.
+          database_path: optional string, database file path (absolute or relative); defaults to MeasureIt, Jupyter working directory, or QCoDeS config.
               Use absolute paths like "/path/to/data.db" or relative paths like "measurements.db".
               AVOID "Databases/file.db" pattern which can create Databases/Databases/ nesting.
           scan_nested: bool, if true, search nested Databases/ subdirectories (e.g., */Databases/*.db).

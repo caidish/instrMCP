@@ -20,6 +20,7 @@ from instrmcp.servers.jupyter_qcodes.options.database.query_tools import (
     get_dataset_info,
     get_database_stats,
     resolve_database_path,
+    _list_available_databases,
     _format_file_size,
     QCODES_AVAILABLE,
 )
@@ -314,6 +315,58 @@ class TestResolveDatabasePath:
                 assert resolved_path == str(qcodes_db)
                 assert resolution_info["source"] == "qcodes_config"
 
+    def test_resolve_cwd_database(self, tmp_path, monkeypatch):
+        """Test CWD databases are discovered when MeasureIt is unavailable."""
+        db_file = tmp_path / "workspace_data.db"
+        db_file.touch()
+
+        monkeypatch.chdir(tmp_path)
+
+        with patch("measureit.get_path", side_effect=ImportError):
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
+            ) as mock_qc:
+                mock_qc.config.core.db_location = "/nonexistent/qcodes.db"
+                resolved_path, resolution_info = resolve_database_path(None)
+                assert resolved_path == str(db_file)
+                assert resolution_info["source"] == "jupyter_cwd"
+
+    def test_resolve_cwd_prefers_example_database(self, tmp_path, monkeypatch):
+        """Test CWD prefers Example_database.db over other .db files."""
+        other_db = tmp_path / "other.db"
+        other_db.touch()
+        example_db = tmp_path / "Example_database.db"
+        example_db.touch()
+
+        monkeypatch.chdir(tmp_path)
+
+        with patch("measureit.get_path", side_effect=ImportError):
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
+            ) as mock_qc:
+                mock_qc.config.core.db_location = "/nonexistent/qcodes.db"
+                resolved_path, resolution_info = resolve_database_path(None)
+                assert resolved_path == str(example_db)
+                assert resolution_info["source"] == "jupyter_cwd"
+
+    def test_resolve_measureit_has_priority_over_cwd(self, tmp_path, monkeypatch):
+        """Test MeasureIt default takes priority over CWD."""
+        # CWD has a database
+        cwd_db = tmp_path / "cwd_data.db"
+        cwd_db.touch()
+        monkeypatch.chdir(tmp_path)
+
+        # MeasureIt also has a database
+        measureit_dir = tmp_path / "MeasureItHome" / "Databases"
+        measureit_dir.mkdir(parents=True)
+        measureit_db = measureit_dir / "Example_database.db"
+        measureit_db.touch()
+
+        with patch("measureit.get_path", return_value=measureit_dir):
+            resolved_path, resolution_info = resolve_database_path(None)
+            assert resolved_path == str(measureit_db)
+            assert resolution_info["source"] == "measureit_default"
+
     @pytest.mark.skipif(not MEASUREIT_AVAILABLE, reason="MeasureIt not available")
     def test_resolve_priority_explicit_over_env(self, monkeypatch, temp_dir):
         """Test explicit path has priority over environment."""
@@ -330,6 +383,39 @@ class TestResolveDatabasePath:
             resolved_path, resolution_info = resolve_database_path(explicit_path)
             assert resolved_path == explicit_path
             assert resolution_info["source"] == "explicit"
+
+
+class TestListAvailableDatabases:
+    """Test _list_available_databases discovers CWD databases."""
+
+    def test_list_finds_cwd_databases(self, tmp_path, monkeypatch):
+        """Test that _list_available_databases finds databases in CWD."""
+        db_file = tmp_path / "my_data.db"
+        db_file.touch()
+        monkeypatch.chdir(tmp_path)
+
+        with patch("measureit.get_path", side_effect=ImportError):
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.options.database.query_tools.qc"
+            ) as mock_qc:
+                mock_qc.config.core.db_location = "/nonexistent/qcodes.db"
+                databases = _list_available_databases()
+                cwd_dbs = [db for db in databases if db["source"] == "jupyter_cwd"]
+                assert len(cwd_dbs) == 1
+                assert cwd_dbs[0]["name"] == "my_data.db"
+
+    def test_list_no_duplicates_with_cwd(self, tmp_path, monkeypatch):
+        """Test that same database isn't listed twice from different sources."""
+        db_file = tmp_path / "Example_database.db"
+        db_file.touch()
+        monkeypatch.chdir(tmp_path)
+
+        # MeasureIt points to the same directory as CWD
+        with patch("measureit.get_path", return_value=tmp_path):
+            databases = _list_available_databases()
+            paths = [db["path"] for db in databases]
+            # Should appear only once (seen_paths deduplication)
+            assert paths.count(str(db_file)) == 1
 
 
 class TestFormatFileSize:

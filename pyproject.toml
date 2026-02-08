@@ -39,7 +39,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=2.0.0",  # Required for FastMCP.as_proxy() and ProxyClient
+    "fastmcp>=2.14.3",  # >=2.14.3 fixes HTTP transport timeout bug (5s default)
     "mcp>=1.0.0",
     "pyyaml>=6.0",
     "httpx>=0.25.0",

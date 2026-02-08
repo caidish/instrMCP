@@ -6,7 +6,7 @@ Tests MeasureItToolRegistrar for registering MeasureIt sweep monitoring tools wi
 
 import pytest
 import json
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import ANY, MagicMock, AsyncMock
 from mcp.types import TextContent
 
 from instrmcp.servers.jupyter_qcodes.options.measureit.tools import (
@@ -144,7 +144,9 @@ class TestMeasureItToolRegistrar:
         assert isinstance(result[0], TextContent)
         payload = json.loads(result[0].text)
         assert payload["sweeps"] == []
-        mock_tools.wait_for_all_sweeps.assert_called_once_with(timeout=30.0, kill=True)
+        mock_tools.wait_for_all_sweeps.assert_called_once_with(
+            timeout=30.0, kill=True, progress_callback=ANY
+        )
 
     @pytest.mark.asyncio
     async def test_wait_for_sweep_tool(self, registrar, mock_tools, mock_mcp_server):
@@ -159,7 +161,9 @@ class TestMeasureItToolRegistrar:
         assert isinstance(result[0], TextContent)
         payload = json.loads(result[0].text)
         assert payload["sweep"]["variable_name"] == "s1"
-        mock_tools.wait_for_sweep.assert_called_once_with("s1", timeout=30.0, kill=True)
+        mock_tools.wait_for_sweep.assert_called_once_with(
+            "s1", timeout=30.0, kill=True, progress_callback=ANY
+        )
 
     @pytest.mark.asyncio
     async def test_get_status_with_multiple_sweeps(

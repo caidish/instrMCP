@@ -109,7 +109,8 @@ When no explicit path is provided, databases are resolved in this order:
 
 1. **Explicit path parameter**: If ``database_path`` is provided in the tool call
 2. **MeasureIt default**: ``$MeasureItHome/Databases/Example_database.db`` (if available)
-3. **QCodes config**: From ``qcodes.config.core.db_location``
+3. **Jupyter working directory**: Any ``*.db`` files in the notebook's working directory (``os.getcwd()``)
+4. **QCodes config**: From ``qcodes.config.core.db_location``
 
 When ``INSTRMCP_DATA_DIR`` environment variable is set, fallback to MeasureIt and QCodes
 paths is DISABLED to ensure isolation in sandboxed environments.
@@ -182,7 +183,8 @@ The database path is determined by:
 
 1. **Explicit path**: If provided in tool call
 2. **MeasureIt integration**: ``$MeasureItHome/Databases/Example_database.db``
-3. **QCodes config**: From ``qcodes.config.core.db_location``
+3. **Jupyter working directory**: ``*.db`` files in the notebook working directory
+4. **QCodes config**: From ``qcodes.config.core.db_location``
 
 Check current database:
 

@@ -9,6 +9,7 @@ import json
 import logging
 from typing import List, Optional
 
+from fastmcp import Context
 from mcp.types import TextContent
 
 logger = logging.getLogger(__name__)
@@ -189,13 +190,22 @@ class MeasureItToolRegistrar:
             all: bool = False,
             kill: bool = True,
             detailed: bool = False,
+            ctx: Context = None,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+
+            # Build progress callback to keep MCP client alive during long waits.
+            # MCP progress notifications reset the client's request timeout timer,
+            # preventing premature disconnection (e.g. 60s default in many clients).
+            async def _progress(elapsed, total, message):
+                if ctx:
+                    await ctx.report_progress(elapsed, total, message)
+
             try:
                 # If all=True, wait for all sweeps
                 if all:
                     result = await self.tools.wait_for_all_sweeps(
-                        timeout=timeout, kill=kill
+                        timeout=timeout, kill=kill, progress_callback=_progress
                     )
                     # Apply concise mode filtering
                     if not detailed:
@@ -217,7 +227,10 @@ class MeasureItToolRegistrar:
                             )
                         ]
                     result = await self.tools.wait_for_sweep(
-                        variable_name, timeout=timeout, kill=kill
+                        variable_name,
+                        timeout=timeout,
+                        kill=kill,
+                        progress_callback=_progress,
                     )
                     # Apply concise mode filtering
                     if not detailed:
