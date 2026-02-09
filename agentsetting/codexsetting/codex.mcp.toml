@@ -5,7 +5,7 @@
 
 [mcp_servers.instr_mcp]
 command = "python"
-args = ["${instrMCP_PATH}/codexsetting/codex_launcher.py"]
+args = ["${instrMCP_PATH}/agentsetting/codexsetting/codex_launcher.py"]
 
 # Optional: set a working directory
 cwd = "${instrMCP_PATH}"
@@ -14,7 +14,7 @@ cwd = "${instrMCP_PATH}"
 env = { JUPYTER_MCP_HOST = "127.0.0.1",JUPYTER_MCP_PORT = "8123",PYTHONPATH = "${instrMCP_PATH}",instrMCP_PATH = "${instrMCP_PATH}"}
 
 # If your Codex build does not expand ${...}, replace with absolute paths, e.g.:
-# args = ["/Users/you/instrMCP/codexsetting/codex_launcher.py"]
+# args = ["/Users/you/instrMCP/agentsetting/codexsetting/codex_launcher.py"]
 # cwd = "/Users/you/instrMCP"
 # env = { PYTHONPATH = "/Users/you/instrMCP", instrMCP_PATH = "/Users/you/instrMCP", JUPYTER_MCP_HOST = "127.0.0.1", JUPYTER_MCP_PORT = "8123" }
 

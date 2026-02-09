@@ -80,10 +80,13 @@ playwright install chromium
 ### Communication Flow
 ```
 Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
-                              (claudedesktopsetting/)     (utils/)              (servers/jupyter_qcodes/)
+                              (agentsetting/claudedesktopsetting/)  (utils/)        (servers/jupyter_qcodes/)
 
 Codex CLI          ←→ STDIO ←→ codex_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
-                              (codexsetting/)
+                              (agentsetting/codexsetting/)
+
+Gemini CLI         ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py ←→ HTTP ←→ Jupyter MCP Server
+                              (agentsetting/geminisetting/)
 ```
 
 ### Key Directories

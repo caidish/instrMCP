@@ -49,7 +49,7 @@ Claude Desktop/Code ←→ STDIO ←→ claude_launcher.py ←→ stdio_proxy.py
 
 The system uses a proxy pattern:
 1. External clients (Claude Desktop, Claude Code, Codex) communicate via STDIO
-2. Launchers (`claudedesktopsetting/claude_launcher.py`, `codexsetting/codex_launcher.py`) bridge STDIO to HTTP
+2. Launchers (`agentsetting/claudedesktopsetting/claude_launcher.py`, `agentsetting/codexsetting/codex_launcher.py`) bridge STDIO to HTTP
 3. The actual MCP server runs as an HTTP server within Jupyter
 
 ### QCodes Integration
@@ -392,7 +392,7 @@ python tests/playwright/test_metadata_consistency.py --mode snapshot
   "mcpServers": {
     "instrmcp-jupyter": {
       "command": "/path/to/your/python3",
-      "args": ["/path/to/your/instrMCP/claudedesktopsetting/claude_launcher.py"],
+      "args": ["/path/to/your/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"],
       "env": {
         "PYTHONPATH": "/path/to/your/instrMCP",
         "instrMCP_PATH": "/path/to/your/instrMCP",
@@ -410,16 +410,36 @@ python tests/playwright/test_metadata_consistency.py --mode snapshot
 claude mcp add instrMCP --env instrMCP_PATH=$instrMCP_PATH \
   --env PYTHONPATH=$instrMCP_PATH \
   -- $instrMCP_PATH/venv/bin/python \
-  $instrMCP_PATH/claudedesktopsetting/claude_launcher.py
+  $instrMCP_PATH/agentsetting/claudedesktopsetting/claude_launcher.py
 ```
 
 ### Codex CLI Integration
 
 - Command: `python`
-- Args: `["/path/to/your/instrMCP/codexsetting/codex_launcher.py"]`
+- Args: `["/path/to/your/instrMCP/agentsetting/codexsetting/codex_launcher.py"]`
 - Env:
   - `JUPYTER_MCP_HOST=127.0.0.1`
   - `JUPYTER_MCP_PORT=8123`
+
+### Gemini CLI Integration
+
+Gemini uses the same STDIO launcher as Claude Desktop (`~/.gemini/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "instrMCP": {
+      "command": "/path/to/your/python",
+      "args": ["/path/to/your/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"],
+      "env": {
+        "instrMCP_PATH": "/path/to/your/instrMCP",
+        "PYTHONPATH": "/path/to/your/instrMCP"
+      },
+      "trust": true
+    }
+  }
+}
+```
 
 ## Communication Flows
 

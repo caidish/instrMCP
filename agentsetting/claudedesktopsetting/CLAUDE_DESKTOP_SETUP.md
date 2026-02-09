@@ -52,7 +52,7 @@ Add this configuration to your `claude_desktop_config.json`:
     "jupyter-qcodes": {
       "command": "${instrMCP_PATH}/venv/bin/python",
       "args": [
-        "${instrMCP_PATH}/claudedesktopsetting/claude_launcher.py"
+        "${instrMCP_PATH}/agentsetting/claudedesktopsetting/claude_launcher.py"
       ],
       "cwd": "${instrMCP_PATH}",
       "env": {

@@ -112,7 +112,7 @@ After starting the MCP server in JupyterLab, connect Claude Desktop or Claude Co
 
 1. The server runs on ``http://127.0.0.1:8123``
 2. Configure your MCP client to connect to this endpoint
-3. Use the launcher scripts in ``claudedesktopsetting/`` or ``codexsetting/``
+3. Use the launcher scripts in ``agentsetting/claudedesktopsetting/`` or ``agentsetting/codexsetting/``
 
 Example configuration for Claude Desktop (``claude_desktop_config.json``):
 
@@ -122,7 +122,7 @@ Example configuration for Claude Desktop (``claude_desktop_config.json``):
      "mcpServers": {
        "instrMCP": {
          "command": "python",
-         "args": ["/path/to/instrMCP/claudedesktopsetting/claude_launcher.py"]
+         "args": ["/path/to/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"]
        }
      }
    }

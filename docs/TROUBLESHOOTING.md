@@ -243,20 +243,20 @@ python3 -c "import sys; sys.path.append('/full/path/to/instrMCP'); import instrm
 ```bash
 # Re-run automated setup
 cd /path/to/instrMCP
-./claudedesktopsetting/setup_claude.sh
+./agentsetting/claudedesktopsetting/setup_claude.sh
 
 # Verify generated config
 cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 # Check paths are correct
 # - command: Should match $(which python3)
-# - args: Should match $(pwd)/claudedesktopsetting/claude_launcher.py
+# - args: Should match $(pwd)/agentsetting/claudedesktopsetting/claude_launcher.py
 # - env: Should match $(pwd)
 
 # Restart Claude Desktop
 ```
 
-See [`claudedesktopsetting/README.md`](../claudedesktopsetting/README.md) for detailed Claude Desktop setup instructions.
+See [`agentsetting/claudedesktopsetting/README.md`](../agentsetting/claudedesktopsetting/README.md) for detailed Claude Desktop setup instructions.
 
 ## Claude Code Integration Issues
 
@@ -275,7 +275,7 @@ claude mcp list
 claude mcp add instrMCP --env instrMCP_PATH=$instrMCP_PATH \
   --env PYTHONPATH=$instrMCP_PATH \
   -- $instrMCP_PATH/venv/bin/python \
-  $instrMCP_PATH/claudedesktopsetting/claude_launcher.py
+  $instrMCP_PATH/agentsetting/claudedesktopsetting/claude_launcher.py
 
 # Restart MCP server
 claude mcp restart instrMCP
@@ -323,7 +323,7 @@ jupyter lab
 # - JUPYTER_MCP_PORT=8123
 
 # Test launcher manually
-python /path/to/instrMCP/codexsetting/codex_launcher.py
+python /path/to/instrMCP/agentsetting/codexsetting/codex_launcher.py
 ```
 
 ## Clean Installation (Fresh Start)

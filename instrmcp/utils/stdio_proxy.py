@@ -218,11 +218,13 @@ class StdioMCPClient:
         # Check common locations
         candidates = [
             Path(__file__).parent.parent.parent.parent
+            / "agentsetting"
             / "claudedesktopsetting"
             / "claude_launcher.py",
             Path.home()
             / "GitHub"
             / "instrMCP"
+            / "agentsetting"
             / "claudedesktopsetting"
             / "claude_launcher.py",
         ]

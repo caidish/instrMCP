@@ -164,7 +164,7 @@ Then in notebook:
 
 .. code-block:: bash
 
-   python claudedesktopsetting/claude_launcher.py
+   python agentsetting/claudedesktopsetting/claude_launcher.py
 
 Development Workflow
 ~~~~~~~~~~~~~~~~~~~~

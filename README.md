@@ -141,7 +141,7 @@ InstrMCP provides seamless integration with Claude Desktop for AI-assisted labor
 1. **Run Automated Setup**:
 ```bash
 cd /path/to/your/instrMCP
-./claudedesktopsetting/setup_claude.sh
+./agentsetting/claudedesktopsetting/setup_claude.sh
 ```
 
 2. **Restart Claude Desktop** completely and test with: *"What MCP tools are available?"*
@@ -149,14 +149,14 @@ cd /path/to/your/instrMCP
 **Manual Setup Alternative:**
 ```bash
 # 1. Copy and edit configuration
-cp claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
+cp agentsetting/claudedesktopsetting/claude_desktop_config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 # 2. Edit the copied file - replace placeholders with actual paths:
 #    /path/to/your/python3 → $(which python3)
 #    /path/to/your/instrMCP → $(pwd)
 ```
 
-See [`claudedesktopsetting/README.md`](claudedesktopsetting/README.md) for detailed setup instructions and troubleshooting.
+See [`agentsetting/claudedesktopsetting/README.md`](agentsetting/claudedesktopsetting/README.md) for detailed setup instructions and troubleshooting.
 
 ## Claude Code Integration
 
@@ -167,7 +167,7 @@ Claude Code supports local MCP servers via STDIO. Use the provided launcher to c
 claude mcp add instrMCP --env instrMCP_PATH=$instrMCP_PATH \
   --env PYTHONPATH=$instrMCP_PATH \
   -- $instrMCP_PATH/venv/bin/python \
-  $instrMCP_PATH/claudedesktopsetting/claude_launcher.py
+  $instrMCP_PATH/agentsetting/claudedesktopsetting/claude_launcher.py
 
 # Verify connection
 /mcp
@@ -184,10 +184,33 @@ Codex expects MCP servers over STDIO. Use the Codex launcher to proxy STDIO call
 
 **Configuration:**
 - command: `python`
-- args: `["/path/to/your/instrMCP/codexsetting/codex_launcher.py"]`
+- args: `["/path/to/your/instrMCP/agentsetting/codexsetting/codex_launcher.py"]`
 - env:
   - `JUPYTER_MCP_HOST=127.0.0.1`
   - `JUPYTER_MCP_PORT=8123`
+
+## Gemini CLI Integration
+
+Gemini CLI supports MCP servers over STDIO. Use the same launcher as Claude Desktop:
+
+**Configuration** (`~/.gemini/settings.json`):
+```json
+{
+  "mcpServers": {
+    "instrMCP": {
+      "command": "/path/to/your/python",
+      "args": ["/path/to/your/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"],
+      "env": {
+        "instrMCP_PATH": "/path/to/your/instrMCP",
+        "PYTHONPATH": "/path/to/your/instrMCP"
+      },
+      "trust": true
+    }
+  }
+}
+```
+
+See [`agentsetting/geminisetting/README.md`](agentsetting/geminisetting/README.md) for detailed setup instructions.
 
 ## V2.0.0 Features (Current Release)
 

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "instrMCP": {
+      "command": "/path/to/your/python",
+      "args": [
+        "/path/to/your/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"
+      ],
+      "env": {
+        "instrMCP_PATH": "/path/to/your/instrMCP",
+        "PYTHONPATH": "/path/to/your/instrMCP"
+      },
+      "trust": true
+    }
+  }
+}

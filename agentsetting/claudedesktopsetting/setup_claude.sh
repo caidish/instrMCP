@@ -22,9 +22,9 @@ echo "   InstrMCP: $INSTRMCP_PATH"
 echo "   Python:   $PYTHON_PATH"
 
 # Check if we're in the right directory
-if [ ! -f "$INSTRMCP_PATH/claudedesktopsetting/claude_launcher.py" ]; then
+if [ ! -f "$INSTRMCP_PATH/agentsetting/claudedesktopsetting/claude_launcher.py" ]; then
     echo "❌ Error: Please run this script from the instrMCP root directory"
-    echo "   Expected to find: claudedesktopsetting/claude_launcher.py"
+    echo "   Expected to find: agentsetting/claudedesktopsetting/claude_launcher.py"
     exit 1
 fi
 
@@ -61,7 +61,7 @@ cat > "$CONFIG_PATH" <<EOF
     "instrmcp-jupyter": {
       "command": "$PYTHON_PATH",
       "args": [
-        "$INSTRMCP_PATH/claudedesktopsetting/claude_launcher.py"
+        "$INSTRMCP_PATH/agentsetting/claudedesktopsetting/claude_launcher.py"
       ],
       "env": {
         "PYTHONPATH": "$INSTRMCP_PATH",

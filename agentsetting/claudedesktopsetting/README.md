@@ -14,7 +14,7 @@ This directory contains Claude Desktop launcher and configuration files for Inst
 **Automated (Recommended):**
 ```bash
 cd /path/to/instrMCP
-./claudedesktopsetting/setup_claude.sh
+./agentsetting/claudedesktopsetting/setup_claude.sh
 ```
 
 **Manual Setup:**

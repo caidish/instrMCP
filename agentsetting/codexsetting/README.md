@@ -8,23 +8,23 @@ Usage
 - Install this project into the Python env Codex will use: `pip install -e .` from the repo root.
 - Configure Codex to launch an MCP server over STDIO using this command:
   - command: `python`
-  - args: `["/path/to/instrMCP/codexsetting/codex_launcher.py"]`
+  - args: `["/path/to/instrMCP/agentsetting/codexsetting/codex_launcher.py"]`
   - env (recommended):
     - `JUPYTER_MCP_HOST=127.0.0.1`
     - `JUPYTER_MCP_PORT=8123`
 
 Using the TOML config
-- A ready-to-use MCP config is provided at `codexsetting/codex.mcp.toml`.
+- A ready-to-use MCP config is provided at `agentsetting/codexsetting/codex.mcp.toml`.
 - Options to use it (adapt to your Codex version):
   - Merge: copy the `[mcp.servers.instr_mcp]` section into your main Codex config file.
-  - Direct: if supported, point Codex to this file, e.g. `codex --mcp-config /path/to/instrMCP/codexsetting/codex.mcp.toml`.
+  - Direct: if supported, point Codex to this file, e.g. `codex --mcp-config /path/to/instrMCP/agentsetting/codexsetting/codex.mcp.toml`.
 - Paths: If your Codex does not expand `${...}`, replace with absolute paths in the TOML as noted in comments.
 - Env: Ensure the Python used by Codex has this repo installed (`pip install -e .`).
 
 Example (conceptual) config entry
 - id: `instr_mcp`
 - command: `python`
-- args: `["${instrMCP_PATH}/codexsetting/codex_launcher.py"]`
+- args: `["${instrMCP_PATH}/agentsetting/codexsetting/codex_launcher.py"]`
 - env:
   - `PYTHONPATH=${instrMCP_PATH}`
   - `instrMCP_PATH=${instrMCP_PATH}`
