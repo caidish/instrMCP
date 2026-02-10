@@ -14,7 +14,7 @@ is split across:
 
 import time
 import logging
-from typing import Dict, List, Any, Optional, Union
+from typing import Callable, Coroutine, Dict, List, Any, Optional, Union
 
 from .cache import ReadCache, RateLimiter, ParameterPoller
 from .backend.base import SharedState
@@ -218,16 +218,31 @@ class QCodesReadOnlyTools:
         return await self.measureit_backend.get_measureit_status()
 
     async def wait_for_sweep(
-        self, var_name: str, timeout: Optional[float] = None, kill: bool = True
+        self,
+        var_name: str,
+        timeout: Optional[float] = None,
+        kill: bool = True,
+        progress_callback: Optional[
+            Callable[[float, float, str], Coroutine[Any, Any, None]]
+        ] = None,
     ) -> Dict[str, Any]:
         """Wait for a measureit sweep to finish."""
-        return await self.measureit_backend.wait_for_sweep(var_name, timeout, kill)
+        return await self.measureit_backend.wait_for_sweep(
+            var_name, timeout, kill, progress_callback=progress_callback
+        )
 
     async def wait_for_all_sweeps(
-        self, timeout: Optional[float] = None, kill: bool = True
+        self,
+        timeout: Optional[float] = None,
+        kill: bool = True,
+        progress_callback: Optional[
+            Callable[[float, float, str], Coroutine[Any, Any, None]]
+        ] = None,
     ) -> Dict[str, Any]:
         """Wait until all running measureit sweeps finish."""
-        return await self.measureit_backend.wait_for_all_sweeps(timeout, kill)
+        return await self.measureit_backend.wait_for_all_sweeps(
+            timeout, kill, progress_callback=progress_callback
+        )
 
     async def kill_sweep(self, var_name: str) -> Dict[str, Any]:
         """Kill a running MeasureIt sweep to release resources."""
