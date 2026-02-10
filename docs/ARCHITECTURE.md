@@ -318,6 +318,7 @@ Manage metadata configuration via the CLI:
 | `instrmcp metadata show <name>` | Show specific tool/resource override |
 | `instrmcp metadata path` | Show config file path |
 | `instrmcp metadata validate` | Validate config against running server (via STDIO proxy) |
+| `instrmcp metadata tokens` | Count tokens in tool/resource descriptions (requires `tiktoken`) |
 
 #### Validation via STDIO Proxy
 
@@ -344,6 +345,28 @@ instrmcp metadata validate --timeout 30
 # With explicit launcher path
 instrmcp metadata validate --launcher-path /path/to/claude_launcher.py
 ```
+
+#### Token Counting
+
+The `tokens` command counts tokens used by metadata descriptions to help optimize context budget.
+By default it uses the Anthropic API (`messages.count_tokens`) for exact counts and falls back
+to tiktoken offline estimation if the API is unavailable.
+
+```bash
+# Count tokens (API by default, auto-fallback to tiktoken)
+instrmcp metadata tokens
+
+# Force offline estimation (no API calls)
+instrmcp metadata tokens --offline
+
+# Count tokens in merged config (baseline + user overrides)
+instrmcp metadata tokens --source merged
+
+# Output as JSON for programmatic use
+instrmcp metadata tokens --format json
+```
+
+The standalone script is also available: `python tools/token_count.py`
 
 ### Validation Modes
 

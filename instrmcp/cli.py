@@ -77,6 +77,30 @@ def _setup_metadata_subcommands(subparsers):
         help="Timeout for proxy communication in seconds (default: 15)",
     )
 
+    # tokens - Count tokens in metadata descriptions
+    tokens_parser = metadata_subparsers.add_parser(
+        "tokens",
+        help="Count tokens in tool/resource metadata descriptions",
+    )
+    tokens_parser.add_argument(
+        "--source",
+        choices=["baseline", "user", "merged"],
+        default="baseline",
+        help="Config source to analyze (default: baseline)",
+    )
+    tokens_parser.add_argument(
+        "--format",
+        choices=["table", "csv", "json"],
+        default="table",
+        dest="output_format",
+        help="Output format (default: table)",
+    )
+    tokens_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Force tiktoken offline estimation (skip API)",
+    )
+
     return metadata_parser
 
 
@@ -240,10 +264,42 @@ def _handle_metadata_command(args):
     elif args.metadata_command == "validate":
         return _handle_metadata_validate(args)
 
+    elif args.metadata_command == "tokens":
+        return _handle_metadata_tokens(args)
+
     else:
         print("Usage: instrmcp metadata <command>")
-        print("Commands: init, edit, list, show, path, validate")
+        print("Commands: init, edit, list, show, path, validate, tokens")
         return 1
+
+
+def _handle_metadata_tokens(args):
+    """Handle metadata tokens subcommand."""
+    # Load token_count module from tools/ directory (not part of installed package)
+    import importlib.util
+
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    token_count_path = tools_dir / "token_count.py"
+
+    if not token_count_path.exists():
+        print(f"Error: token_count.py not found at {token_count_path}")
+        print("This command requires a source checkout of instrMCP.")
+        return 1
+
+    spec = importlib.util.spec_from_file_location("token_count", token_count_path)
+    token_count = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(token_count)
+
+    # Default: API with auto-fallback. --offline forces tiktoken only.
+    use_api = False if getattr(args, "offline", False) else None
+
+    output = token_count.run_token_count(
+        source=args.source,
+        output_format=args.output_format,
+        use_api=use_api,
+    )
+    print(output)
+    return 0
 
 
 def _handle_metadata_validate(args):

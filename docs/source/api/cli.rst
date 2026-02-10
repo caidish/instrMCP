@@ -166,6 +166,21 @@ Then in notebook:
 
    python agentsetting/claudedesktopsetting/claude_launcher.py
 
+metadata tokens
+~~~~~~~~~~~~~~~
+
+Count tokens used by tool/resource metadata descriptions. Useful for optimizing context budget.
+By default uses the Anthropic API for exact counts, with automatic fallback to tiktoken.
+
+.. code-block:: bash
+
+   instrmcp metadata tokens                    # API (auto-fallback to tiktoken)
+   instrmcp metadata tokens --offline          # Force tiktoken offline estimation
+   instrmcp metadata tokens --source merged    # Include user overrides
+   instrmcp metadata tokens --format json      # JSON output
+
+The standalone script is also available: ``python tools/token_count.py``
+
 Development Workflow
 ~~~~~~~~~~~~~~~~~~~~
 

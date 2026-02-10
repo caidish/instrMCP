@@ -112,9 +112,10 @@ In a Jupyter notebook cell:
 #### CLI Utilities
 
 ```bash
-instrmcp config    # Show configuration paths
-instrmcp version   # Show version
-instrmcp --help    # Show all commands
+instrmcp config            # Show configuration paths
+instrmcp version           # Show version
+instrmcp metadata tokens   # Count tokens in metadata descriptions
+instrmcp --help            # Show all commands
 ```
 
 ## Documentation

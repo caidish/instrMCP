@@ -57,6 +57,12 @@ InstrMCP provides several optional dependency groups:
 
    pip install -e .[docs]
 
+**Analysis Tools** (token counting for metadata optimization):
+
+.. code-block:: bash
+
+   pip install -e .[analysis]
+
 **All Features**:
 
 .. code-block:: bash

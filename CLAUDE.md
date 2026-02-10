@@ -125,7 +125,7 @@ tools:
           param1: Description of param1
 ```
 
-**CLI commands**: `instrmcp metadata init|edit|list|show|path|validate`
+**CLI commands**: `instrmcp metadata init|edit|list|show|path|validate|tokens`
 
 **Validation** (`instrmcp metadata validate`) tests the full STDIO proxy path:
 ```
