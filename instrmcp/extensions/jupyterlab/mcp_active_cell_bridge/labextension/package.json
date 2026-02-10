@@ -1,6 +1,6 @@
 {
   "name": "mcp-active-cell-bridge",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "description": "JupyterLab extension to bridge active cell content to MCP server",
   "keywords": [
     "jupyter",
@@ -64,7 +64,7 @@
     "extension": true,
     "webpackConfig": "./webpack.config.js",
     "_build": {
-      "load": "static/remoteEntry.aa0f00fdb8ca909a5e47.js",
+      "load": "static/remoteEntry.5a5a2f51d21a0d7fb341.js",
       "extension": "./extension",
       "style": "./style"
     }
