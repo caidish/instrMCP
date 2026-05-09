@@ -5,6 +5,29 @@ All notable changes to instrMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-05-09
+
+### Fixed - qcodes >=0.55 compatibility
+
+Replaced `from qcodes.instrument.base import InstrumentBase` with the
+stable `from qcodes.instrument import InstrumentBase` path at three sites:
+
+- [`backend/qcodes.py`](instrmcp/servers/jupyter_qcodes/backend/qcodes.py) — `_get_instrument` and `list_instruments`
+- [`backend/notebook.py`](instrmcp/servers/jupyter_qcodes/backend/notebook.py) — `get_variable_info`
+
+The `qcodes.instrument.base` module was a deprecated re-export in qcodes
+0.45–0.54 and was removed in qcodes 0.55+. The previous import was
+wrapped in `try/except ImportError`, so on qcodes >=0.55 the
+`ModuleNotFoundError` was silently swallowed and `isinstance(obj,
+InstrumentBase)` was never executed, causing every QCoDeS instrument to
+go undetected by `qcodes_instrument_info` and `notebook_read_variable`.
+
+Added behavioral and static-guard regression tests in
+[`tests/unit/test_qcodes_compat.py`](tests/unit/test_qcodes_compat.py)
+that exercise the `InstrumentBase` isinstance check against a real
+`qcodes.instrument.Instrument` (existing tests used `MagicMock`, which
+never triggered the broken code path).
+
 ## [2.0.0] - 2025-10-02
 
 ### Added - Visual Diff Consent for apply_patch

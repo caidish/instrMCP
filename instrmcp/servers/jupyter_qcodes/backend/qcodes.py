@@ -41,7 +41,7 @@ class QCodesBackend(BaseBackend):
 
         # Check if it's a QCoDeS instrument
         try:
-            from qcodes.instrument.base import InstrumentBase
+            from qcodes.instrument import InstrumentBase
 
             if not isinstance(instr, InstrumentBase):
                 raise ValueError(f"'{name}' is not a QCoDeS instrument")
@@ -302,7 +302,7 @@ class QCodesBackend(BaseBackend):
 
         for name, obj in self.namespace.items():
             try:
-                from qcodes.instrument.base import InstrumentBase
+                from qcodes.instrument import InstrumentBase
 
                 if isinstance(obj, InstrumentBase):
                     # Parameters to exclude (internal/special parameters)

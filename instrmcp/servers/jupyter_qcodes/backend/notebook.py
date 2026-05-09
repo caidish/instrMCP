@@ -118,7 +118,7 @@ class NotebookBackend(BaseBackend):
 
         # Add QCoDeS-specific info if it's an instrument
         try:
-            from qcodes.instrument.base import InstrumentBase
+            from qcodes.instrument import InstrumentBase
 
             if isinstance(obj, InstrumentBase):
                 info["qcodes_instrument"] = True
