@@ -3,8 +3,6 @@
 import asyncio
 import json
 
-import pytest
-
 from instrmcp.app import mcp_client
 
 
