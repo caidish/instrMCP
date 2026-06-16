@@ -44,6 +44,8 @@ class TestNotebookToolRegistrar:
         tools.get_editing_cell = AsyncMock()
         tools.update_editing_cell = AsyncMock()
         tools.move_cursor = AsyncMock()
+        tools.kernel_status = AsyncMock()
+        tools.wait_for_kernel = AsyncMock()
         return tools
 
     @pytest.fixture
@@ -81,6 +83,8 @@ class TestNotebookToolRegistrar:
             "notebook_read_content",
             "notebook_move_cursor",
             "notebook_server_status",
+            "notebook_kernel_status",
+            "notebook_wait_for_kernel",
         ]
 
         for tool_name in expected_tools:
@@ -400,6 +404,99 @@ class TestNotebookToolRegistrar:
 
         response_data = json.loads(result[0].text)
         assert response_data["mode"] == "safe"
+
+    @pytest.mark.asyncio
+    async def test_kernel_status_idle_concise(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
+        """kernel_status concise mode returns only core fields."""
+        mock_tools.kernel_status.return_value = {
+            "state": "idle",
+            "busy_for_seconds": 0.0,
+            "execution_count": 7,
+            "execution_count_at_start": 7,
+            "running_cell_preview": None,
+            "last_idle_seconds_ago": 1.2,
+        }
+
+        registrar.register_all()
+        func = mock_mcp_server._tools["notebook_kernel_status"]
+        result = await func()
+
+        data = json.loads(result[0].text)
+        assert data["state"] == "idle"
+        assert data["execution_count"] == 7
+        # Concise mode drops detailed-only fields
+        assert "last_idle_seconds_ago" not in data
+        assert "execution_count_at_start" not in data
+
+    @pytest.mark.asyncio
+    async def test_kernel_status_busy_detailed(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
+        """kernel_status detailed mode reports busy state and full fields."""
+        mock_tools.kernel_status.return_value = {
+            "state": "busy",
+            "busy_for_seconds": 4.5,
+            "execution_count": 8,
+            "execution_count_at_start": 8,
+            "running_cell_preview": "import time; time.sleep(30)",
+            "last_idle_seconds_ago": None,
+        }
+
+        registrar.register_all()
+        func = mock_mcp_server._tools["notebook_kernel_status"]
+        result = await func(detailed=True)
+
+        data = json.loads(result[0].text)
+        assert data["state"] == "busy"
+        assert data["busy_for_seconds"] == 4.5
+        assert data["running_cell_preview"] == "import time; time.sleep(30)"
+        assert "execution_count_at_start" in data
+
+    @pytest.mark.asyncio
+    async def test_wait_for_kernel_idle(self, registrar, mock_tools, mock_mcp_server):
+        """wait_for_kernel returns idle result and passes through args."""
+        mock_tools.wait_for_kernel.return_value = {
+            "state": "idle",
+            "timed_out": False,
+            "waited_seconds": 0.0,
+            "execution_count": 3,
+        }
+
+        registrar.register_all()
+        func = mock_mcp_server._tools["notebook_wait_for_kernel"]
+        result = await func(timeout=10.0)
+
+        data = json.loads(result[0].text)
+        assert data["state"] == "idle"
+        assert data["timed_out"] is False
+        # timeout forwarded; ctx defaults to None
+        call = mock_tools.wait_for_kernel.call_args
+        assert call.args[0] == 10.0
+
+    @pytest.mark.asyncio
+    async def test_wait_for_kernel_timeout(
+        self, registrar, mock_tools, mock_mcp_server
+    ):
+        """wait_for_kernel reports a timeout while the kernel is still busy."""
+        mock_tools.wait_for_kernel.return_value = {
+            "state": "busy",
+            "timed_out": True,
+            "waited_seconds": 5.0,
+            "busy_for_seconds": 5.0,
+            "running_cell_preview": "while True: pass",
+            "hint": "Kernel still busy after timeout; it may be stalled...",
+        }
+
+        registrar.register_all()
+        func = mock_mcp_server._tools["notebook_wait_for_kernel"]
+        result = await func(timeout=5.0, poll_interval=0.01)
+
+        data = json.loads(result[0].text)
+        assert data["state"] == "busy"
+        assert data["timed_out"] is True
+        assert "running_cell_preview" in data
 
     @pytest.mark.asyncio
     async def test_get_notebook_cells_with_errors(

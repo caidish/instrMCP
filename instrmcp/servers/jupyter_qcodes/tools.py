@@ -69,13 +69,18 @@ class QCodesReadOnlyTools:
         self._notebook_unsafe = NotebookUnsafeBackend(self._state, self._notebook)
         self._measureit = None  # Lazy-loaded when needed
 
-        # Register pre_run_cell event to capture current cell
+        # Register pre/post_run_cell events to capture current cell and track
+        # kernel busy/idle state.
         if ipython and hasattr(ipython, "events"):
             ipython.events.register("pre_run_cell", self._capture_current_cell)
-            logger.debug("Registered pre_run_cell event for current cell capture")
+            ipython.events.register("post_run_cell", self._mark_cell_complete)
+            logger.debug(
+                "Registered pre/post_run_cell events for cell capture and "
+                "kernel busy tracking"
+            )
         else:
             logger.warning(
-                "Could not register pre_run_cell event - events system unavailable"
+                "Could not register run_cell events - events system unavailable"
             )
 
         logger.debug("QCoDesReadOnlyTools initialized with backend delegation")
@@ -95,7 +100,37 @@ class QCodesReadOnlyTools:
         self._state.current_cell_id = self.current_cell_id
         self._state.current_cell_timestamp = self.current_cell_timestamp
 
+        # Mark the kernel as busy. This fires on the kernel main thread BEFORE
+        # the cell body executes (and potentially blocks), so the flag is set
+        # and remains readable from the MCP server thread throughout a stall.
+        preview = (info.raw_cell or "")[:200]
+        with self._state.kernel_state_lock:
+            self._state.kernel_busy = True
+            self._state.kernel_busy_since_mono = time.monotonic()
+            self._state.kernel_busy_since_wall = time.time()
+            self._state.kernel_exec_count_at_start = getattr(
+                self.ipython, "execution_count", None
+            )
+            self._state.kernel_running_cell_preview = preview
+
         logger.debug(f"Captured current cell: {len(info.raw_cell)} characters")
+
+    def _mark_cell_complete(self, result):
+        """Mark the kernel as idle after a cell finishes executing.
+
+        Fires on the kernel main thread via post_run_cell, including when the
+        cell raised an exception or was interrupted (KeyboardInterrupt).
+
+        Args:
+            result: IPython ExecutionResult object (unused; presence signals done).
+        """
+        with self._state.kernel_state_lock:
+            self._state.kernel_busy = False
+            self._state.kernel_busy_since_mono = None
+            self._state.kernel_running_cell_preview = None
+            self._state.kernel_last_idle_at = time.time()
+
+        logger.debug("Kernel marked idle (post_run_cell)")
 
     @property
     def measureit_backend(self):
@@ -175,6 +210,21 @@ class QCodesReadOnlyTools:
     async def move_cursor(self, target: str) -> Dict[str, Any]:
         """Move cursor to a different cell in the notebook."""
         return await self._notebook.move_cursor(target)
+
+    async def kernel_status(self) -> Dict[str, Any]:
+        """Report whether the ipykernel is currently busy or idle."""
+        return await self._notebook.kernel_status()
+
+    async def wait_for_kernel(
+        self,
+        timeout: float,
+        poll_interval: float = 1.0,
+        progress_callback: Optional[Callable[..., Coroutine[Any, Any, None]]] = None,
+    ) -> Dict[str, Any]:
+        """Wait until the ipykernel becomes idle or the timeout expires."""
+        return await self._notebook.wait_for_kernel(
+            timeout, poll_interval, progress_callback
+        )
 
     # =========================================================================
     # Notebook Unsafe Backend Delegation

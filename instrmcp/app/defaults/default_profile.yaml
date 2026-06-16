@@ -1,0 +1,37 @@
+# InstrMCP default profile.
+#
+# This is the bundled baseline. User profiles (~/.instrmcp/profiles/<name>.yaml) and
+# project-local profiles (./.instrmcp/profiles/<name>.yaml) are deep-merged over this.
+#
+# Edit a copy rather than this file:  instrmcp profiles ...
+
+version: 1
+name: default
+
+environment:
+  # conda_env: instrMCPdev          # informational; doctor warns on mismatch
+  # working_dir: ./experiments      # cwd for the JupyterLab subprocess
+  env_vars: {}
+
+jupyter:
+  port: 8888
+  host: 127.0.0.1
+  open_browser: true
+  kernel_name: instrmcp             # the auto-loading kernelspec (install-kernel)
+  # notebook_dir: ./
+
+mcp:
+  host: 127.0.0.1
+  port: 8123
+  mode: safe                        # safe | unsafe | dangerous
+  options: []                       # measureit | database | dynamictool | auto_correct_json
+  autostart: true                   # kernelspec injects %mcp_start on kernel boot
+
+harness:
+  expected: false                   # connect-only; the supervisor never spawns a harness
+
+measureit:
+  enabled: false
+  stream_interval_s: 1.0
+
+supervisor_port: 8124

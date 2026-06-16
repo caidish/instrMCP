@@ -21,8 +21,10 @@ https://github.com/user-attachments/assets/e7d0a441-36b2-4fec-9c54-1427310b7698
 - **Database Integration**: Read-only access to QCodes databases with intelligent code generation
 - **MeasureIt Templates**: Comprehensive measurement pattern library and code generation
 - **JupyterLab Native**: Seamless integration with JupyterLab
+- **Kernel Awareness**: `notebook_kernel_status` / `notebook_wait_for_kernel` report whether the kernel is busy and wait for it to go idle - working even while a cell is stalled
 - **Dynamic Tool Creation**: Create custom MCP tools at runtime using LLM-powered tool registration
 - **Safe mode**: Read-only mode with optional unsafe execution
+- **GUI control panel**: `instrmcp app` opens a Streamlit dashboard to launch JupyterLab and watch live status, logs, and MeasureIt sweeps
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI
@@ -108,6 +110,62 @@ In a Jupyter notebook cell:
 %mcp_option add measureit database
 %mcp_restart
 ```
+
+> **You don't need to type the magics.** The JupyterLab extension auto-loads the
+> InstrMCP kernel extension in every notebook, and the notebook **toolbar** has a
+> one-click **Start** button (safe mode by default). The cell commands above are just
+> the manual equivalent.
+
+#### Friendly GUI (Streamlit control panel)
+
+For a no-terminal experience, use the Streamlit control panel:
+
+```bash
+pip install 'instrmcp[gui]'     # one-time: install the GUI extra
+instrmcp app --profile demo     # opens http://localhost:8501
+```
+
+From the GUI you can launch JupyterLab, watch live status / logs / MeasureIt, run
+diagnostics, and recover (restart kernel / stop) — all in one pane. To start the MCP
+server, open a notebook from the GUI's **Open JupyterLab** link and click **Start** in
+the InstrMCP toolbar (safe mode). The GUI then shows **MCP → ready**.
+
+#### Command-line launcher (optional)
+
+The same supervisor is available headlessly, with a built-in HTML dashboard at
+`http://127.0.0.1:8124/`:
+
+```bash
+instrmcp doctor --profile demo      # readable environment diagnostics + fixes
+instrmcp launch --profile demo      # launch JupyterLab + supervisor (foreground)
+instrmcp status --profile demo      # component states (or --json)
+instrmcp logs --follow              # stream JupyterLab / supervisor logs
+instrmcp restart --component kernel # restart kernels via the Jupyter REST API
+instrmcp stop                       # shut down JupyterLab + supervisor
+instrmcp profiles list              # discover bundled / user / project profiles
+```
+
+The supervisor **observes** runtime health (JupyterLab, MCP reachability) — it never
+owns the MCP lifecycle. Start/stop/mode for MCP stay in the JupyterLab toolbar.
+
+Profiles are YAML, deep-merged over a bundled default. Search order: project-local
+(`./.instrmcp/profiles/<name>.yaml`) → user (`~/.instrmcp/profiles/<name>.yaml`) →
+bundled. See `instrmcp profiles show <name>`.
+
+<details>
+<summary><b>Advanced:</b> auto-start MCP on a dedicated kernel</summary>
+
+Optionally register an `instrmcp` kernelspec whose kernel auto-starts the MCP server on
+launch (no toolbar click). This is **not required** — the toolbar works with any kernel —
+and adds a kernel-selection step:
+
+```bash
+instrmcp install-kernel --profile demo   # registers the "instrmcp" kernel
+instrmcp uninstall-kernel                 # remove it
+```
+
+Then open notebooks on the **"Python 3 (instrmcp · …)"** kernel.
+</details>
 
 #### CLI Utilities
 

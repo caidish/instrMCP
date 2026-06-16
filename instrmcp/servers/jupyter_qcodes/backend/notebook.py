@@ -296,3 +296,97 @@ class NotebookBackend(BaseBackend):
                 "source": "error",
                 "target_requested": target,
             }
+
+    async def kernel_status(self) -> Dict[str, Any]:
+        """Report whether the ipykernel is currently busy or idle.
+
+        Reads a flag maintained by the pre/post_run_cell callbacks (see
+        ``QCodesReadOnlyTools._capture_current_cell`` / ``_mark_cell_complete``).
+        This involves no comm round-trip, so it returns instantly and correctly
+        even while the kernel main thread is blocked in a stalled cell.
+
+        Returns:
+            Dictionary with kernel state, elapsed busy time, execution count,
+            running cell preview, and time since last idle.
+        """
+        with self.state.kernel_state_lock:
+            busy = self.state.kernel_busy
+            since_mono = self.state.kernel_busy_since_mono
+            preview = self.state.kernel_running_cell_preview
+            ec_start = self.state.kernel_exec_count_at_start
+            last_idle = self.state.kernel_last_idle_at
+
+        busy_for = (time.monotonic() - since_mono) if (busy and since_mono) else 0.0
+        return {
+            "state": "busy" if busy else "idle",
+            "busy_for_seconds": round(busy_for, 3),
+            "execution_count": getattr(self.ipython, "execution_count", None),
+            "execution_count_at_start": ec_start,
+            "running_cell_preview": preview if busy else None,
+            "last_idle_seconds_ago": (
+                round(time.time() - last_idle, 3) if last_idle else None
+            ),
+        }
+
+    async def wait_for_kernel(
+        self,
+        timeout: float,
+        poll_interval: float = 1.0,
+        progress_callback=None,
+    ) -> Dict[str, Any]:
+        """Wait until the ipykernel becomes idle or the timeout expires.
+
+        Polls the busy flag (comm-free) on the MCP server event loop, so it
+        keeps working even while the kernel main thread is fully blocked. On
+        timeout it reports diagnostics and returns WITHOUT interrupting the
+        kernel; the caller decides whether the kernel is stalled.
+
+        Args:
+            timeout: Maximum time to wait in seconds (required).
+            poll_interval: Seconds between busy-flag checks.
+            progress_callback: Optional async callable(elapsed, total, message)
+                used to keep the MCP client connection alive during long waits.
+
+        Returns:
+            Dictionary with final state and, on timeout, busy diagnostics.
+        """
+        start = time.monotonic()
+        while True:
+            with self.state.kernel_state_lock:
+                busy = self.state.kernel_busy
+                since_mono = self.state.kernel_busy_since_mono
+                preview = self.state.kernel_running_cell_preview
+
+            if not busy:
+                return {
+                    "state": "idle",
+                    "timed_out": False,
+                    "waited_seconds": round(time.monotonic() - start, 3),
+                    "execution_count": getattr(self.ipython, "execution_count", None),
+                }
+
+            elapsed = time.monotonic() - start
+            if progress_callback:
+                try:
+                    await progress_callback(
+                        elapsed, timeout, "Waiting for kernel to be idle..."
+                    )
+                except Exception:
+                    pass
+
+            if elapsed > timeout:
+                busy_for = (time.monotonic() - since_mono) if since_mono else elapsed
+                return {
+                    "state": "busy",
+                    "timed_out": True,
+                    "waited_seconds": round(elapsed, 3),
+                    "busy_for_seconds": round(busy_for, 3),
+                    "running_cell_preview": preview,
+                    "hint": (
+                        "Kernel still busy after timeout; it may be stalled or "
+                        "running a long cell. Inspect running_cell_preview and "
+                        "consider interrupting the kernel."
+                    ),
+                }
+
+            await asyncio.sleep(poll_interval)

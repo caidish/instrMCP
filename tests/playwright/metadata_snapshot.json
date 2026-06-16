@@ -59,7 +59,7 @@
           "description": null
         }
       },
-      "description": "Check database exists and return health/stats.\n\nArgs:\n    database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default or QCoDeS config.",
+      "description": "Check database exists and return health/stats.\n\nArgs:\n    database_path: optional string, path to the database file (absolute or relative); if omitted, uses the MeasureIt default, Jupyter working directory, or QCoDeS config.",
       "title": "Database Statistics"
     },
     "database_get_dataset_info": {
@@ -77,16 +77,19 @@
           "description": null
         }
       },
-      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    detailed: bool, if `true`, return full info\n    code_suggestion: dataset-loading code; \n    unsafe/dangerous mode -> auto-inserts+executes, safe returns a suggestion.",
+      "description": "Get detailed information about a specific dataset.\n\nArgs:\n    id: Dataset run ID to load\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt, Jupyter working directory, or QCoDeS config.\n    detailed: bool, if `true`, return full info\n    code_suggestion: dataset-loading code;\n    unsafe/dangerous mode -> auto-inserts+executes, safe returns a suggestion.",
       "title": "Get Dataset Info"
     },
     "database_list_all_available_db": {
       "arguments": {
         "detailed": {
           "description": null
+        },
+        "scan_nested": {
+          "description": null
         }
       },
-      "description": "List all available QCodes databases.\n\nSearches common locations including MeasureIt databases directory\nand QCodes configuration paths.\n\nArgs:\n    detailed: bool, if true, also return measureit sweep and qcodes default config.",
+      "description": "List all available QCodes databases.\n\nSearches common locations for databases (MeasureIt, Jupyter working directory, QCoDeS config).\n\nArgs:\n    detailed: bool, if true, also return measureit sweep and qcodes default config.",
       "title": "List Databases"
     },
     "database_list_experiments": {
@@ -101,7 +104,7 @@
           "description": null
         }
       },
-      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt or QCoDeS config.\n    scan_nested: bool, if true, also scan nested Databases/ subdirectories\n    detailed: bool, If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
+      "description": "List all experiments in the specified QCoDeS database.\n\nArgs:\n    database_path: optional string, database file path (absolute or relative); defaults to MeasureIt, Jupyter working directory, or QCoDeS config.\n        Use absolute paths like \"/path/to/data.db\" or relative paths like \"measurements.db\".\n        AVOID \"Databases/file.db\" pattern which can create Databases/Databases/ nesting.\n    scan_nested: bool, if true, search nested Databases/ subdirectories (e.g., */Databases/*.db).\n        Finds databases in experiment-specific folders like experiment1/Databases/data.db.\n        Automatically excludes problematic Databases/Databases/ nesting patterns.\n    detailed: bool, If true, add path_resolved_via, experiment_count, per-experiment metadata\n        (experiment_id, name, sample_name, start/end time, run_ids summary like \"6-16(11)\", (*) means total counts),\n        and sweep_groups when detected.",
       "title": "List Experiments"
     },
     "mcp_get_resource": {
@@ -114,7 +117,11 @@
       "title": "Get MCP Resource"
     },
     "mcp_list_resources": {
-      "arguments": {},
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
       "description": "List all available MCP resources and guide.\n\nUse this tool to discover\nwhat context and documentation is available.",
       "title": "List MCP Resources"
     },
@@ -211,6 +218,15 @@
       "description": "Execute the currently active cell and return the output.\n\nMay require human consent.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0). if 0, fire-and-forget.\n    detailed: bool, If false (default), return concise summary; if true, return full info\n\nReturns (concise mode):\n    - signal_success: Whether the execution request was sent successfully\n    - status: \"completed\", \"error\", \"timeout\", or \"no_wait\"\n    - executed: true if cell was executed\n    - has_output, has_error: Boolean flags\n    - outputs: List of cell outputs\n    - error_type, error_message, traceback: If error occurred\n\nReturns (detailed mode - adds):\n    - input: The code that was executed\n    - sweep_detected: true if .start() was detected\n    - suggestion: Hint to use wait tools if sweep detected\n    - the output will not be summarized.",
       "title": "Execute Cell"
     },
+    "notebook_kernel_status": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        }
+      },
+      "description": "Report whether the Jupyter kernel is currently busy (running a cell) or idle.\n\nWorks even while the kernel is blocked in a long-running or stalled cell,\nbecause it reads a backend flag without contacting the kernel main thread.\nUse this to check, before sending work, whether the kernel is free.\n\nArgs:\n    detailed: If false (default), return state, busy_for_seconds,\n        execution_count, and running_cell_preview. If true, also include\n        execution_count_at_start and last_idle_seconds_ago.\n\nReturns:\n    - state: \"busy\" or \"idle\"\n    - busy_for_seconds: How long the current cell has been running (0 if idle)\n    - execution_count: Current kernel execution count\n    - running_cell_preview: First 200 chars of the running cell (null if idle)",
+      "title": "Kernel Status"
+    },
     "notebook_list_variables": {
       "arguments": {
         "detailed": {
@@ -303,6 +319,21 @@
       },
       "description": "Get server status and configuration.",
       "title": "Server Status"
+    },
+    "notebook_wait_for_kernel": {
+      "arguments": {
+        "detailed": {
+          "description": null
+        },
+        "poll_interval": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        }
+      },
+      "description": "Wait until the Jupyter kernel becomes idle, or until a timeout expires.\n\nThis only observes the kernel; it does NOT interrupt it. It keeps working\neven while the kernel main thread is fully blocked. If the timeout expires\nwhile the kernel is still busy, the kernel may be stalled or running a long\ncell - inspect running_cell_preview and decide whether to interrupt.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED). Choose based on how\n        long the running cell is expected to take to avoid hanging forever.\n    poll_interval: Seconds between checks (default: 1.0).\n    detailed: Reserved for future use (default: false).\n\nReturns (idle):\n    - state: \"idle\", timed_out: false, waited_seconds, execution_count\nReturns (timeout while still busy):\n    - state: \"busy\", timed_out: true, waited_seconds, busy_for_seconds,\n      running_cell_preview, hint",
+      "title": "Wait for Kernel"
     },
     "qcodes_get_parameter_info": {
       "arguments": {

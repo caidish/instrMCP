@@ -18,6 +18,19 @@ instrmcp/
 │   └── qcodes/        # Standalone QCodes station server
 ├── extensions/        # Jupyter/IPython extensions
 │   └── jupyterlab/    # JupyterLab extension for active cell bridging
+├── app/               # App / Launcher (CLI + supervisor + dashboard)
+│   ├── profiles.py        # Pydantic profile models + YAML loader (project/user/bundled)
+│   ├── doctor.py          # Environment / readiness diagnostics
+│   ├── install_kernel.py  # Auto-loading "instrmcp" kernelspec installer
+│   ├── launcher.py        # `instrmcp launch` entry; argv/env builders
+│   ├── supervisor.py      # Observer + orchestrator (JupyterLab + health loop + API)
+│   ├── components.py      # Component state machine + aggregate state
+│   ├── api.py             # Starlette status API + WS + static webapp mount
+│   ├── logs.py            # Bounded per-component log buffers + pub/sub
+│   ├── mcp_client.py      # Minimal MCP-over-HTTP tool caller (MeasureIt poll)
+│   ├── cli_app.py         # argparse wiring + handlers for App subcommands
+│   ├── webapp/            # Static dashboard (index.html, app.js, style.css)
+│   └── defaults/          # Bundled profiles (default_profile.yaml, demo.yaml)
 ├── utils/             # Utility modules
 │   ├── stdio_proxy.py # STDIO↔HTTP proxy for Claude Desktop/Codex integration
 │   ├── metadata_config.py  # Metadata configuration loader
@@ -52,6 +65,66 @@ The system uses a proxy pattern:
 2. Launchers (`agentsetting/claudedesktopsetting/claude_launcher.py`, `agentsetting/codexsetting/codex_launcher.py`) bridge STDIO to HTTP
 3. The actual MCP server runs as an HTTP server within Jupyter
 
+### App / Launcher Architecture
+
+The `instrmcp/app/` package turns the manual startup flow into one command
+(`instrmcp launch`) plus a live dashboard, **without** changing the kernel-hosted MCP
+model.
+
+```
+instrmcp launch ─spawns─▶ jupyter lab ─opens─▶ notebook on "instrmcp" kernel
+      │ owns                                          │ kernel.json exec_files
+      ▼                                               ▼ instrmcp_startup.py
+ Supervisor (asyncio, :8124)              %load_ext + %mcp_<mode> + %mcp_start
+  ├─ Starlette: status API + WS + static dashboard          │
+  ├─ health loop ─ check_http_mcp_server(:8123) ─observes─▶ JupyterMCPServer (:8123)
+  ├─ measureit poll ─ MCP tools/call measureit_get_status (HTTP)   (kernel-hosted)
+  └─ LogStore (JupyterLab stdout + supervisor observations)
+                 ▲
+  Dashboard (browser @ :8124) ──HTTP/WS──┘   status / logs / recovery / measureit
+```
+
+Key design points:
+
+- **Auto-loading kernelspec (Option A)** — `instrmcp install-kernel` registers an
+  `instrmcp` kernelspec whose `kernel.json` runs
+  `--IPKernelApp.exec_files={resource_dir}/instrmcp_startup.py`. That startup script
+  invokes the existing magics (`%load_ext instrmcp.extensions`, `%mcp_<mode>`,
+  `%mcp_option add ...`, `%mcp_start`), so the MCP server starts in the user's
+  interactive kernel where the instruments live. Profile `mcp.mode/options/autostart`
+  are baked into the script and recorded in `kernel.json` metadata (for drift checks).
+- **Supervisor is observer + orchestrator** — it owns the JupyterLab subprocess and the
+  status API, but never imports `JupyterMCPServer`. MCP health is observed via
+  `check_http_mcp_server`. MeasureIt status is read by calling the `measureit_get_status`
+  MCP tool over HTTP (`app/mcp_client.py`) — no kernel comm, no new MCP tool.
+- **Dashboard is same-origin** — served by the supervisor's Starlette app, so it stays
+  available even when JupyterLab/kernel is down (recovery view). Real in-notebook MCP
+  control (mode/options/restart) stays in the JupyterLab toolbar; the supervisor's
+  `POST /restart-mcp` is intentionally advisory.
+
+Local API endpoints (on `supervisor_port`, default 8124):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /` `,/<asset>` | Static dashboard |
+| `GET /status` | Component snapshot + aggregate state |
+| `GET /logs` | Tail of per-component logs |
+| `GET /doctor` | On-demand diagnostics report |
+| `GET /profiles` | Discoverable profiles |
+| `GET /measureit` | Cached MeasureIt sweep status |
+| `POST /stop` | Graceful shutdown |
+| `POST /restart-kernel` | Restart kernels via Jupyter REST |
+| `POST /restart-mcp` | Advisory (use the notebook toolbar / `%mcp_restart`) |
+| `WS /events` | Live status + log + measureit stream |
+
+Component state machine (`app/components.py`): `IDLE → STARTING → READY`, with
+`READY → DEGRADED` on transient MCP failures, `→ ERROR` if a spawned process dies, and
+`→ STOPPED` on shutdown. Observed components (MCP) never force an aggregate `ERROR`.
+
+Profiles (`app/profiles.py`) are YAML, deep-merged over the bundled default. Resolution
+order: project-local `./.instrmcp/profiles/<name>.yaml` → user
+`~/.instrmcp/profiles/<name>.yaml` → bundled `app/defaults/`.
+
 ### QCodes Integration
 
 - **Lazy Loading**: Instruments loaded on-demand for safety
@@ -85,6 +158,8 @@ All tools now use hierarchical naming with `/` separator for better organization
 - `notebook/read_active_cell_output()` - Get output of the currently active cell
 - `notebook/read_content(num_cells, include_output)` - Get cells around cursor position
 - `notebook/server_status()` - Check server mode and status
+- `notebook/kernel_status(detailed)` - Report whether the ipykernel is busy or idle (works even during a stall)
+- `notebook/wait_for_kernel(timeout, poll_interval, detailed)` - Wait until the kernel is idle or the timeout expires (observe-only; never interrupts)
 
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
@@ -93,6 +168,34 @@ All tools now use hierarchical naming with `/` separator for better organization
 - `notebook/delete_cell()` - Delete the currently active cell (requires consent)
 - `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
 - `notebook/apply_patch(old_text, new_text)` - Apply text replacement patch to active cell (requires consent)
+
+#### Kernel Busy/Idle Tracking
+
+`notebook_kernel_status` and `notebook_wait_for_kernel` let an agent tell whether the
+ipykernel is running a cell and wait for it to finish.
+
+The state is tracked entirely in the backend via IPython events: `QCodesReadOnlyTools`
+registers `pre_run_cell` and `post_run_cell` callbacks (`tools.py`) that flip a
+`kernel_busy` flag (plus start time, execution count, and a cell preview) stored in
+`SharedState` (`backend/base.py`) under a dedicated `threading.Lock`. `pre_run_cell` fires
+on the kernel main thread *before* the cell body runs, so the flag is set and remains
+readable throughout a blocking cell; `post_run_cell` fires on completion, including when
+the cell raises or is interrupted.
+
+Because the MCP HTTP server runs on its own background thread and event loop
+(`mcp_server.py` `_run_server_in_thread`), these two tools - which only read the in-memory
+flag, with **no comm round-trip** - respond instantly even while the kernel main thread is
+fully blocked in a stalled cell. (Comm-based tools such as `notebook_execute_active_cell`
+would hang in that situation, since their response callback runs on the blocked main
+thread.) This is why kernel state is tracked in the backend rather than read from the
+frontend `kernel.status`.
+
+This flag is kernel-wide ("is any cell running"), independent of the per-cell completion
+detection inside `notebook_execute_active_cell` (`_wait_for_execution` in
+`backend/notebook_unsafe.py`, which keys off `last_execution_result` identity). `wait_for_kernel`
+only observes; on timeout it reports `busy_for_seconds` and the running-cell preview and
+returns without interrupting - distinguishing a true stall from a long cell is left to the
+caller.
 
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
@@ -210,7 +313,7 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 
 **Read-Only Tools** (`readOnlyHint: true`):
 - All QCodes tools (`qcodes_instrument_info`, `qcodes_get_parameter_info`, `qcodes_get_parameter_values`)
-- All notebook read tools (`notebook_list_variables`, `notebook_read_*`, `notebook_server_status`)
+- All notebook read tools (`notebook_list_variables`, `notebook_read_*`, `notebook_server_status`, `notebook_kernel_status`, `notebook_wait_for_kernel`)
 - All MeasureIt status tools, Database tools, Dynamic list/inspect/stats tools
 - Resource tools (`mcp_list_resources`, `mcp_get_resource`)
 

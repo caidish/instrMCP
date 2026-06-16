@@ -1,0 +1,22 @@
+# InstrMCP demo profile.
+#
+#   instrmcp install-kernel --profile demo
+#   instrmcp launch --profile demo
+#
+# Safe mode with MeasureIt monitoring enabled so the dashboard shows live sweep
+# status. Deep-merged over the bundled default; override locally by creating
+# ~/.instrmcp/profiles/demo.yaml or ./.instrmcp/profiles/demo.yaml.
+
+name: demo
+
+jupyter:
+  open_browser: true
+
+mcp:
+  mode: safe
+  options:
+    - measureit
+
+measureit:
+  enabled: true
+  stream_interval_s: 1.0

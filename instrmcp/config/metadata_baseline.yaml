@@ -175,6 +175,48 @@ tools:
           - suggestion: Hint to use wait tools if sweep detected
           - the output will not be summarized.
 
+  notebook_kernel_status:
+    title: "Kernel Status"
+    description: |
+      Report whether the Jupyter kernel is currently busy (running a cell) or idle.
+
+      Works even while the kernel is blocked in a long-running or stalled cell,
+      because it reads a backend flag without contacting the kernel main thread.
+      Use this to check, before sending work, whether the kernel is free.
+
+      Args:
+          detailed: If false (default), return state, busy_for_seconds,
+              execution_count, and running_cell_preview. If true, also include
+              execution_count_at_start and last_idle_seconds_ago.
+
+      Returns:
+          - state: "busy" or "idle"
+          - busy_for_seconds: How long the current cell has been running (0 if idle)
+          - execution_count: Current kernel execution count
+          - running_cell_preview: First 200 chars of the running cell (null if idle)
+
+  notebook_wait_for_kernel:
+    title: "Wait for Kernel"
+    description: |
+      Wait until the Jupyter kernel becomes idle, or until a timeout expires.
+
+      This only observes the kernel; it does NOT interrupt it. It keeps working
+      even while the kernel main thread is fully blocked. If the timeout expires
+      while the kernel is still busy, the kernel may be stalled or running a long
+      cell - inspect running_cell_preview and decide whether to interrupt.
+
+      Args:
+          timeout: Maximum time to wait in seconds (REQUIRED). Choose based on how
+              long the running cell is expected to take to avoid hanging forever.
+          poll_interval: Seconds between checks (default: 1.0).
+          detailed: Reserved for future use (default: false).
+
+      Returns (idle):
+          - state: "idle", timed_out: false, waited_seconds, execution_count
+      Returns (timeout while still busy):
+          - state: "busy", timed_out: true, waited_seconds, busy_for_seconds,
+            running_cell_preview, hint
+
   notebook_read_active_cell:
     title: "Read Active Cell"
     description: |

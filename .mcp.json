@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "instrMCP": {
+      "type": "stdio",
+      "command": "/Users/caijiaqi/miniforge3/envs/instrMCPdev/bin/python",
+      "args": [
+        "/Users/caijiaqi/Documents/GitHub/instrMCP/agentsetting/claudedesktopsetting/claude_launcher.py"
+      ],
+      "env": {
+        "instrMCP_PATH": "/Users/caijiaqi/Documents/GitHub/instrMCP",
+        "PYTHONPATH": "/Users/caijiaqi/Documents/GitHub/instrMCP"
+      }
+    }
+  }
+}

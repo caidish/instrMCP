@@ -432,6 +432,11 @@ def main():
     # Metadata command group
     _setup_metadata_subcommands(subparsers)
 
+    # App / Launcher command group (launch, doctor, status, stop, profiles, kernel)
+    from instrmcp.app.cli_app import APP_COMMANDS, setup_app_subcommands
+
+    setup_app_subcommands(subparsers)
+
     args = parser.parse_args()
 
     if args.command == "config":
@@ -496,6 +501,10 @@ def main():
     elif args.command == "metadata":
         result = _handle_metadata_command(args)
         sys.exit(result)
+    elif args.command in APP_COMMANDS:
+        from instrmcp.app.cli_app import handle_app_command
+
+        sys.exit(handle_app_command(args))
     else:
         parser.print_help()
         sys.exit(1)
