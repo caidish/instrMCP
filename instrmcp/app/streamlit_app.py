@@ -22,7 +22,7 @@ import time
 import httpx
 import streamlit as st
 
-from instrmcp.app import runfile
+from instrmcp.app import inspector, runfile
 from instrmcp.app.doctor import run_doctor_sync
 from instrmcp.app.profiles import list_profiles, load_profile
 
@@ -175,10 +175,14 @@ def main() -> None:
             time.sleep(2)
             st.rerun()
 
-    _render_status(base)
-    _render_help(compact=True)
-    _render_logs(base)
-    _render_doctor()
+    monitor_tab, inspector_tab = st.tabs(["📊 Monitor", "🔍 Inspector"])
+    with monitor_tab:
+        _render_status(base)
+        _render_help(compact=True)
+        _render_logs(base)
+        _render_doctor()
+    with inspector_tab:
+        _render_inspector(base, profile.mcp.host, profile.mcp.port)
 
 
 @st.fragment(run_every=2.0)
@@ -258,6 +262,134 @@ def _render_help(compact: bool = False) -> None:
 Safe mode means the model can read instruments and the notebook but cannot
 execute code without your explicit consent. Switch modes from the toolbar.
 """)
+
+
+# ---------------------------------------------------------------------------
+# Inspector tab — a native, Node-free MCP Inspector over the kernel-hosted
+# server (tools/resources/prompts browse + call). Logic lives in app/inspector.py.
+# ---------------------------------------------------------------------------
+
+
+def _mcp_ready(base: str) -> bool:
+    """Best-effort: is the kernel-hosted MCP server reporting 'ready'?"""
+    try:
+        data = _get(base, "/status").json()
+        comp = (data.get("components") or {}).get("mcp") or {}
+        return (comp.get("state") or "").lower() == "ready"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _render_inspector(base: str, host: str, port: int) -> None:
+    st.caption(f"Target: {host}:{port}/mcp · native client (no Node / npx required)")
+
+    if st.button("🔌 Connect / Refresh", type="primary"):
+        with st.spinner("Querying the MCP server…"):
+            st.session_state["_inspect"] = inspector.inspect(host=host, port=port)
+
+    snap = st.session_state.get("_inspect")
+    if not snap:
+        if _mcp_ready(base):
+            st.info("Click **Connect / Refresh** to load tools, resources and prompts.")
+        else:
+            st.info(
+                "MCP is not ready yet. Open JupyterLab, click **Start** in the "
+                "InstrMCP toolbar, then **Connect / Refresh**."
+            )
+        return
+
+    if not snap.get("ok"):
+        st.error(snap.get("error", "Could not reach the MCP server."))
+        return
+
+    tools = snap.get("tools") or []
+    resources = snap.get("resources") or []
+    prompts = snap.get("prompts") or []
+    t_tab, r_tab, p_tab = st.tabs(
+        [
+            f"🛠 Tools ({len(tools)})",
+            f"📄 Resources ({len(resources)})",
+            f"💬 Prompts ({len(prompts)})",
+        ]
+    )
+    with t_tab:
+        _render_insp_tools(tools, host, port)
+    with r_tab:
+        _render_insp_resources(resources, host, port)
+    with p_tab:
+        _render_insp_prompts(prompts, host, port)
+
+
+def _render_insp_tools(tools: list, host: str, port: int) -> None:
+    if not tools:
+        st.caption("No tools registered.")
+        return
+    names = [t.get("name", "?") for t in tools]
+    sel = st.selectbox("Tool", names, key="_insp_tool")
+    tool = next((t for t in tools if t.get("name") == sel), {})
+    if tool.get("description"):
+        st.caption(tool["description"])
+    schema = tool.get("inputSchema") or tool.get("input_schema") or {}
+    if schema:
+        with st.expander("Input schema"):
+            st.json(schema)
+
+    args_text = st.text_area("Arguments (JSON)", value="{}", key=f"_insp_args_{sel}")
+    if st.button("▶ Call tool", key=f"_insp_call_{sel}"):
+        args, err = inspector.parse_json_args(args_text)
+        if err:
+            st.error(err)
+            return
+        with st.spinner(f"Calling {sel}…"):
+            out = inspector.call_tool_sync(sel, args, host=host, port=port)
+        if not out.get("ok"):
+            st.error(out.get("error", "Tool call failed."))
+            return
+        if out.get("text"):
+            st.code(out["text"], language="text")
+        with st.expander("Raw result", expanded=not out.get("text")):
+            st.json(out.get("result"))
+
+
+def _render_insp_resources(resources: list, host: str, port: int) -> None:
+    if not resources:
+        st.caption("No resources exposed.")
+        return
+    uris = [r.get("uri", "?") for r in resources]
+    sel = st.selectbox("Resource", uris, key="_insp_res")
+    res = next((r for r in resources if r.get("uri") == sel), {})
+    if res.get("description"):
+        st.caption(res["description"])
+    if st.button("📖 Read resource", key=f"_insp_read_{sel}"):
+        with st.spinner(f"Reading {sel}…"):
+            out = inspector.read_resource_sync(sel, host=host, port=port)
+        if not out.get("ok"):
+            st.error(out.get("error", "Read failed."))
+            return
+        st.json(out.get("result"))
+
+
+def _render_insp_prompts(prompts: list, host: str, port: int) -> None:
+    if not prompts:
+        st.caption("No prompts exposed.")
+        return
+    names = [p.get("name", "?") for p in prompts]
+    sel = st.selectbox("Prompt", names, key="_insp_prompt")
+    prompt = next((p for p in prompts if p.get("name") == sel), {})
+    if prompt.get("description"):
+        st.caption(prompt["description"])
+    args_text = st.text_area("Arguments (JSON)", value="{}", key=f"_insp_pargs_{sel}")
+    if st.button("💬 Render prompt", key=f"_insp_get_{sel}"):
+        args, err = inspector.parse_json_args(args_text)
+        if err:
+            st.error(err)
+            return
+        with st.spinner(f"Rendering {sel}…"):
+            out = inspector.get_prompt_sync(sel, args, host=host, port=port)
+        if not out.get("ok"):
+            st.error(out.get("error", "Prompt render failed."))
+            return
+        st.json(out.get("result"))
 
 
 # Streamlit executes this file top-to-bottom on every run/rerun.

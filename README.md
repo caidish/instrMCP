@@ -25,6 +25,7 @@ https://github.com/user-attachments/assets/e7d0a441-36b2-4fec-9c54-1427310b7698
 - **Dynamic Tool Creation**: Create custom MCP tools at runtime using LLM-powered tool registration
 - **Safe mode**: Read-only mode with optional unsafe execution
 - **GUI control panel**: `instrmcp app` opens a Streamlit dashboard to launch JupyterLab and watch live status, logs, and MeasureIt sweeps
+- **Embedded MCP Inspector**: the GUI's **Inspector** tab browses and calls the server's tools/resources/prompts — a native, Node-free alternative to the official `npx` inspector
 - **CLI**: Easy server management with `instrmcp` command
 - **MCP**: Standard Model Context Protocol for LLM integration
 - The MCP has been tested to work with Claude Desktop, Claude Code, and Codex CLI
@@ -129,6 +130,13 @@ From the GUI you can launch JupyterLab, watch live status / logs / MeasureIt, ru
 diagnostics, and recover (restart kernel / stop) — all in one pane. To start the MCP
 server, open a notebook from the GUI's **Open JupyterLab** link and click **Start** in
 the InstrMCP toolbar (safe mode). The GUI then shows **MCP → ready**.
+
+The GUI also has an **🔍 Inspector** tab — a built-in, **Node-free** MCP Inspector. Once
+MCP is ready, click **Connect / Refresh** to browse the server's tools, resources, and
+prompts, fill in a JSON-argument form, **Call** a tool (or read a resource / render a
+prompt), and view the raw result. It talks the same MCP protocol as the kernel-hosted
+server (`127.0.0.1:8123/mcp`), so it needs no `npx`, no Node.js, and no extra ports —
+unlike the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
 
 #### Command-line launcher (optional)
 

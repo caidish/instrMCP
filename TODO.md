@@ -28,6 +28,12 @@ See `docs/ARCHITECTURE.md` → "App / Launcher Architecture".
 - [x] Kernelspec startup hardened: deferred onto the kernel event loop so it no longer
   blocks kernel readiness (was causing JupyterLab to restart the kernel) and is wrapped
   defensively so failures don't crash the kernel
+- [x] Embedded MCP Inspector (Node-free): `app/inspector.py` + GUI **Inspector** tab over
+  the kernel-hosted server. `app/mcp_client.py` gained a shared `_request` helper plus
+  `list_tools`/`list_resources`/`list_prompts`/`read_resource`/`get_prompt`; the Streamlit
+  app browses + calls tools/resources/prompts. Reuses the existing `:8123/mcp` streamable-
+  HTTP handshake — no `npx`/Node, no new MCP tool, no extra port. Verified end-to-end
+  against a live FastMCP server (`tests/unit/test_inspector.py`, `test_mcp_client.py`)
 
 ### Follow-ups (post-MVP)
 - [ ] Per-kernel MCP port allocation (today `:8123` is a singleton; two `instrmcp`

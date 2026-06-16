@@ -24,17 +24,19 @@ _JSON_HEADERS = {
 }
 
 
-async def call_tool(
-    name: str,
-    arguments: Optional[dict] = None,
+async def _request(
+    method: str,
+    params: Optional[dict] = None,
     host: str = "127.0.0.1",
     port: int = 8123,
     timeout: float = 10.0,
 ) -> Optional[dict]:
-    """Call an MCP tool over HTTP and return its JSON-RPC ``result``, or None.
+    """Run one JSON-RPC request against the kernel-hosted MCP server.
 
-    Returns None on any transport error, missing session, or tool error (e.g. the
-    tool isn't registered because its option isn't enabled in the kernel).
+    Performs the full handshake (initialize → notifications/initialized → request)
+    and returns the JSON-RPC ``result``, or None on any transport error, missing
+    session, or JSON-RPC error (e.g. the method/tool isn't available because its
+    option isn't enabled in the kernel).
     """
     endpoint = f"http://{host}:{port}/mcp"
     try:
@@ -74,9 +76,9 @@ async def call_tool(
                 endpoint,
                 json={
                     "jsonrpc": "2.0",
-                    "id": "call",
-                    "method": "tools/call",
-                    "params": {"name": name, "arguments": arguments or {}},
+                    "id": "req",
+                    "method": method,
+                    "params": params or {},
                 },
                 headers=headers,
             )
@@ -88,6 +90,80 @@ async def call_tool(
             return payload.get("result")
     except Exception:
         return None
+
+
+async def call_tool(
+    name: str,
+    arguments: Optional[dict] = None,
+    host: str = "127.0.0.1",
+    port: int = 8123,
+    timeout: float = 10.0,
+) -> Optional[dict]:
+    """Call an MCP tool over HTTP and return its JSON-RPC ``result``, or None.
+
+    Returns None on any transport error, missing session, or tool error (e.g. the
+    tool isn't registered because its option isn't enabled in the kernel).
+    """
+    return await _request(
+        "tools/call",
+        {"name": name, "arguments": arguments or {}},
+        host=host,
+        port=port,
+        timeout=timeout,
+    )
+
+
+async def list_tools(
+    host: str = "127.0.0.1", port: int = 8123, timeout: float = 10.0
+) -> Optional[list]:
+    """Return the server's registered tools (``tools/list``), or None."""
+    result = await _request("tools/list", host=host, port=port, timeout=timeout)
+    return result.get("tools") if result else None
+
+
+async def list_resources(
+    host: str = "127.0.0.1", port: int = 8123, timeout: float = 10.0
+) -> Optional[list]:
+    """Return the server's resources (``resources/list``), or None."""
+    result = await _request("resources/list", host=host, port=port, timeout=timeout)
+    return result.get("resources") if result else None
+
+
+async def list_prompts(
+    host: str = "127.0.0.1", port: int = 8123, timeout: float = 10.0
+) -> Optional[list]:
+    """Return the server's prompts (``prompts/list``), or None."""
+    result = await _request("prompts/list", host=host, port=port, timeout=timeout)
+    return result.get("prompts") if result else None
+
+
+async def read_resource(
+    uri: str,
+    host: str = "127.0.0.1",
+    port: int = 8123,
+    timeout: float = 10.0,
+) -> Optional[dict]:
+    """Read a resource by URI (``resources/read``) and return its result, or None."""
+    return await _request(
+        "resources/read", {"uri": uri}, host=host, port=port, timeout=timeout
+    )
+
+
+async def get_prompt(
+    name: str,
+    arguments: Optional[dict] = None,
+    host: str = "127.0.0.1",
+    port: int = 8123,
+    timeout: float = 10.0,
+) -> Optional[dict]:
+    """Render a prompt (``prompts/get``) and return its result, or None."""
+    return await _request(
+        "prompts/get",
+        {"name": name, "arguments": arguments or {}},
+        host=host,
+        port=port,
+        timeout=timeout,
+    )
 
 
 def _extract_text(result: dict) -> Optional[str]:

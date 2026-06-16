@@ -27,8 +27,10 @@ instrmcp/
 │   ├── components.py      # Component state machine + aggregate state
 │   ├── api.py             # Starlette status API + WS + static webapp mount
 │   ├── logs.py            # Bounded per-component log buffers + pub/sub
-│   ├── mcp_client.py      # Minimal MCP-over-HTTP tool caller (MeasureIt poll)
+│   ├── mcp_client.py      # Minimal MCP-over-HTTP client (handshake + tools/resources/prompts)
+│   ├── inspector.py       # Sync facade for the embedded Inspector tab (Node-free)
 │   ├── cli_app.py         # argparse wiring + handlers for App subcommands
+│   ├── streamlit_app.py   # `instrmcp app` GUI: monitor + embedded Inspector
 │   ├── webapp/            # Static dashboard (index.html, app.js, style.css)
 │   └── defaults/          # Bundled profiles (default_profile.yaml, demo.yaml)
 ├── utils/             # Utility modules
@@ -124,6 +126,33 @@ Component state machine (`app/components.py`): `IDLE → STARTING → READY`, wi
 Profiles (`app/profiles.py`) are YAML, deep-merged over the bundled default. Resolution
 order: project-local `./.instrmcp/profiles/<name>.yaml` → user
 `~/.instrmcp/profiles/<name>.yaml` → bundled `app/defaults/`.
+
+#### Embedded MCP Inspector (`app/inspector.py`)
+
+The `instrmcp app` GUI (`app/streamlit_app.py`) includes an **Inspector** tab — a
+native, **Node-free** equivalent of the official (npx) [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
+It speaks the same streamable-HTTP MCP protocol the kernel-hosted server already
+exposes at `127.0.0.1:8123/mcp`, so it needs **no Node runtime, no second proxy port,
+and no new MCP tool**:
+
+```
+Streamlit "Inspector" tab ─▶ app/inspector.py (sync facade)
+                               └─▶ app/mcp_client.py ─HTTP JSON-RPC─▶ :8123/mcp
+                                     initialize → tools/list · resources/list ·
+                                     prompts/list · tools/call · resources/read · prompts/get
+```
+
+- `app/mcp_client.py` gained a shared `_request()` helper (reusing the existing
+  `initialize → notifications/initialized → request` handshake) plus `list_tools`,
+  `list_resources`, `list_prompts`, `read_resource`, and `get_prompt`. The MeasureIt
+  poll's `call_tool` now routes through the same helper.
+- `app/inspector.py` wraps those async calls with `asyncio.run` and returns plain
+  `{ok, ..., error}` dicts the UI renders. `inspect()` reports `ok=False` only when the
+  server is unreachable; a server with no resources/prompts capability yields empty
+  lists, not an error.
+- The tab is gated on MCP readiness: until the toolbar **Start** button brings the
+  server up on `:8123`, it shows a hint instead of failing. Browse tools/resources/
+  prompts, fill a JSON-argument form, **Call**, and view the text + raw JSON result.
 
 ### QCodes Integration
 
