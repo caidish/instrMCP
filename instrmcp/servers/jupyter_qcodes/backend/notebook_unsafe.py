@@ -426,6 +426,202 @@ class NotebookUnsafeBackend(BaseBackend):
                 "error": str(e),
             }
 
+    async def execute_code(
+        self, code: str, timeout: float = 30.0
+    ) -> Dict[str, Any]:
+        """Execute a code string directly on the kernel, bypassing the frontend.
+
+        Bridge-independent execution route (instrMCP#29). The code is sent to the
+        kernel as a normal ZMQ ``execute_request`` via a loopback
+        ``jupyter_client`` connected to the kernel's own connection file — the
+        same shell-channel path the JupyterLab frontend uses, and the one a
+        Qt-integrated kernel (``%gui qt``) actually services. This avoids both the
+        frontend active-cell comm (which fails when the bridge degrades) and an
+        asyncio callback on the kernel loop (which an idle Qt loop does not pump).
+
+        Args:
+            code: Python source to execute on the kernel.
+            timeout: Max seconds to wait for completion (default 30). 0 =
+                fire-and-forget (send and return immediately, e.g. long sweeps).
+
+        Returns:
+            Dict with execution status and captured stdout/result/error.
+        """
+        import threading
+
+        # Fire-and-forget: send the request on a daemon thread and return at once.
+        if not timeout or timeout <= 0:
+            threading.Thread(
+                target=self._exec_via_kernel_client,
+                args=(code, None),
+                daemon=True,
+            ).start()
+            return self._exec_no_wait_result()
+
+        loop = asyncio.get_running_loop()
+        try:
+            # The client call blocks; run it in a worker thread. Outer guard is a
+            # safety net for a hung wait_for_ready (execute itself self-times-out).
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, self._exec_via_kernel_client, code, timeout),
+                timeout + 10.0,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            return {
+                "success": True,
+                "executed": True,
+                "status": "timeout",
+                "has_error": False,
+                "has_output": False,
+                "message": f"Timeout after {timeout}s waiting for execution to complete",
+            }
+
+    def _exec_via_kernel_client(
+        self, code: str, timeout: Optional[float]
+    ) -> Dict[str, Any]:
+        """Run ``code`` on THIS kernel via a loopback jupyter_client (blocking).
+
+        Sends a ZMQ execute_request on the kernel's shell channel and collects
+        stdout/result/error from IOPub. Call from a worker thread.
+        """
+        from ipykernel import get_connection_file
+        from jupyter_client import BlockingKernelClient
+
+        outs: Dict[str, Any] = {
+            "stdout": [],
+            "stderr": [],
+            "result": None,
+            "error": None,
+        }
+
+        def _hook(msg):
+            try:
+                mt = msg.get("header", {}).get("msg_type")
+                c = msg.get("content", {})
+                if mt == "stream":
+                    key = "stderr" if c.get("name") == "stderr" else "stdout"
+                    outs[key].append(c.get("text", ""))
+                elif mt == "execute_result":
+                    outs["result"] = c.get("data", {}).get("text/plain")
+                elif mt == "error":
+                    outs["error"] = (
+                        c.get("ename"),
+                        c.get("evalue"),
+                        c.get("traceback", []),
+                    )
+            except Exception:  # never let output handling kill the execution
+                pass
+
+        kc = BlockingKernelClient(connection_file=get_connection_file())
+        kc.load_connection_file()
+        kc.start_channels()
+        try:
+            kc.wait_for_ready(timeout=10.0)
+            try:
+                reply = kc.execute_interactive(
+                    code,
+                    timeout=timeout,
+                    output_hook=_hook,
+                    store_history=True,
+                    allow_stdin=False,
+                )
+            except TimeoutError:
+                # The execute_request was sent and the kernel keeps running it
+                # (e.g. a long sweep); we just stopped waiting.
+                return {
+                    "success": True,
+                    "executed": True,
+                    "status": "timeout",
+                    "has_error": False,
+                    "has_output": bool("".join(outs["stdout"])),
+                    "stdout": "".join(outs["stdout"]),
+                    "message": f"Timeout after {timeout}s waiting for execution to complete",
+                }
+            return self._assemble_kernel_result(reply.get("content", {}), outs, code)
+        finally:
+            try:
+                kc.stop_channels()
+            except Exception:
+                pass
+
+    def _assemble_kernel_result(
+        self, content: Dict[str, Any], outs: Dict[str, Any], code: str
+    ) -> Dict[str, Any]:
+        """Build the execute_code result dict from a kernel execute_reply + IOPub.
+
+        Pure (no I/O) so it is unit-testable independent of a live kernel.
+        """
+        status = content.get("status", "ok")
+        exec_count = content.get("execution_count", 0)
+        stdout = "".join(outs.get("stdout", []))
+
+        err = outs.get("error")
+        if status == "error" or err:
+            ename, evalue, tb = err or (
+                content.get("ename"),
+                content.get("evalue"),
+                content.get("traceback", []),
+            )
+            return {
+                "success": True,
+                "executed": True,
+                "status": "error",
+                "has_error": True,
+                "error_type": ename or "Error",
+                "error_message": evalue or "",
+                "traceback": "\n".join(tb) if isinstance(tb, list) else str(tb),
+                "stdout": stdout,
+                "has_output": bool(stdout),
+                "execution_count": exec_count,
+            }
+
+        result: Dict[str, Any] = {
+            "success": True,
+            "executed": True,
+            "status": "completed",
+            "has_error": False,
+            "has_output": bool(stdout),
+            "stdout": stdout,
+            "execution_count": exec_count,
+        }
+        if outs.get("result") is not None:
+            result["result"] = outs["result"]
+
+        # Detect a started MeasureIt sweep (same heuristic as execute_editing_cell).
+        sweep_matches = re.findall(r"(\w+)\.start\s*\(", code)
+        if sweep_matches:
+            result["sweep_detected"] = True
+            result["sweep_names"] = sweep_matches
+            if len(sweep_matches) == 1:
+                result["suggestion"] = (
+                    f"A sweep appears to have been started. Use "
+                    f"measureit_wait_for_sweep with sweep name "
+                    f"'{sweep_matches[0]}' to wait for completion."
+                )
+            else:
+                names = ", ".join(f"'{n}'" for n in sweep_matches)
+                result["suggestion"] = (
+                    f"Multiple sweeps appear to have been started ({names}). "
+                    f"Use measureit_wait_for_sweep(timeout=..., variable_name=name) or "
+                    f"measureit_wait_for_sweep(timeout=..., all=True) to wait for completion."
+                )
+
+        return result
+
+    def _exec_no_wait_result(self) -> Dict[str, Any]:
+        """Fire-and-forget result for execute_code (timeout=0)."""
+        return {
+            "success": True,
+            "executed": True,
+            "status": "no_wait",
+            "has_error": False,
+            "has_output": False,
+            "message": (
+                "Execution scheduled (fire-and-forget). Use "
+                "measureit_wait_for_sweep / notebook_kernel_status to check progress."
+            ),
+        }
+
     async def add_new_cell(
         self,
         cell_type: str = "code",

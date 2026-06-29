@@ -238,6 +238,10 @@ class QCodesReadOnlyTools:
         """Execute the currently editing cell and wait for output."""
         return await self._notebook_unsafe.execute_editing_cell(timeout)
 
+    async def execute_code(self, code: str, timeout: float = 30.0) -> Dict[str, Any]:
+        """Execute a code string directly on the kernel (bypasses the frontend bridge)."""
+        return await self._notebook_unsafe.execute_code(code, timeout)
+
     async def add_new_cell(
         self,
         cell_type: str = "code",
