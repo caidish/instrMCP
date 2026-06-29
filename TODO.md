@@ -35,6 +35,31 @@ See `docs/ARCHITECTURE.md` → "App / Launcher Architecture".
   HTTP handshake — no `npx`/Node, no new MCP tool, no extra port. Verified end-to-end
   against a live FastMCP server (`tests/unit/test_inspector.py`, `test_mcp_client.py`)
 
+## Notebook-bridge "stale state" e2e coverage (#29 / PRs #30, #32, #33)
+
+Durable e2e tests for the bridge fix, folding the throwaway `/tmp/bridge_repro/`
+harnesses into the suite. Validated on an integration build (main + #32 + #33).
+
+- [x] `tests/e2e/test_13_bridge_resilience.py` — BR-010/011/012 cover
+  `notebook_execute_code` (registered + runs on the real kernel, shares the kernel
+  namespace + advances exec count, and **survives frontend death** while `add_cell`
+  fails — the deterministic recovery path). All 4 pass on the integration build.
+- [x] Registration for `notebook_execute_code`: `metadata_baseline.yaml`,
+  `docs/ARCHITECTURE.md`, `README.md`, regenerated `metadata_snapshot.json`
+  (25→26 tools). STDIO-proxy path verified (HTTP==Proxy==26 tools).
+  No `stdio_proxy.py` change needed — `FastMCP.as_proxy` mirrors tools transparently.
+- [x] #33 regression check: `test_03_unsafe_mode_tools.py -m p0` (14) + the new BR-001
+  burst all green — the comm-handler rewrite didn't regress add/execute/delete/patch.
+- [!] **The listener-leak wedge is NOT deterministically reproducible** in the e2e
+  harness: the original `repro.py` (qdevBot task notebook) runs 30/30 clean even
+  against the *unpatched, leak-present* frontend on current hardware; neither the
+  dangerous nor MeasureIt/qt fixture wedges at 80 cycles. It's a timing race. So
+  BR-001 is an honest burst/responsiveness smoke test, not a leak guard, and the
+  leak fix (#30, `stopTrackingActiveCell` in `src/index.ts`) is guarded by code
+  review, not e2e. Follow-up: a jest unit test asserting the listener disconnects.
+- [ ] Port the registration edits + `test_13` onto PRs #32/#33 before merge (they
+  currently live on the throwaway `test/bridge-integration` branch).
+
 ### Follow-ups (post-MVP)
 - [ ] Per-kernel MCP port allocation (today `:8123` is a singleton; two `instrmcp`
   kernels collide — `doctor` warns)

@@ -144,19 +144,27 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        // Execute the active cell using NotebookActions
-        await NotebookActions.run(panel.content, panel.sessionContext);
+        // Trigger execution but do NOT await completion. A long-running cell
+        // (e.g. a MeasureIt sweep) must not hold the serialized handler queue or
+        // keep this handler pending — the MCP server detects completion by
+        // polling the kernel's execution_count, not this response. Awaiting here
+        // was a wedge surface under load.
+        void NotebookActions.run(panel.content, panel.sessionContext).catch(
+          (err: any) => {
+            console.error('MCP Active Cell Bridge: cell execution failed:', err);
+          }
+        );
 
-        // Send success response
+        // Send response: execution was triggered (not necessarily finished).
         comm.send({
           type: 'execute_response',
           request_id: requestId,
           success: true,
           cell_id: cell.model.id,
-          message: 'Cell executed successfully'
+          message: 'Cell execution triggered'
         });
 
-        console.log('MCP Active Cell Bridge: Executed active cell');
+        console.log('MCP Active Cell Bridge: Triggered active cell execution');
 
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to execute cell:', error);
@@ -1748,37 +1756,55 @@ const plugin: JupyterFrontEndPlugin<void> = {
           try {
             comm = kernel.createComm('mcp:active_cell');
 
+            // Serialize handler execution through a per-comm promise chain so
+            // concurrent comm messages cannot interleave notebook-model
+            // mutations (insertBelow / setSource / changeCellType /
+            // activeCellIndex / NotebookActions.run), which can corrupt the
+            // notebook widget state under load. `onMsg` itself returns
+            // immediately and does NOT await the chain, so the JupyterLab kernel
+            // message loop is never blocked. execute_cell does not hold the chain
+            // for the whole cell run (it triggers and returns; see
+            // handleCellExecution).
+            let handlerChain: Promise<void> = Promise.resolve();
+            const enqueue = (fn: () => any) => {
+              handlerChain = handlerChain
+                .then(fn)
+                .catch((e) =>
+                  console.error('MCP Active Cell Bridge: handler error:', e)
+                );
+            };
+
             // Handle incoming messages from kernel
             comm.onMsg = (msg: any) => {
               const data = msg?.content?.data || {};
               const msgType = data.type;
 
               if (msgType === 'request_current') {
-                sendSnapshot(kernel);
+                enqueue(() => sendSnapshot(kernel));
               } else if (msgType === 'update_cell') {
-                handleCellUpdate(kernel, comm, data);
+                enqueue(() => handleCellUpdate(kernel, comm, data));
               } else if (msgType === 'execute_cell') {
-                handleCellExecution(kernel, comm, data);
+                enqueue(() => handleCellExecution(kernel, comm, data));
               } else if (msgType === 'add_cell') {
-                handleAddCell(kernel, comm, data);
+                enqueue(() => handleAddCell(kernel, comm, data));
               } else if (msgType === 'delete_cell') {
-                handleDeleteCell(kernel, comm, data);
+                enqueue(() => handleDeleteCell(kernel, comm, data));
               } else if (msgType === 'delete_cells_by_number') {
-                handleDeleteCellsByNumber(kernel, comm, data);
+                enqueue(() => handleDeleteCellsByNumber(kernel, comm, data));
               } else if (msgType === 'delete_cells_by_index') {
-                handleDeleteCellsByIndex(kernel, comm, data);
+                enqueue(() => handleDeleteCellsByIndex(kernel, comm, data));
               } else if (msgType === 'move_cursor') {
-                handleMoveCursor(kernel, comm, data);
+                enqueue(() => handleMoveCursor(kernel, comm, data));
               } else if (msgType === 'get_cell_outputs') {
-                handleGetCellOutputs(kernel, comm, data);
+                enqueue(() => handleGetCellOutputs(kernel, comm, data));
               } else if (msgType === 'get_active_cell_output') {
-                handleGetActiveCellOutput(kernel, comm, data);
+                enqueue(() => handleGetActiveCellOutput(kernel, comm, data));
               } else if (msgType === 'apply_patch') {
-                handleApplyPatch(kernel, comm, data);
+                enqueue(() => handleApplyPatch(kernel, comm, data));
               } else if (msgType === 'get_notebook_structure') {
-                handleGetNotebookStructure(kernel, comm, data);
+                enqueue(() => handleGetNotebookStructure(kernel, comm, data));
               } else if (msgType === 'get_cells_by_index') {
-                handleGetCellsByIndex(kernel, comm, data);
+                enqueue(() => handleGetCellsByIndex(kernel, comm, data));
               } else {
                 console.warn(`MCP Active Cell Bridge: Unknown message type: ${msgType}`);
               }
@@ -2037,6 +2063,30 @@ const plugin: JupyterFrontEndPlugin<void> = {
       statusUpdateSignal
     });
     app.docRegistry.addWidgetExtension('Notebook', toolbarExtension);
+
+    // Bridge self-healing (instrMCP#29): periodically re-establish the
+    // active-cell comm if it has dropped (e.g. after a websocket reconnect or a
+    // transient failure), so the bridge recovers without needing a user-driven
+    // cell change. Cheap when healthy — it only acts when the comm is
+    // missing/closed and the MCP server is up.
+    const COMM_KEEPALIVE_MS = 15000;
+    window.setInterval(() => {
+      try {
+        const kernel =
+          notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
+        if (!kernel || kernel.status === 'dead') return;
+        if (!mcpServerReady.get(kernel)) return;
+        const existing = comms.get(kernel);
+        if (!existing || !isCommReady(kernel, existing)) {
+          console.log(
+            'MCP Active Cell Bridge: keepalive re-establishing dropped comm'
+          );
+          ensureComm(kernel).catch(() => {});
+        }
+      } catch (e) {
+        // never let the keepalive throw
+      }
+    }, COMM_KEEPALIVE_MS);
 
     console.log('MCP Active Cell Bridge: Event listeners registered');
   }

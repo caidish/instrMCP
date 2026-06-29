@@ -323,6 +323,7 @@ Cell modification tools now require user consent in unsafe mode:
 **Tools requiring consent:**
 - `notebook_update_editing_cell` - Shows old/new content comparison before replacing entire cell
 - `notebook_apply_patch` - Shows visual diff dialog with exact changes
+- `notebook_execute_code` - Runs a passed code string **directly on the kernel**, bypassing the JupyterLab frontend bridge (no cell added). Recovery path when the notebook bridge is degraded but the kernel is alive.
 
 **Features:**
 - **Visual Diff Display**: Red deletions, green additions, context lines

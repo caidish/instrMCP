@@ -218,6 +218,21 @@
       "description": "Execute the currently active cell and return the output.\n\nMay require human consent.\n\nArgs:\n    timeout: Maximum seconds to wait for execution to complete (default: 30.0). if 0, fire-and-forget.\n    detailed: bool, If false (default), return concise summary; if true, return full info\n\nReturns (concise mode):\n    - signal_success: Whether the execution request was sent successfully\n    - status: \"completed\", \"error\", \"timeout\", or \"no_wait\"\n    - executed: true if cell was executed\n    - has_output, has_error: Boolean flags\n    - outputs: List of cell outputs\n    - error_type, error_message, traceback: If error occurred\n\nReturns (detailed mode - adds):\n    - input: The code that was executed\n    - sweep_detected: true if .start() was detected\n    - suggestion: Hint to use wait tools if sweep detected\n    - the output will not be summarized.",
       "title": "Execute Cell"
     },
+    "notebook_execute_code": {
+      "arguments": {
+        "code": {
+          "description": null
+        },
+        "detailed": {
+          "description": null
+        },
+        "timeout": {
+          "description": null
+        }
+      },
+      "description": "Execute a Python code string directly on the running kernel, bypassing the\nJupyterLab frontend bridge (no cell is added to the notebook). The code runs\non the kernel main thread with the same semantics as a normal cell.\n\nUse this to recover when notebook_add_cell / notebook_execute_active_cell\ntime out but the kernel is still alive.\n\nMay require human consent. Code is security-scanned before execution.\n\nArgs:\n    code: Python source to execute on the kernel.\n    timeout: Maximum seconds to wait for completion (default: 30.0). if 0, fire-and-forget.\n    detailed: bool, If false (default), omit the verbose traceback field; if true, include it.\n\nReturns: {success, status (\"completed\", \"error\", \"timeout\", or \"no_wait\"),\n    stdout, execution_count, has_error/has_output, error_type/error_message on error,\n    sweep_detected/sweep_names/suggestion if a sweep was started}",
+      "title": "Execute Code (Bridge-Independent)"
+    },
     "notebook_kernel_status": {
       "arguments": {
         "detailed": {
