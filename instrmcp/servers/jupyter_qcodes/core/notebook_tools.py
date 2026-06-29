@@ -8,6 +8,7 @@ import json
 import time
 from typing import List, Optional
 
+from fastmcp import Context
 from mcp.types import TextContent
 from ..active_cell_bridge import (  # noqa: F401 - invalidate_cell_output_cache exposed for unsafe tools
     get_cell_outputs,
@@ -248,6 +249,8 @@ class NotebookToolRegistrar:
         self._register_read_content()
         self._register_move_cursor()
         self._register_server_status()
+        self._register_kernel_status()
+        self._register_wait_for_kernel()
 
     def _register_list_variables(self):
         """Register the notebook/list_variables tool."""
@@ -1026,6 +1029,119 @@ class NotebookToolRegistrar:
                 return [TextContent(type="text", text=json.dumps(status, indent=2))]
             except Exception as e:
                 logger.error(f"Error in server_status: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_kernel_status(self):
+        """Register the notebook/kernel_status tool."""
+
+        @self.mcp.tool(
+            name="notebook_kernel_status",
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        )
+        async def kernel_status(detailed: bool = False) -> List[TextContent]:
+            # Description loaded from metadata_baseline.yaml
+            start = time.perf_counter()
+            try:
+                result = await self.tools.kernel_status()
+
+                # Concise mode: only the core fields agents typically need.
+                if not detailed:
+                    result = {
+                        k: result.get(k)
+                        for k in (
+                            "state",
+                            "busy_for_seconds",
+                            "execution_count",
+                            "running_cell_preview",
+                        )
+                    }
+
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_kernel_status",
+                    {"detailed": detailed},
+                    duration,
+                    "success",
+                )
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_kernel_status",
+                    {"detailed": detailed},
+                    duration,
+                    "error",
+                    str(e),
+                )
+                logger.error(f"Error in notebook/kernel_status: {e}")
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": str(e)}, indent=2)
+                    )
+                ]
+
+    def _register_wait_for_kernel(self):
+        """Register the notebook/wait_for_kernel tool."""
+
+        @self.mcp.tool(
+            name="notebook_wait_for_kernel",
+            annotations={
+                "readOnlyHint": True,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
+        async def wait_for_kernel(
+            timeout: float,
+            poll_interval: float = 1.0,
+            detailed: bool = False,
+            ctx: Context = None,
+        ) -> List[TextContent]:
+            # Description loaded from metadata_baseline.yaml
+            start = time.perf_counter()
+
+            async def _progress(elapsed, total, message):
+                if ctx:
+                    await ctx.report_progress(elapsed, total, message)
+
+            try:
+                result = await self.tools.wait_for_kernel(
+                    timeout, poll_interval, progress_callback=_progress
+                )
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_wait_for_kernel",
+                    {"timeout": timeout, "poll_interval": poll_interval},
+                    duration,
+                    "success",
+                )
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_wait_for_kernel",
+                    {"timeout": timeout, "poll_interval": poll_interval},
+                    duration,
+                    "error",
+                    str(e),
+                )
+                logger.error(f"Error in notebook/wait_for_kernel: {e}")
                 return [
                     TextContent(
                         type="text", text=json.dumps({"error": str(e)}, indent=2)

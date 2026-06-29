@@ -1909,6 +1909,28 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // Content-change listener bookkeeping for the CURRENTLY active cell.
+    // Without this, every activeCellChanged connected a brand-new
+    // sharedModel.changed listener that was never disconnected, leaking one
+    // listener per active-cell change. The leaked listeners turned each cell
+    // edit/insert into a growing storm of concurrent sendSnapshot()/comm.send()
+    // calls that, under load, wedged the JupyterLab kernel message loop and
+    // left the notebook bridge permanently unresponsive (the "stale state").
+    let trackedSharedModel: any = null;
+    let trackedChangeSlot: (() => void) | null = null;
+
+    const stopTrackingActiveCell = () => {
+      if (trackedSharedModel && trackedChangeSlot) {
+        try {
+          trackedSharedModel.changed.disconnect(trackedChangeSlot);
+        } catch (e) {
+          // ignore — model may already be disposed
+        }
+      }
+      trackedSharedModel = null;
+      trackedChangeSlot = null;
+    };
+
     // Track active cell changes
     notebooks.activeCellChanged.connect(async (sender: any, args: any) => {
       const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
@@ -1930,16 +1952,23 @@ const plugin: JupyterFrontEndPlugin<void> = {
       // Send snapshot immediately when cell changes
       await sendSnapshot(kernel);
 
+      // Stop listening to the previous active cell before tracking the new one
+      // (prevents the listener leak / snapshot storm described above).
+      stopTrackingActiveCell();
+
       // Set up debounced content change tracking for the new cell
       const cell = notebooks.activeCell;
       if (cell) {
         // Create debounced function with 2000ms delay as requested
         const debouncedSendSnapshot = debounce(() => sendSnapshot(kernel), 2000);
 
-        // Listen to content changes
-        cell.model.sharedModel.changed.connect(() => {
+        // Listen to content changes (single active listener at a time)
+        const slot = () => {
           debouncedSendSnapshot();
-        });
+        };
+        cell.model.sharedModel.changed.connect(slot);
+        trackedSharedModel = cell.model.sharedModel;
+        trackedChangeSlot = slot;
 
         console.log('MCP Active Cell Bridge: Tracking new active cell');
       }

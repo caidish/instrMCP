@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>InstrMCP</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>InstrMCP</h1>
+    <div class="header-right">
+      <span id="profile-name" class="pill">profile: …</span>
+      <span id="aggregate" class="badge badge-idle">…</span>
+      <span id="conn" class="conn conn-down" title="event stream">●</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" id="status-cards">
+      <!-- component cards injected here -->
+    </section>
+
+    <section class="panel">
+      <h2>Actions</h2>
+      <div class="actions">
+        <a id="open-lab" class="btn" target="_blank" rel="noopener">Open JupyterLab</a>
+        <button id="btn-doctor" class="btn">Run Doctor</button>
+        <button id="btn-restart-kernel" class="btn">Restart Kernel</button>
+        <button id="btn-restart-mcp" class="btn">Restart MCP</button>
+        <button id="btn-stop" class="btn btn-danger">Stop</button>
+      </div>
+      <p id="action-msg" class="msg"></p>
+    </section>
+
+    <div class="two-col">
+      <section class="panel">
+        <h2>Logs
+          <select id="log-filter" class="select">
+            <option value="">all</option>
+          </select>
+        </h2>
+        <pre id="logs" class="logs"></pre>
+      </section>
+
+      <div class="col-stack">
+        <section class="panel" id="measureit-panel" hidden>
+          <h2>MeasureIt</h2>
+          <div id="measureit-body" class="kv">no active sweeps</div>
+        </section>
+
+        <section class="panel">
+          <h2>Doctor</h2>
+          <pre id="doctor" class="logs small">Click “Run Doctor”.</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Profiles</h2>
+          <ul id="profiles" class="plain"></ul>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

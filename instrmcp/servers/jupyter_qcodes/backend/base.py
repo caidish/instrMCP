@@ -5,6 +5,7 @@ Provides SharedState dataclass for shared resources and BaseBackend
 abstract base class that all backends inherit from.
 """
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Optional, TYPE_CHECKING
 
@@ -31,6 +32,20 @@ class SharedState:
     current_cell_content: Optional[str] = field(default=None)
     current_cell_id: Optional[str] = field(default=None)
     current_cell_timestamp: Optional[float] = field(default=None)
+
+    # Kernel busy/idle tracking (written by pre/post_run_cell callbacks on the
+    # kernel main thread, read by the MCP server background thread). All access
+    # is guarded by kernel_state_lock. This is comm-free, so reads stay correct
+    # and instant even while the kernel main thread is blocked in a stalled cell.
+    kernel_busy: bool = field(default=False)
+    kernel_busy_since_mono: Optional[float] = field(default=None)  # time.monotonic()
+    kernel_busy_since_wall: Optional[float] = field(
+        default=None
+    )  # time.time(), display
+    kernel_exec_count_at_start: Optional[int] = field(default=None)
+    kernel_running_cell_preview: Optional[str] = field(default=None)
+    kernel_last_idle_at: Optional[float] = field(default=None)  # time.time()
+    kernel_state_lock: Any = field(default_factory=threading.Lock)
 
 
 class BaseBackend:

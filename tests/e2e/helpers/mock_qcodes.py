@@ -120,6 +120,8 @@ SAFE_MODE_TOOLS = [
     "notebook_read_active_cell_output",
     "notebook_read_content",
     "notebook_move_cursor",
+    "notebook_kernel_status",
+    "notebook_wait_for_kernel",
     "qcodes_instrument_info",
     "qcodes_get_parameter_info",
     "qcodes_get_parameter_values",
