@@ -175,6 +175,27 @@ tools:
           - suggestion: Hint to use wait tools if sweep detected
           - the output will not be summarized.
 
+  notebook_execute_code:
+    title: "Execute Code (Bridge-Independent)"
+    description: |
+      Execute a Python code string directly on the running kernel, bypassing the
+      JupyterLab frontend bridge (no cell is added to the notebook). The code runs
+      on the kernel main thread with the same semantics as a normal cell.
+
+      Use this to recover when notebook_add_cell / notebook_execute_active_cell
+      time out but the kernel is still alive.
+
+      May require human consent. Code is security-scanned before execution.
+
+      Args:
+          code: Python source to execute on the kernel.
+          timeout: Maximum seconds to wait for completion (default: 30.0). if 0, fire-and-forget.
+          detailed: bool, If false (default), omit the verbose traceback field; if true, include it.
+
+      Returns: {success, status ("completed", "error", "timeout", or "no_wait"),
+          stdout, execution_count, has_error/has_output, error_type/error_message on error,
+          sweep_detected/sweep_names/suggestion if a sweep was started}
+
   notebook_kernel_status:
     title: "Kernel Status"
     description: |

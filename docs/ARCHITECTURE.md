@@ -193,6 +193,7 @@ All tools now use hierarchical naming with `/` separator for better organization
 ### Unsafe Notebook Tools (`notebook/*` - unsafe mode only)
 
 - `notebook/execute_active_cell(timeout)` - Execute current cell and return output (requires consent)
+- `notebook/execute_code(code, timeout, detailed)` - Execute a passed code string **directly on the kernel**, bypassing the JupyterLab frontend bridge (no cell is added). Recovery path when the frontend bridge is degraded but the kernel is alive (requires consent). Implemented via a loopback `jupyter_client.BlockingKernelClient` in `backend/notebook_unsafe.py`.
 - `notebook/add_cell(cell_type, position, content)` - Add new cell relative to active cell
 - `notebook/delete_cell()` - Delete the currently active cell (requires consent)
 - `notebook/delete_cells(cell_numbers)` - Delete multiple cells by number (requires consent)
@@ -349,6 +350,7 @@ All MCP tools include annotations per the [MCP specification (2025-06-18)](https
 **Write Tools - Non-Destructive** (`readOnlyHint: false`, `destructiveHint: false`):
 - `notebook_move_cursor`, `notebook_apply_patch`
 - `notebook_execute_active_cell` (also `openWorldHint: true` - executes code)
+- `notebook_execute_code` (also `openWorldHint: true` - executes code directly on the kernel, bypassing the frontend bridge)
 - `notebook_add_cell`
 - `measureit_kill_sweep` (stops running sweep, releases resources)
 - `dynamic_register_tool`, `dynamic_update_tool`
@@ -729,6 +731,7 @@ s("rm -rf /")  # Detected!
 For unsafe mode operations, user consent is required before execution:
 
 - `notebook_execute_active_cell` - Code execution
+- `notebook_execute_code` - Bridge-independent code execution (runs on the kernel directly)
 - `notebook_delete_cell` - Cell deletion
 - `notebook_apply_patch` - Text replacement
 
