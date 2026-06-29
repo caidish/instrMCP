@@ -209,9 +209,131 @@ class UnsafeToolRegistrar:
     def register_all(self):
         """Register all unsafe mode tools."""
         self._register_execute_active_cell()
+        self._register_execute_code()
         self._register_add_cell()
         self._register_delete_cell()
         self._register_apply_patch()
+
+    def _register_execute_code(self):
+        """Register the notebook/execute_code tool.
+
+        Bridge-independent execution route (instrMCP#29): runs a passed code
+        string directly on the kernel, bypassing the JupyterLab frontend
+        active-cell comm. Use this when the notebook frontend bridge is
+        degraded (add_cell/execute_active_cell timing out) but the kernel is
+        still alive.
+        """
+
+        @self.mcp.tool(
+            name="notebook_execute_code",
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
+        )
+        async def execute_code(
+            code: str, timeout: float = 30.0, detailed: bool = False
+        ) -> List[TextContent]:
+            """Execute a code string directly on the running kernel.
+
+            Bypasses the JupyterLab frontend bridge (no cell is added to the
+            notebook) — the code runs on the kernel main thread with the same
+            semantics as a normal cell. Use this to recover when notebook_add_cell
+            / notebook_execute_active_cell time out but the kernel is alive.
+
+            Args:
+                code: Python source to execute on the kernel.
+                timeout: Max seconds to wait for completion (default 30). 0 =
+                    fire-and-forget (schedule and return immediately).
+                detailed: If false (default), omit the verbose traceback field.
+
+            Returns: {success, status (completed|error|timeout|no_wait), stdout,
+                execution_count, has_error/has_output, error_* on error,
+                sweep_detected/sweep_names/suggestion if a sweep was started}.
+            """
+            # SECURITY: scan the PASSED code before consent (hard boundary).
+            # Unlike execute_active_cell, no frontend round-trip is needed to get
+            # the code — it is passed directly, so this works even when the
+            # frontend bridge is dead.
+            rejection = self._scan_and_reject(code, "notebook_execute_code")
+            if rejection:
+                return rejection
+
+            # Request consent if a consent manager is configured.
+            if self.consent_manager:
+                try:
+                    consent_result = await self.consent_manager.request_consent(
+                        operation="execute_code",
+                        tool_name="notebook_execute_code",
+                        author="MCP Server",
+                        details={
+                            "source_code": code,
+                            "description": (
+                                "Execute a code string directly on the kernel "
+                                "(bypasses the JupyterLab frontend bridge)"
+                            ),
+                        },
+                    )
+                    if not consent_result["approved"]:
+                        reason = consent_result.get("reason", "User declined")
+                        logger.warning(f"execute_code declined - {reason}")
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "success": False,
+                                        "error": f"Execution declined: {reason}",
+                                    },
+                                    indent=2,
+                                ),
+                            )
+                        ]
+                except TimeoutError:
+                    logger.error("Consent request timed out for execute_code")
+                    return [
+                        TextContent(
+                            type="text",
+                            text=json.dumps(
+                                {
+                                    "success": False,
+                                    "error": "Consent request timed out",
+                                },
+                                indent=2,
+                            ),
+                        )
+                    ]
+
+            start = time.perf_counter()
+            try:
+                result = await self.tools.execute_code(code, timeout=timeout)
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_execute_code",
+                    {"timeout": timeout, "detailed": detailed},
+                    duration,
+                    "success",
+                )
+                if not detailed and isinstance(result, dict):
+                    result = {k: v for k, v in result.items() if k != "traceback"}
+                return [
+                    TextContent(
+                        type="text", text=json.dumps(result, indent=2, default=str)
+                    )
+                ]
+            except Exception as e:
+                duration = (time.perf_counter() - start) * 1000
+                log_tool_call(
+                    "notebook_execute_code", {}, duration, "error", str(e)
+                )
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"success": False, "error": str(e)}, indent=2),
+                    )
+                ]
 
     def _register_execute_active_cell(self):
         """Register the notebook/execute_active_cell tool."""
