@@ -10,8 +10,6 @@ import json
 import logging
 from typing import Tuple
 
-from mcp.types import Resource, TextResourceContents
-
 logger = logging.getLogger(__name__)
 
 
@@ -275,17 +273,16 @@ class ResourceRegistrar:
             default_desc=f"Template resource: {uri_suffix}",
         )
 
-        @self.mcp.resource(uri)
-        async def template_resource() -> Resource:
-            content = get_content_func()
-            return Resource(
-                uri=uri,
-                name=name,
-                description=description,
-                mimeType="application/json",
-                contents=[
-                    TextResourceContents(
-                        uri=uri, mimeType="application/json", text=content
-                    )
-                ],
-            )
+        # FastMCP resource-read functions must return the CONTENT
+        # (str / bytes / list[ResourceContent]), NOT an mcp.types.Resource
+        # wrapper. Discovery metadata (name/description/mime_type) is supplied
+        # to the @resource decorator instead. Returning a Resource object here
+        # breaks the standard MCP `resources/read` path (GitHub issue #34).
+        @self.mcp.resource(
+            uri,
+            name=name,
+            description=description,
+            mime_type="application/json",
+        )
+        async def template_resource() -> str:
+            return get_content_func()

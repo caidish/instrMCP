@@ -426,9 +426,7 @@ class NotebookUnsafeBackend(BaseBackend):
                 "error": str(e),
             }
 
-    async def execute_code(
-        self, code: str, timeout: float = 30.0
-    ) -> Dict[str, Any]:
+    async def execute_code(self, code: str, timeout: float = 30.0) -> Dict[str, Any]:
         """Execute a code string directly on the kernel, bypassing the frontend.
 
         Bridge-independent execution route (instrMCP#29). The code is sent to the

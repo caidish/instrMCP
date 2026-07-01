@@ -7,7 +7,8 @@ Tests ResourceRegistrar for registering MCP resources (QCodes, notebook, Measure
 import pytest
 import json
 from unittest.mock import MagicMock, AsyncMock, patch
-from mcp.types import Resource, TextResourceContents
+
+from fastmcp import FastMCP, Client
 
 from instrmcp.servers.jupyter_qcodes.core.resources import ResourceRegistrar
 
@@ -20,11 +21,15 @@ class TestResourceRegistrar:
         """Create a mock FastMCP server."""
         mcp = MagicMock()
         mcp._resources = {}
+        mcp._resource_metadata = {}
 
-        # Mock the @mcp.resource decorator
-        def resource_decorator(uri):
+        # Mock the @mcp.resource decorator. The real FastMCP decorator accepts
+        # discovery metadata (name/description/mime_type) as keyword arguments,
+        # so the mock must accept and record them too.
+        def resource_decorator(uri, **metadata):
             def wrapper(func):
                 mcp._resources[uri] = func
+                mcp._resource_metadata[uri] = metadata
                 return func
 
             return wrapper
@@ -203,19 +208,21 @@ class TestResourceRegistrar:
             ),
         ):
             registrar.register_all()
-            sweep0d_func = mock_mcp_server._resources[
-                "resource://measureit_sweep0d_template"
-            ]
-            resource = await sweep0d_func()
+            uri = "resource://measureit_sweep0d_template"
+            sweep0d_func = mock_mcp_server._resources[uri]
 
-            assert isinstance(resource, Resource)
-            assert str(resource.uri) == "resource://measureit_sweep0d_template"
-            # Without metadata_config, uses uri_suffix as fallback name
-            assert resource.name == "measureit_sweep0d_template"
-            assert resource.mimeType == "application/json"
-
-            content = json.loads(resource.contents[0].text)
+            # The read function must return the raw content STRING (not a
+            # Resource wrapper) so the standard MCP resources/read path works.
+            content_str = await sweep0d_func()
+            assert isinstance(content_str, str)
+            content = json.loads(content_str)
             assert "examples" in content
+
+            # Discovery metadata is now supplied to the @resource decorator.
+            metadata = mock_mcp_server._resource_metadata[uri]
+            # Without metadata_config, uses uri_suffix as fallback name
+            assert metadata["name"] == "measureit_sweep0d_template"
+            assert metadata["mime_type"] == "application/json"
 
     def test_register_all_with_all_options(
         self, mock_mcp_server, mock_tools, mock_measureit_module, mock_db_module
@@ -263,23 +270,36 @@ class TestResourceRegistrar:
 
     @pytest.mark.asyncio
     async def test_resources_have_correct_structure(
-        self, registrar, mock_tools, mock_mcp_server
+        self, mock_mcp_server, mock_tools, mock_measureit_module
     ):
-        """Test that all resources have correct structure."""
-        mock_tools.list_instruments.return_value = []
+        """Test that all registered resources follow the correct contract.
+
+        Each template read function must return the raw content STRING (so the
+        standard MCP resources/read path works), and discovery metadata
+        (name/description/mime_type) must be registered on the decorator.
+        """
+        registrar = ResourceRegistrar(
+            mock_mcp_server,
+            mock_tools,
+            enabled_options={"measureit"},
+            measureit_module=mock_measureit_module,
+        )
         registrar.register_all()
 
+        # Sanity: measureit resources were actually registered.
+        assert mock_mcp_server._resources
+
         for uri, func in mock_mcp_server._resources.items():
-            resource = await func()
-            assert isinstance(resource, Resource)
-            assert str(resource.uri) == uri
-            assert resource.name is not None
-            assert resource.description is not None
-            assert resource.mimeType == "application/json"
-            assert len(resource.contents) == 1
-            assert isinstance(resource.contents[0], TextResourceContents)
-            assert str(resource.contents[0].uri) == uri
-            assert resource.contents[0].mimeType == "application/json"
+            # Read function returns the content string, not a Resource wrapper.
+            content = await func()
+            assert isinstance(content, str)
+            assert len(content) > 0
+
+            # Discovery metadata registered via decorator kwargs.
+            metadata = mock_mcp_server._resource_metadata[uri]
+            assert metadata["name"] is not None
+            assert metadata["description"] is not None
+            assert metadata["mime_type"] == "application/json"
 
     def test_no_measureit_resources_without_module(self, mock_mcp_server, mock_tools):
         """Test that MeasureIt resources are not registered without module."""
@@ -319,12 +339,15 @@ class TestResourceDiscoveryTools:
         """Create a mock FastMCP server with tool registration."""
         mcp = MagicMock()
         mcp._resources = {}
+        mcp._resource_metadata = {}
         mcp._tools = {}
 
-        # Mock the @mcp.resource decorator
-        def resource_decorator(uri):
+        # Mock the @mcp.resource decorator (accepts metadata kwargs like the
+        # real FastMCP decorator: name/description/mime_type).
+        def resource_decorator(uri, **metadata):
             def wrapper(func):
                 mcp._resources[uri] = func
+                mcp._resource_metadata[uri] = metadata
                 return func
 
             return wrapper
@@ -756,3 +779,71 @@ class TestResourceDiscoveryTools:
             # Fields should have meaningful content
             assert len(resource["name"]) > 0
             assert len(resource["description"]) > 0
+
+
+class TestTemplateResourceRealReadPath:
+    """Regression tests for GitHub issue #34.
+
+    Reading a template resource via the standard MCP ``resources/read`` path
+    (e.g. ``resource://measureit_sweep2d_template``) returned the wrong content
+    because ``_register_template_resource`` returned an ``mcp.types.Resource``
+    wrapper object instead of the content string. FastMCP expects a
+    resource-read function to return ``str`` / ``bytes`` / ``list[ResourceContent]``.
+
+    The other tests in this module mock the ``@mcp.resource`` decorator (they
+    store the decorated function and call it directly), which bypasses FastMCP's
+    real ``resources/read`` type conversion -- so they never caught this bug and
+    some even assert ``isinstance(result, Resource)``, codifying the buggy shape.
+
+    This test exercises the REAL FastMCP ``resources/read`` path by registering
+    on a genuine ``fastmcp.FastMCP`` instance and reading through an in-memory
+    ``fastmcp.Client`` -- exactly what a real MCP client (e.g. Claude Desktop's
+    proxy) does.
+    """
+
+    @pytest.mark.asyncio
+    async def test_read_measureit_template_returns_content_not_resource_wrapper(self):
+        """resources/read of a template must return the raw template string.
+
+        With the bug present, reading through a real FastMCP client either:
+          * returns the JSON dump of the whole ``Resource`` wrapper object
+            (``{"name": ..., "uri": ..., "contents": [...]}``) on fastmcp
+            versions that coerce it, or
+          * raises ``contents must be str, bytes, or list[ResourceContent],
+            got Resource`` on versions that reject it.
+        Either way the returned text does not equal the real template content,
+        so this test fails. After the fix (returning ``get_content_func()``'s
+        string directly) it passes.
+        """
+        # Import the real template producer; comparing against the same function
+        # keeps the test robust if the template text itself changes later.
+        from instrmcp.servers.jupyter_qcodes.options.measureit import (
+            get_sweep2d_template,
+        )
+
+        # Build a REAL FastMCP server (not the mocked decorator used elsewhere).
+        mcp = FastMCP("issue-34-regression")
+        registrar = ResourceRegistrar(
+            mcp,
+            MagicMock(),  # tools - unused by template registration
+            enabled_options={"measureit"},
+            measureit_module=MagicMock(),  # truthy so measureit resources register
+        )
+        registrar.register_all()
+
+        uri = "resource://measureit_sweep2d_template"
+
+        # Read through the REAL FastMCP resources/read path. On fastmcp versions
+        # that reject a Resource return value, this line itself raises.
+        async with Client(mcp) as client:
+            contents = await client.read_resource(uri)
+
+        assert len(contents) == 1
+        # The load-bearing assertion: the read must yield the raw template
+        # content, NOT a serialized Resource wrapper.
+        assert contents[0].text == get_sweep2d_template()
+        # Read-path MIME metadata must survive the fix. (This is delivered
+        # through the standard resources/read result, so it is portable across
+        # fastmcp versions -- unlike the FastMCP.get_resources() helper, which
+        # is version-dependent and only used behind a try/except in production.)
+        assert contents[0].mimeType == "application/json"

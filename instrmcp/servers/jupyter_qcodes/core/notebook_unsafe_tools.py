@@ -325,9 +325,7 @@ class UnsafeToolRegistrar:
                 ]
             except Exception as e:
                 duration = (time.perf_counter() - start) * 1000
-                log_tool_call(
-                    "notebook_execute_code", {}, duration, "error", str(e)
-                )
+                log_tool_call("notebook_execute_code", {}, duration, "error", str(e))
                 return [
                     TextContent(
                         type="text",

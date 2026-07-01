@@ -22,6 +22,7 @@ def make_backend():
 
 # ---- pure result assembly (_assemble_kernel_result) ----
 
+
 def test_assemble_completed_with_stdout():
     b = make_backend()
     r = b._assemble_kernel_result(
@@ -40,8 +41,12 @@ def test_assemble_error_from_iopub():
     b = make_backend()
     r = b._assemble_kernel_result(
         {"status": "error", "execution_count": 3},
-        {"stdout": [], "stderr": [], "result": None,
-         "error": ("ValueError", "boom", ["tb-line-1", "tb-line-2"])},
+        {
+            "stdout": [],
+            "stderr": [],
+            "result": None,
+            "error": ("ValueError", "boom", ["tb-line-1", "tb-line-2"]),
+        },
         "raise ValueError('boom')",
     )
     assert r["status"] == "error"
@@ -75,16 +80,22 @@ def test_assemble_includes_result_value():
 
 # ---- execute_code control flow (kernel client mocked) ----
 
+
 @pytest.mark.asyncio
 async def test_execute_code_returns_kernel_client_result(monkeypatch):
     tools = QCodesReadOnlyTools(MagicMock(user_ns={}, execution_count=0))
     canned = {
-        "success": True, "executed": True, "status": "completed",
-        "has_error": False, "has_output": True, "stdout": "hi\n",
+        "success": True,
+        "executed": True,
+        "status": "completed",
+        "has_error": False,
+        "has_output": True,
+        "stdout": "hi\n",
         "execution_count": 5,
     }
     monkeypatch.setattr(
-        tools._notebook_unsafe, "_exec_via_kernel_client",
+        tools._notebook_unsafe,
+        "_exec_via_kernel_client",
         lambda code, timeout: canned,
     )
     result = await tools.execute_code("print('hi')", timeout=5.0)
@@ -95,7 +106,8 @@ async def test_execute_code_returns_kernel_client_result(monkeypatch):
 async def test_execute_code_fire_and_forget_returns_no_wait(monkeypatch):
     tools = QCodesReadOnlyTools(MagicMock(user_ns={}, execution_count=0))
     monkeypatch.setattr(
-        tools._notebook_unsafe, "_exec_via_kernel_client",
+        tools._notebook_unsafe,
+        "_exec_via_kernel_client",
         lambda code, timeout: None,
     )
     result = await asyncio.wait_for(tools.execute_code("x = 1", timeout=0), timeout=2.0)
