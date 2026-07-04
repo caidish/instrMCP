@@ -199,6 +199,15 @@ View current configuration:
 instrmcp config
 ```
 
+### Environment variables
+
+- `INSTRMCP_FRONTEND_TIMEOUT` — seconds the backend waits for a JupyterLab
+  frontend response on cell operations (add/move/read that round-trip through the
+  bridge). Default `10`. Raise it on slow machines or heavy notebooks; adding a
+  **markdown** cell in particular needs an extra frontend round-trip, so a value
+  that is too low can report a false "Timeout waiting for frontend response" even
+  though the cell was added. Read once at kernel start (restart to apply).
+
 ## Claude Desktop Integration
 
 InstrMCP provides seamless integration with Claude Desktop for AI-assisted laboratory instrumentation control.

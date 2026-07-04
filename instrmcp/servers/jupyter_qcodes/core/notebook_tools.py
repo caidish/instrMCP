@@ -426,7 +426,7 @@ class NotebookToolRegistrar:
                 # FIX for Bug #10: Use direct frontend query instead of IPython history
                 # This gets output from the currently selected cell in JupyterLab,
                 # avoiding stale state issues with sys.last_* and Out history.
-                frontend_result = get_active_cell_output(timeout_s=2.0)
+                frontend_result = get_active_cell_output()
 
                 if frontend_result.get("success"):
                     # Frontend returned the active cell's output directly
@@ -688,7 +688,7 @@ class NotebookToolRegistrar:
                         ]
 
                 # PHASE 1: Get notebook structure (lightweight - no source code)
-                structure = get_notebook_structure(timeout_s=2.0)
+                structure = get_notebook_structure()
 
                 if not structure.get("success"):
                     # Frontend unavailable - check if position-based access was requested
@@ -752,7 +752,7 @@ class NotebookToolRegistrar:
                     indices_to_fetch = list(range(start, end))
 
                 # Get cells with source code
-                cells_result = get_cells_by_index(indices_to_fetch, timeout_s=2.0)
+                cells_result = get_cells_by_index(indices_to_fetch)
 
                 if not cells_result.get("success"):
                     logger.warning(

@@ -6,6 +6,7 @@ the currently editing cell content via Jupyter comm protocol.
 """
 
 import copy
+import os
 import time
 import threading
 import logging
@@ -29,6 +30,29 @@ _CELL_OUTPUTS_CACHE: Dict[int, Dict[str, Any]] = {}
 # Default cache TTL in seconds (60 seconds)
 # Cached outputs older than this are considered stale and will be refreshed
 CELL_OUTPUT_CACHE_TTL_SECONDS = 60.0
+
+
+def _default_frontend_timeout() -> float:
+    """Resolve the default frontend-response timeout (seconds).
+
+    Overridable via the INSTRMCP_FRONTEND_TIMEOUT environment variable so users
+    on slower machines / heavy notebooks can extend it without a code change.
+    Read once at import time; changing the env var requires a kernel restart.
+    """
+    try:
+        return float(os.environ.get("INSTRMCP_FRONTEND_TIMEOUT", "10.0"))
+    except (TypeError, ValueError):
+        return 10.0
+
+
+# Default timeout (seconds) for operations that wait on a frontend response via
+# _send_and_wait. Intentionally generous: some frontend operations respond
+# noticeably slower than others. In particular, adding a *markdown* cell requires
+# an extra NotebookActions.changeCellType round-trip on the frontend, so its
+# add_cell_response can arrive well after a plain code-cell insert would. A short
+# timeout (the historical 2.0s) caused the operation to succeed on the frontend
+# while the backend reported a false "Timeout waiting for frontend response".
+FRONTEND_RESPONSE_TIMEOUT: float = _default_frontend_timeout()
 
 # Response waiting mechanism for operations that need frontend confirmation
 # Maps request_id -> [threading.Event, response_dict or None]
@@ -343,7 +367,9 @@ def _send_to_kernel(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def _send_and_wait(payload: Dict[str, Any], timeout_s: float = 2.0) -> Dict[str, Any]:
+def _send_and_wait(
+    payload: Dict[str, Any], timeout_s: Optional[float] = None
+) -> Dict[str, Any]:
     """
     Send a message to the frontend and wait for the response.
 
@@ -352,12 +378,18 @@ def _send_and_wait(payload: Dict[str, Any], timeout_s: float = 2.0) -> Dict[str,
 
     Args:
         payload: Message payload (type, and operation-specific data)
-        timeout_s: How long to wait for response from frontend
+        timeout_s: How long to wait for response from frontend. If None (the
+            default), uses FRONTEND_RESPONSE_TIMEOUT (configurable via the
+            INSTRMCP_FRONTEND_TIMEOUT environment variable, default 10s).
 
     Returns:
         The actual response from frontend, or error dict on timeout/failure
     """
     import uuid
+
+    effective_timeout = (
+        timeout_s if timeout_s is not None else FRONTEND_RESPONSE_TIMEOUT
+    )
 
     # Generate request_id if not present
     request_id = payload.get("request_id") or str(uuid.uuid4())
@@ -378,42 +410,44 @@ def _send_and_wait(payload: Dict[str, Any], timeout_s: float = 2.0) -> Dict[str,
                 _PENDING_REQUESTS.pop(request_id, None)
             return send_result
 
-        # Wait for response with timeout
-        if event.wait(timeout=timeout_s):
-            # Got response
-            with _STATE_LOCK:
-                _, response = _PENDING_REQUESTS.pop(request_id, [None, None])
+        # Wait for response with timeout.
+        timed_out = not event.wait(timeout=effective_timeout)
 
-            if response:
-                # Return the full response from frontend
-                return {
-                    "success": response.get("success", False),
-                    "message": response.get("message", ""),
-                    "request_id": request_id,
-                    "kernel_id": send_result.get("kernel_id"),
-                    # Include any additional fields from frontend response
-                    **{
-                        k: v
-                        for k, v in response.items()
-                        if k not in ["type", "request_id", "success", "message"]
-                    },
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "Response received but data was empty",
-                    "request_id": request_id,
-                }
-        else:
-            # Timeout
-            with _STATE_LOCK:
-                _PENDING_REQUESTS.pop(request_id, None)
+        # Always pop-and-check the response under the lock, even on timeout.
+        # _on_msg fills [event, data] atomically under _STATE_LOCK, so a response
+        # that lands in the race window between wait() returning False and this
+        # pop is still honored instead of being discarded as a false timeout.
+        with _STATE_LOCK:
+            _, response = _PENDING_REQUESTS.pop(request_id, [None, None])
+
+        if response:
+            # Return the full response from frontend (success or handled failure)
+            return {
+                "success": response.get("success", False),
+                "message": response.get("message", ""),
+                "request_id": request_id,
+                "kernel_id": send_result.get("kernel_id"),
+                # Include any additional fields from frontend response
+                **{
+                    k: v
+                    for k, v in response.items()
+                    if k not in ["type", "request_id", "success", "message"]
+                },
+            }
+
+        if timed_out:
             return {
                 "success": False,
-                "error": f"Timeout waiting for frontend response after {timeout_s}s",
+                "error": f"Timeout waiting for frontend response after {effective_timeout}s",
                 "request_id": request_id,
                 "kernel_id": send_result.get("kernel_id"),
             }
+
+        return {
+            "success": False,
+            "error": "Response received but data was empty",
+            "request_id": request_id,
+        }
 
     except Exception as e:
         # Clean up on any error
@@ -630,7 +664,7 @@ def add_new_cell(
     cell_type: str = "code",
     position: str = "below",
     content: str = "",
-    timeout_s: float = 2.0,
+    timeout_s: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Add a new cell relative to the currently active cell in JupyterLab frontend.
@@ -643,7 +677,10 @@ def add_new_cell(
         position: Position relative to active cell ("above", "below", "end")
                   "end" appends the cell at the very end of the notebook
         content: Initial content for the new cell
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT,
+                  default 10s). Generous by design: adding a markdown cell needs an
+                  extra changeCellType round-trip and responds slower than code.
 
     Returns:
         Dictionary with creation status and response details
@@ -937,7 +974,7 @@ def get_cell_outputs(cell_numbers: List[int], timeout_s: float = 2.0) -> Dict[st
     return result
 
 
-def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
+def move_cursor(target: str, timeout_s: Optional[float] = None) -> Dict[str, Any]:
     """
     Move cursor to a different cell in the notebook.
 
@@ -950,7 +987,8 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
                - "below": Move to cell below current
                - "bottom": Move to the last cell in the notebook (by file order)
                - "index:N": Move to cell at position N (0-indexed) - works for ALL cells
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT, default 10s)
 
     Returns:
         Dictionary with operation status, old index, and new index.
@@ -979,7 +1017,7 @@ def move_cursor(target: str, timeout_s: float = 2.0) -> Dict[str, Any]:
     return result
 
 
-def get_active_cell_output(timeout_s: float = 10.0) -> Dict[str, Any]:
+def get_active_cell_output(timeout_s: Optional[float] = None) -> Dict[str, Any]:
     """
     Get the output of the currently active cell directly from JupyterLab frontend.
 
@@ -991,7 +1029,8 @@ def get_active_cell_output(timeout_s: float = 10.0) -> Dict[str, Any]:
     frontend for the active cell's current outputs.
 
     Args:
-        timeout_s: How long to wait for response from frontend (default 10.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT, default 10s)
 
     Returns:
         Dictionary with:
@@ -1022,7 +1061,7 @@ def get_active_cell_output(timeout_s: float = 10.0) -> Dict[str, Any]:
     return result
 
 
-def get_notebook_structure(timeout_s: float = 2.0) -> Dict[str, Any]:
+def get_notebook_structure(timeout_s: Optional[float] = None) -> Dict[str, Any]:
     """
     Get lightweight notebook structure (metadata only, no source code).
 
@@ -1031,7 +1070,8 @@ def get_notebook_structure(timeout_s: float = 2.0) -> Dict[str, Any]:
     making it fast for large notebooks.
 
     Args:
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT, default 10s)
 
     Returns:
         Dictionary with:
@@ -1052,7 +1092,7 @@ def get_notebook_structure(timeout_s: float = 2.0) -> Dict[str, Any]:
 
 
 def get_cells_by_index(
-    cell_id_notebooks: List[int], timeout_s: float = 2.0
+    cell_id_notebooks: List[int], timeout_s: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Get specific cells by position index (with source code).
@@ -1062,7 +1102,8 @@ def get_cells_by_index(
 
     Args:
         cell_id_notebooks: List of cell indices to fetch (0-indexed positions)
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT, default 10s)
 
     Returns:
         Dictionary with:
@@ -1085,7 +1126,7 @@ def get_cells_by_index(
 
 
 def delete_cells_by_index(
-    cell_id_notebooks: List[int], timeout_s: float = 2.0
+    cell_id_notebooks: List[int], timeout_s: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Delete cells by position index (works for ALL cells including unexecuted ones).
@@ -1099,7 +1140,8 @@ def delete_cells_by_index(
 
     Args:
         cell_id_notebooks: List of cell indices to delete (0-indexed positions)
-        timeout_s: How long to wait for response from frontend (default 2.0s)
+        timeout_s: How long to wait for response from frontend. If None (default),
+                  uses FRONTEND_RESPONSE_TIMEOUT (env INSTRMCP_FRONTEND_TIMEOUT, default 10s)
 
     Returns:
         Dictionary with:

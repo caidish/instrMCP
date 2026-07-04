@@ -67,3 +67,25 @@ harnesses into the suite. Validated on an integration build (main + #32 + #33).
   the kernel-hosted server (currently advisory)
 - [ ] Optional JupyterLab side panel mirroring the dashboard in-notebook
 - [ ] `--detach` daemon mode (M1–M2 are foreground only)
+
+## Bridge timeout / markdown `add_cell` false-timeout fix
+
+`notebook_add_cell(cell_type="markdown")` returned a false
+`{"success": false, "error": "Timeout waiting for frontend response after 2.0s"}`
+even though the cell was added — the frontend's extra `changeCellType` round-trip
+for markdown exceeds the old hardcoded 2.0s wait.
+
+- [x] Configurable default frontend-response timeout in `active_cell_bridge.py`
+  (`FRONTEND_RESPONSE_TIMEOUT`, env `INSTRMCP_FRONTEND_TIMEOUT`, default 10s),
+  threaded through every `_send_and_wait` wrapper (`add_new_cell`, `move_cursor`,
+  `get_active_cell_output`, `get_notebook_structure`, `get_cells_by_index`,
+  `delete_cells_by_index`).
+- [x] Removed hardcoded `timeout_s=2.0` at `backend/notebook_unsafe.py`
+  (add_new_cell) and `core/notebook_tools.py` (3 read sites; one was even lowering
+  the intended 10s to 2s).
+- [x] Closed the late-response race in `_send_and_wait`: always pop-and-check the
+  response under the lock before declaring a timeout, so a valid response landing
+  right as the wait expires is honored instead of discarded.
+- [x] Reproducing tests `tests/unit/servers/test_add_cell_timeout.py` (markdown
+  slow-success at bridge + backend layers, and the late-response race), verified
+  red on pre-fix / green on fix. Env var documented in `README.md`.

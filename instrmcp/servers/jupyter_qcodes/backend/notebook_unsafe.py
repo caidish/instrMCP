@@ -640,10 +640,12 @@ class NotebookUnsafeBackend(BaseBackend):
             Dictionary with creation status and response details
         """
         try:
-            # Send add cell request to frontend (fixed 2s timeout)
-            result = self.bridge.add_new_cell(
-                cell_type, position, content, timeout_s=2.0
-            )
+            # Send add cell request to frontend. Timeout comes from the bridge
+            # default (FRONTEND_RESPONSE_TIMEOUT / INSTRMCP_FRONTEND_TIMEOUT, ~10s)
+            # so markdown's extra changeCellType round-trip does not cause a
+            # false "Timeout waiting for frontend response" while the cell is
+            # actually added.
+            result = self.bridge.add_new_cell(cell_type, position, content)
 
             # Add metadata
             result.update(
