@@ -1,2 +1,15 @@
 global-include *.yaml *.yml *.json *.ini *.md
 recursive-include instrmcp/extensions/jupyterlab/mcp_active_cell_bridge/labextension *
+
+# The global-include above otherwise sweeps every *.json/*.md/etc. across the whole
+# working tree into the sdist, including large untracked dev artifacts (a local
+# virtualenv, JupyterLab staging, node_modules, tool caches). CI builds from a clean
+# checkout so it is unaffected, but local `python -m build` must prune these.
+prune instrmcp/extensions/jupyterlab/node_modules
+prune venv
+prune .venv
+prune build
+prune dist
+prune .mypy_cache
+prune .pytest_cache
+global-exclude *.egg-info
