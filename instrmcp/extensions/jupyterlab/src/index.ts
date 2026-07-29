@@ -19,6 +19,7 @@ import { Signal } from '@lumino/signaling';
 
 import { Change, diffLines } from 'diff';
 import { MCPToolbarExtension, MCPStatusUpdate } from './toolbar';
+import { isQdevbotAnalysisKernel } from './kernel-policy';
 
 const statusUpdateSignal = new Signal<object, MCPStatusUpdate>({});
 
@@ -1446,6 +1447,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       if (extensionLoaded.get(kernel)) {
         return;
@@ -1612,6 +1616,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       // Register target to receive server status updates
       kernel.registerCommTarget('mcp:server_status', (comm: any, msg: any) => {
@@ -1676,6 +1683,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       // Register target to receive comms opened by backend
       kernel.registerCommTarget('mcp:capcall', (comm: any, msg: any) => {
@@ -1724,6 +1734,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         console.warn('MCP Active Cell Bridge: Kernel not available or dead');
+        return null;
+      }
+      if (isQdevbotAnalysisKernel(kernel)) {
         return null;
       }
 
@@ -1961,6 +1974,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.activeCellChanged.connect(async (sender: any, args: any) => {
       const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
 
+      if (isQdevbotAnalysisKernel(kernel)) {
+        stopTrackingActiveCell();
+        return;
+      }
+
       // // Check if server is ready
       // if (kernel && !mcpServerReady.get(kernel)) {
       //   console.log('MCP Active Cell Bridge: Server not ready, queueing active cell change');
@@ -2004,6 +2022,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.currentChanged.connect(async (sender: any, args: any) => {
       const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
 
+      if (isQdevbotAnalysisKernel(kernel)) {
+        stopTrackingActiveCell();
+        console.log('MCP Active Cell Bridge: QDevBot analysis kernel is isolated');
+        return;
+      }
+
       // // Check if server is ready
       // if (kernel && !mcpServerReady.get(kernel)) {
       //   console.log('MCP Active Cell Bridge: Server not ready, queueing notebook change');
@@ -2025,7 +2049,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.widgetAdded.connect((sender: any, panel: any) => {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
-        if (kernel) {
+        if (kernel && !isQdevbotAnalysisKernel(kernel)) {
           ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
@@ -2036,7 +2060,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
       panel.sessionContext.kernelChanged.connect((_: any, args: any) => {
         const kernel = args.newValue ?? null;
-        if (kernel) {
+        if (kernel && !isQdevbotAnalysisKernel(kernel)) {
           ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);
           registerConsentCommTarget(kernel);
@@ -2047,7 +2071,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Initialize comm targets for existing notebooks
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
-      if (kernel) {
+      if (kernel && !isQdevbotAnalysisKernel(kernel)) {
         ensureExtensionLoaded(kernel);
         registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
@@ -2061,7 +2085,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       getComm: (kernel?: Kernel.IKernelConnection | null) =>
         kernel ? comms.get(kernel) : null,
       statusUpdateSignal
-    });
+    }, kernel => !isQdevbotAnalysisKernel(kernel));
     app.docRegistry.addWidgetExtension('Notebook', toolbarExtension);
 
     // Bridge self-healing (instrMCP#29): periodically re-establish the
@@ -2075,6 +2099,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const kernel =
           notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
         if (!kernel || kernel.status === 'dead') return;
+        if (isQdevbotAnalysisKernel(kernel)) return;
         if (!mcpServerReady.get(kernel)) return;
         const existing = comms.get(kernel);
         if (!existing || !isCommReady(kernel, existing)) {
