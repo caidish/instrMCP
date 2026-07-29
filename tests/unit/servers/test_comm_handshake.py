@@ -82,6 +82,7 @@ class FakeIPython:
     """Mock IPython instance with kernel."""
 
     def __init__(self):
+        self.user_ns: Dict[str, Any] = {}
         self.kernel = MagicMock()
         self.kernel.comm_manager = FakeCommManager()
 
@@ -115,6 +116,131 @@ def cleanup_status_comm():
     from instrmcp.servers.jupyter_qcodes import jupyter_mcp_extension
 
     jupyter_mcp_extension._status_comm = None
+
+
+@pytest.fixture
+def toolbar_attestation_state():
+    """Isolate toolbar comm and attestation globals for each test."""
+    from instrmcp.servers.jupyter_qcodes import jupyter_mcp_extension as extension
+
+    with extension._toolbar_comms_lock:
+        original_comms = extension._toolbar_comms.copy()
+        original_connected_at = extension._toolbar_connected_at
+        original_user_ns = extension._toolbar_user_ns
+        extension._toolbar_comms.clear()
+        extension._toolbar_connected_at = None
+        extension._toolbar_user_ns = None
+
+    yield extension
+
+    with extension._toolbar_comms_lock:
+        extension._toolbar_comms.clear()
+        extension._toolbar_comms.update(original_comms)
+        extension._toolbar_connected_at = original_connected_at
+        extension._toolbar_user_ns = original_user_ns
+
+
+class TestToolbarFrontendAttestation:
+    """Test namespace attestation driven by real toolbar comm lifecycle events."""
+
+    def test_comm_open_publishes_attestation(
+        self, fake_ipython, toolbar_attestation_state, monkeypatch
+    ):
+        extension = toolbar_attestation_state
+        connected_at = "2026-07-29T12:34:56Z"
+        monkeypatch.setenv("QDEVBOT_FRONTEND_ATTESTATION_NONCE", "nonce-123")
+
+        with patch(
+            "IPython.core.getipython.get_ipython", return_value=fake_ipython
+        ), patch.object(extension, "_utc_now", return_value=connected_at):
+            comm = DummyComm(extension.TOOLBAR_CONTROL_TARGET)
+            extension._handle_toolbar_control(comm, {})
+
+        attestation = fake_ipython.user_ns[extension.FRONTEND_ATTESTATION_VARIABLE]
+        assert attestation == {
+            "schemaVersion": 1,
+            "connected": True,
+            "target": "mcp:toolbar_control",
+            "connectedAt": connected_at,
+            "connectionCount": 1,
+            "nonce": "nonce-123",
+            "package": {
+                "name": "instrmcp",
+                "version": extension.instrmcp.__version__,
+                "revision": None,
+            },
+        }
+
+    def test_multiple_comms_stay_connected_until_last_close(
+        self, fake_ipython, toolbar_attestation_state
+    ):
+        extension = toolbar_attestation_state
+        connected_at = "2026-07-29T13:00:00Z"
+
+        with patch(
+            "IPython.core.getipython.get_ipython", return_value=fake_ipython
+        ), patch.object(extension, "_utc_now", return_value=connected_at) as now:
+            first = DummyComm(extension.TOOLBAR_CONTROL_TARGET, "first")
+            second = DummyComm(extension.TOOLBAR_CONTROL_TARGET, "second")
+            extension._handle_toolbar_control(first, {})
+            extension._handle_toolbar_control(second, {})
+
+            state = fake_ipython.user_ns[extension.FRONTEND_ATTESTATION_VARIABLE]
+            assert state["connected"] is True
+            assert state["connectionCount"] == 2
+            assert state["connectedAt"] == connected_at
+            now.assert_called_once_with()
+
+            first.close()
+            state = fake_ipython.user_ns[extension.FRONTEND_ATTESTATION_VARIABLE]
+            assert state["connected"] is True
+            assert state["connectionCount"] == 1
+
+            second.close()
+
+        state = fake_ipython.user_ns[extension.FRONTEND_ATTESTATION_VARIABLE]
+        assert state["connected"] is False
+        assert state["connectionCount"] == 0
+        assert state["connectedAt"] == connected_at
+
+    def test_missing_ipython_is_non_fatal(self, toolbar_attestation_state):
+        extension = toolbar_attestation_state
+        comm = DummyComm(extension.TOOLBAR_CONTROL_TARGET)
+
+        with patch("IPython.core.getipython.get_ipython", return_value=None):
+            extension._handle_toolbar_control(comm, {})
+            assert comm in extension._toolbar_comms
+            comm.close()
+
+        assert comm not in extension._toolbar_comms
+
+    def test_close_removes_comm_when_namespace_write_fails(
+        self, fake_ipython, toolbar_attestation_state
+    ):
+        extension = toolbar_attestation_state
+
+        class FailingNamespace(dict):
+            fail_writes = False
+
+            def __setitem__(self, key, value):
+                if self.fail_writes:
+                    raise RuntimeError("namespace unavailable")
+                super().__setitem__(key, value)
+
+        fake_ipython.user_ns = FailingNamespace()
+        comm = DummyComm(extension.TOOLBAR_CONTROL_TARGET)
+
+        with patch(
+            "IPython.core.getipython.get_ipython", return_value=fake_ipython
+        ):
+            extension._handle_toolbar_control(comm, {})
+            fake_ipython.user_ns.fail_writes = True
+            comm.close()
+
+        assert comm not in extension._toolbar_comms
+        state = fake_ipython.user_ns[extension.FRONTEND_ATTESTATION_VARIABLE]
+        assert state["connected"] is False
+        assert state["connectionCount"] == 0
 
 
 class TestBroadcastServerStatusPython313:
