@@ -65,7 +65,7 @@
     "extension": true,
     "webpackConfig": "./webpack.config.js",
     "_build": {
-      "load": "static/remoteEntry.2d5815cc49cb2420d179.js",
+      "load": "static/remoteEntry.fcc9d1ee16e521e2c0b1.js",
       "extension": "./extension",
       "style": "./style"
     }

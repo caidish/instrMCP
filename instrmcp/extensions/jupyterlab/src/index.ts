@@ -1948,6 +1948,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    // A frontend can attach after the kernel-side MCP server has already sent
+    // its one-shot `server_ready` status comm. In that order the toolbar can
+    // still query and display "Running", but the active-cell comm used by MCP
+    // notebook tools was never opened until the user changed cells. Connect
+    // eagerly after loading the IPython extension; if the server is not ready
+    // yet, the normal status notification path will retry later.
+    const connectFrontendBridge = (kernel: Kernel.IKernelConnection) => {
+      void ensureExtensionLoaded(kernel)
+        .then(() => ensureComm(kernel))
+        .then((comm: any) => comm ? sendSnapshot(kernel) : undefined)
+        .catch(() => {});
+    };
+
     // Content-change listener bookkeeping for the CURRENTLY active cell.
     // Without this, every activeCellChanged connected a brand-new
     // sharedModel.changed listener that was never disconnected, leaking one
@@ -2050,10 +2063,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
         if (kernel && !isQdevbotAnalysisKernel(kernel)) {
-          ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
-          // Don't try to ensure comm yet - wait for server ready signal
+          connectFrontendBridge(kernel);
         }
         console.log('MCP Active Cell Bridge: Kernel ready, waiting for server status');
       });
@@ -2061,9 +2073,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       panel.sessionContext.kernelChanged.connect((_: any, args: any) => {
         const kernel = args.newValue ?? null;
         if (kernel && !isQdevbotAnalysisKernel(kernel)) {
-          ensureExtensionLoaded(kernel);
           registerServerStatusCommTarget(kernel);
           registerConsentCommTarget(kernel);
+          connectFrontendBridge(kernel);
         }
       });
     });
@@ -2072,10 +2084,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
       if (kernel && !isQdevbotAnalysisKernel(kernel)) {
-        ensureExtensionLoaded(kernel);
         registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
-        // Don't try to ensure comm yet - wait for server ready signal
+        connectFrontendBridge(kernel);
       }
     });
 
