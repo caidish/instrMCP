@@ -217,6 +217,7 @@ def _on_comm_open(comm, open_msg):
             "update_response",
             "execute_response",
             "add_cell_response",
+            "save_notebook_response",
             "delete_cell_response",
             "apply_patch_response",
             "move_cursor_response",
@@ -658,6 +659,15 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
         result["warning"] = "UNSAFE: Code execution was requested in active cell"
 
     return result
+
+
+def save_active_notebook(timeout_s: Optional[float] = None) -> Dict[str, Any]:
+    """Persist the active notebook through its owning JupyterLab frontend.
+
+    This waits for ``NotebookPanel.context.save()`` so callers can treat a
+    successful response as a durability boundary for cell content and output.
+    """
+    return _send_and_wait({"type": "save_notebook"}, timeout_s=timeout_s)
 
 
 def add_new_cell(

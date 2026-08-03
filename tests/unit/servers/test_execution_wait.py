@@ -13,6 +13,9 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 
 from instrmcp.servers.jupyter_qcodes.tools import QCodesReadOnlyTools
+from instrmcp.servers.jupyter_qcodes.backend.notebook_unsafe import (
+    NotebookUnsafeBackend,
+)
 
 
 class MockExecutionResult:
@@ -471,3 +474,62 @@ class TestAsyncGetCellOutput:
 
             # Should take ~0.1s (async sleep) not block indefinitely
             assert elapsed < 0.5
+
+
+class TestExecutionSaveBoundary:
+    """Completed frontend executions are durable before the tool returns."""
+
+    @pytest.fixture
+    def backend(self):
+        ipython = MagicMock()
+        ipython.execution_count = 0
+        ipython.user_ns = {"In": [""], "Out": {}}
+        state = MagicMock(ipython=ipython, namespace=ipython.user_ns)
+        backend = NotebookUnsafeBackend(state, MagicMock())
+        backend._bridge = MagicMock()
+        backend._bridge.get_active_cell.return_value = {"text": "print('saved')"}
+        backend._bridge.execute_active_cell.return_value = {"success": True}
+        backend._bridge.get_active_cell_output.return_value = {
+            "success": True,
+            "has_output": True,
+            "has_error": False,
+            "outputs": [{"type": "stream", "text": "saved\n"}],
+        }
+        backend._wait_for_execution = AsyncMock(
+            return_value={
+                "status": "completed",
+                "has_error": False,
+                "cell_number": 1,
+                "input": "print('saved')",
+            }
+        )
+        return backend
+
+    @pytest.mark.asyncio
+    async def test_completed_execution_waits_for_frontend_save(self, backend):
+        backend._bridge.save_active_notebook.return_value = {
+            "success": True,
+            "notebook_path": "experiments/run/experiment.ipynb",
+        }
+
+        result = await backend.execute_editing_cell(timeout=30.0)
+
+        backend._bridge.save_active_notebook.assert_called_once_with(timeout_s=10.0)
+        assert result["success"] is True
+        assert result["status"] == "completed"
+        assert result["saved"] is True
+        assert result["notebook_path"] == "experiments/run/experiment.ipynb"
+
+    @pytest.mark.asyncio
+    async def test_completed_execution_fails_closed_when_save_fails(self, backend):
+        backend._bridge.save_active_notebook.return_value = {
+            "success": False,
+            "message": "disk write rejected",
+        }
+
+        result = await backend.execute_editing_cell(timeout=30.0)
+
+        assert result["executed"] is True
+        assert result["success"] is False
+        assert result["saved"] is False
+        assert result["error"] == "disk write rejected"

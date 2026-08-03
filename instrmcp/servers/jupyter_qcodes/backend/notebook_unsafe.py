@@ -336,13 +336,26 @@ class NotebookUnsafeBackend(BaseBackend):
 
             # 5. Handle errors detected during wait
             if wait_result.get("has_error"):
-                return {
+                error_result = {
                     "success": True,
                     "executed": True,
                     **wait_result,
                     "input": wait_result.get("input", "") or cell_text_from_bridge,
                     "has_output": False,
                 }
+                save_result = self.bridge.save_active_notebook(timeout_s=10.0)
+                if not save_result.get("success"):
+                    return {
+                        **error_result,
+                        "success": False,
+                        "saved": False,
+                        "error": save_result.get("error")
+                        or save_result.get("message")
+                        or "Notebook execution completed but could not be saved",
+                    }
+                error_result["saved"] = True
+                error_result["notebook_path"] = save_result.get("notebook_path")
+                return error_result
 
             # 6. Fetch output using shared logic from get_active_cell_output
             # This is the same path used by notebook_read_active_cell_output
@@ -416,6 +429,22 @@ class NotebookUnsafeBackend(BaseBackend):
                         f"Use measureit_wait_for_sweep(timeout=..., variable_name=name) or "
                         f"measureit_wait_for_sweep(timeout=..., all=True) to wait for completion."
                     )
+
+            # The MCP call is the public completion boundary used by Desktop.
+            # Do not report a completed cell while its source/output exists only
+            # in the JupyterLab model and Compact Flow still reads stale bytes.
+            save_result = self.bridge.save_active_notebook(timeout_s=10.0)
+            if not save_result.get("success"):
+                return {
+                    **combined_result,
+                    "success": False,
+                    "saved": False,
+                    "error": save_result.get("error")
+                    or save_result.get("message")
+                    or "Notebook execution completed but could not be saved",
+                }
+            combined_result["saved"] = True
+            combined_result["notebook_path"] = save_result.get("notebook_path")
 
             return combined_result
 

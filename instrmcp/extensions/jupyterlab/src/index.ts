@@ -76,6 +76,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return comm && !comm.isDisposed && openedComms.get(kernel) === true;
     };
 
+    const saveNotebook = async (
+      kernel: Kernel.IKernelConnection,
+      panel: NotebookPanel
+    ): Promise<void> => {
+      const panelKernel = panel.sessionContext.session?.kernel;
+      if (!panelKernel || panelKernel.id !== kernel.id) {
+        throw new Error('Active notebook does not belong to the requesting kernel');
+      }
+      await panel.context.save();
+    };
+
     // Handle cell update requests from kernel
     const handleCellUpdate = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
@@ -255,6 +266,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         }
 
+        // A successful bridge mutation must be durable before the backend can
+        // report success. Desktop notebook summaries read the same .ipynb from
+        // disk, so relying on JupyterLab's periodic autosave creates a window
+        // where the visible notebook and product state disagree.
+        await saveNotebook(kernel, panel);
+
         // Send success response
         comm.send({
           type: 'add_cell_response',
@@ -281,6 +298,42 @@ const plugin: JupyterFrontEndPlugin<void> = {
           request_id: requestId,
           success: false,
           message: `Failed to add cell: ${error}`
+        });
+      }
+    };
+
+    const handleSaveNotebook = async (
+      kernel: Kernel.IKernelConnection,
+      comm: any,
+      data: any
+    ) => {
+      const requestId = data.request_id;
+      try {
+        const panel = notebooks.currentWidget;
+        if (!panel) {
+          comm.send({
+            type: 'save_notebook_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+        await saveNotebook(kernel, panel);
+        comm.send({
+          type: 'save_notebook_response',
+          request_id: requestId,
+          success: true,
+          notebook_path: panel.context.path,
+          message: 'Notebook saved successfully'
+        });
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to save notebook:', error);
+        comm.send({
+          type: 'save_notebook_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to save notebook: ${error}`
         });
       }
     };
@@ -1800,6 +1853,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 enqueue(() => handleCellExecution(kernel, comm, data));
               } else if (msgType === 'add_cell') {
                 enqueue(() => handleAddCell(kernel, comm, data));
+              } else if (msgType === 'save_notebook') {
+                enqueue(() => handleSaveNotebook(kernel, comm, data));
               } else if (msgType === 'delete_cell') {
                 enqueue(() => handleDeleteCell(kernel, comm, data));
               } else if (msgType === 'delete_cells_by_number') {
