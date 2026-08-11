@@ -97,23 +97,6 @@ class UnsafeToolRegistrar:
 
         return None
 
-    def _unescape_content(self, text: str) -> str:
-        """Convert common escape sequences in text content.
-
-        LLMs and tools sometimes pass literal escape sequences (e.g., '\\n')
-        instead of actual characters. This normalizes them for code/text content.
-
-        Args:
-            text: Input text that may contain escape sequences
-
-        Returns:
-            Text with escape sequences converted to actual characters
-        """
-        if not text:
-            return text
-        # Convert common escape sequences
-        return text.replace("\\n", "\n").replace("\\t", "\t")
-
     # ===== Concise mode helpers =====
 
     def _to_concise_execute_cell(self, result: dict) -> dict:
@@ -503,9 +486,6 @@ class UnsafeToolRegistrar:
             content: str = "",
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
-            # Normalize escape sequences (LLMs may pass literal \n instead of newlines)
-            content = self._unescape_content(content)
-
             # SECURITY: Scan content for dangerous patterns (only for code cells)
             if cell_type == "code" and content:
                 rejection = self._scan_and_reject(content, "notebook_add_cell")
@@ -743,10 +723,6 @@ class UnsafeToolRegistrar:
         )
         async def apply_patch(old_text: str, new_text: str) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
-            # Normalize escape sequences (LLMs may pass literal \n instead of newlines)
-            old_text = self._unescape_content(old_text)
-            new_text = self._unescape_content(new_text)
-
             # SECURITY: Get current cell content and compute the patched result
             # We must scan the FULL resulting code, not just the new_text fragment
             try:
