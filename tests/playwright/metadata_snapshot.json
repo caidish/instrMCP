@@ -146,7 +146,7 @@
           "description": null
         }
       },
-      "description": "Kill running MeasureIt sweep(s) to release resources.\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\"). Required when all=false.\n    all: If true, kill all sweeps in namespace. If false (default),\n        kill only the sweep specified by variable_name.",
+      "description": "Kill running MeasureIt sweep(s) to release resources.\n\nOnly available in unsafe or dangerous mode (not registered in safe mode).\n\nArgs:\n    variable_name: Name of the sweep variable in the notebook namespace\n        (e.g., \"sweep1d\", \"my_sweep\"). Required when all=false.\n    all: If true, kill all sweeps in namespace. If false (default),\n        kill only the sweep specified by variable_name.",
       "title": "Kill Sweep"
     },
     "measureit_wait_for_sweep": {
@@ -167,7 +167,7 @@
           "description": null
         }
       },
-      "description": "Wait until MeasureIt sweep(s) finish.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    variable_name: Name of the sweep variable to wait for. Required when all=false.\n    all: If true, wait for all sweeps in namespace. If false (default),\n        wait only for the sweep specified by variable_name.\n    kill: If true (default), kill the sweep after waiting to release hardware\n        resources. If false, skip killing (useful for polling without cleanup).\n    detailed: If false (default), return only sweep state; if true, return full sweep information.",
+      "description": "Wait until MeasureIt sweep(s) finish.\n\nArgs:\n    timeout: Maximum time to wait in seconds (REQUIRED).\n        Calculate based on sweep parameters to avoid hanging on stuck sweeps.\n    variable_name: Name of the sweep variable to wait for. Required when all=false.\n    all: If true, wait for all sweeps in namespace. If false (default),\n        wait only for the sweep specified by variable_name.\n    kill: If true (default), kill the sweep after waiting to release hardware\n        resources. If false, skip killing (useful for polling without cleanup).\n        Ignored in safe mode: sweeps are never killed.\n    detailed: If false (default), return only sweep state; if true, return full sweep information.",
       "title": "Wait for Sweep"
     },
     "notebook_add_cell": {

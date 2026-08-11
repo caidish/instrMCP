@@ -16,6 +16,7 @@ from tests.e2e.helpers.mcp_helpers import (
 )
 from tests.e2e.helpers.mock_qcodes import (
     MEASUREIT_TOOLS,
+    MEASUREIT_SAFE_TOOLS,
     DATABASE_TOOLS,
     DYNAMIC_TOOLS,
     MEASUREIT_SWEEP_QUEUE_SETUP,
@@ -41,7 +42,8 @@ class TestMeasureItTools:
 
     @pytest.mark.p1
     def test_measureit_tools_visible(self, notebook_page, mcp_port):
-        """OF-002: MeasureIt tools are visible when enabled."""
+        """OF-002: MeasureIt monitoring tools are visible in safe mode,
+        kill_sweep is not."""
         run_cell(notebook_page, "%load_ext instrmcp.extensions")
         notebook_page.wait_for_timeout(1000)
 
@@ -56,7 +58,36 @@ class TestMeasureItTools:
         # Extract tool names from list of dicts
         tools = [t.get("name") for t in tools_raw if isinstance(t, dict)]
 
-        # Check for MeasureIt tools
+        # Safe mode: monitoring tools only
+        for tool in MEASUREIT_SAFE_TOOLS:
+            assert tool in tools, f"MeasureIt tool {tool} not found. Available: {tools}"
+
+        # Sweep-terminating tool must not be exposed in safe mode
+        assert (
+            "measureit_kill_sweep" not in tools
+        ), f"measureit_kill_sweep must not be available in safe mode. Available: {tools}"
+
+        run_cell(notebook_page, "%mcp_stop")
+
+    @pytest.mark.p1
+    def test_measureit_kill_sweep_visible_unsafe(self, notebook_page, mcp_port):
+        """OF-002b: All MeasureIt tools (incl. kill_sweep) visible in unsafe mode."""
+        run_cell(notebook_page, "%load_ext instrmcp.extensions")
+        notebook_page.wait_for_timeout(1000)
+
+        run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_unsafe")
+        notebook_page.wait_for_timeout(500)
+
+        run_cell(notebook_page, "%mcp_start")
+        notebook_page.wait_for_timeout(2000)
+
+        base_url = f"http://localhost:{mcp_port}"
+        tools_raw = list_mcp_tools(base_url)
+        tools = [t.get("name") for t in tools_raw if isinstance(t, dict)]
+
         for tool in MEASUREIT_TOOLS:
             assert tool in tools, f"MeasureIt tool {tool} not found. Available: {tools}"
 
@@ -553,11 +584,15 @@ class TestMeasureItSweepTools:
 
     @pytest.mark.p1
     def test_measureit_kill_sweep_all(self, notebook_page, mcp_port):
-        """OF-042: measureit_kill_sweep with all=True."""
+        """OF-042: measureit_kill_sweep with all=True (unsafe mode only)."""
         run_cell(notebook_page, "%load_ext instrmcp.extensions")
         notebook_page.wait_for_timeout(1000)
 
         run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        # kill_sweep is only registered outside safe mode
+        run_cell(notebook_page, "%mcp_unsafe")
         notebook_page.wait_for_timeout(500)
 
         run_cell(notebook_page, "%mcp_start")
@@ -582,11 +617,15 @@ class TestMeasureItSweepTools:
 
     @pytest.mark.p1
     def test_measureit_kill_sweep_variable(self, notebook_page, mcp_port):
-        """OF-043: measureit_kill_sweep with specific variable name."""
+        """OF-043: measureit_kill_sweep with specific variable name (unsafe mode only)."""
         run_cell(notebook_page, "%load_ext instrmcp.extensions")
         notebook_page.wait_for_timeout(1000)
 
         run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        # kill_sweep is only registered outside safe mode
+        run_cell(notebook_page, "%mcp_unsafe")
         notebook_page.wait_for_timeout(500)
 
         run_cell(notebook_page, "%mcp_start")
@@ -832,6 +871,10 @@ class TestSweepQueueQueuedSweeps:
         notebook_page.wait_for_timeout(1000)
 
         run_cell(notebook_page, "%mcp_option measureit")
+        notebook_page.wait_for_timeout(500)
+
+        # kill_sweep is only registered outside safe mode
+        run_cell(notebook_page, "%mcp_unsafe")
         notebook_page.wait_for_timeout(500)
 
         run_cell(notebook_page, "%mcp_start")

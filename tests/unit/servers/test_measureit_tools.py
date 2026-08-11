@@ -46,17 +46,24 @@ class TestMeasureItToolRegistrar:
 
     @pytest.fixture
     def registrar(self, mock_mcp_server, mock_tools):
-        """Create a MeasureItToolRegistrar instance."""
-        return MeasureItToolRegistrar(mock_mcp_server, mock_tools)
+        """Create a MeasureItToolRegistrar in unsafe mode (all tools register)."""
+        return MeasureItToolRegistrar(mock_mcp_server, mock_tools, safe_mode=False)
+
+    @pytest.fixture
+    def safe_registrar(self, mock_mcp_server, mock_tools):
+        """Create a MeasureItToolRegistrar in safe mode."""
+        return MeasureItToolRegistrar(mock_mcp_server, mock_tools, safe_mode=True)
 
     def test_initialization(self, mock_mcp_server, mock_tools):
         """Test registrar initialization."""
         registrar = MeasureItToolRegistrar(mock_mcp_server, mock_tools)
         assert registrar.mcp == mock_mcp_server
         assert registrar.tools == mock_tools
+        # Safe mode by default
+        assert registrar.safe_mode is True
 
     def test_register_all(self, registrar, mock_mcp_server):
-        """Test registering all MeasureIt tools."""
+        """Test registering all MeasureIt tools in unsafe mode."""
         registrar.register_all()
 
         # Check that all MeasureIt tools were registered
@@ -384,7 +391,7 @@ class TestMeasureItToolRegistrar:
         assert response_data["active"] is True
 
     def test_three_tools_registered(self, registrar, mock_mcp_server):
-        """Test that all MeasureIt tools are registered."""
+        """Test that all MeasureIt tools are registered in unsafe mode."""
         registrar.register_all()
 
         # Should have 3 MeasureIt tools (wait_for_sweep supports all=True for wait_for_all)
@@ -431,3 +438,64 @@ class TestMeasureItToolRegistrar:
         assert sweep["type"] == "SimulSweep"
         assert len(sweep["parameters"]) == 3
         assert sweep["simultaneous"] is True
+
+    # ===== Safe mode =====
+
+    def test_safe_mode_excludes_kill_sweep(self, safe_registrar, mock_mcp_server):
+        """Safe mode must not register the sweep-terminating tool."""
+        safe_registrar.register_all()
+
+        assert "measureit_get_status" in mock_mcp_server._tools
+        assert "measureit_wait_for_sweep" in mock_mcp_server._tools
+        assert "measureit_kill_sweep" not in mock_mcp_server._tools
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_wait_for_sweep_never_kills(
+        self, safe_registrar, mock_tools, mock_mcp_server
+    ):
+        """Safe mode forces kill=False even when the caller requests a kill."""
+        mock_tools.wait_for_sweep.return_value = {"sweep": {"variable_name": "s1"}}
+
+        safe_registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        result = await wait_tool(timeout=30.0, variable_name="s1", kill=True)
+
+        mock_tools.wait_for_sweep.assert_called_once_with(
+            "s1", timeout=30.0, kill=False, progress_callback=ANY
+        )
+        payload = json.loads(result[0].text)
+        assert payload["kill_skipped"] == "Sweep kill is disabled in safe mode"
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_wait_for_all_sweeps_never_kills(
+        self, safe_registrar, mock_tools, mock_mcp_server
+    ):
+        """Safe mode forces kill=False for all=True as well."""
+        mock_tools.wait_for_all_sweeps.return_value = {"sweeps": {}}
+
+        safe_registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        result = await wait_tool(timeout=30.0, all=True)
+
+        mock_tools.wait_for_all_sweeps.assert_called_once_with(
+            timeout=30.0, kill=False, progress_callback=ANY
+        )
+        payload = json.loads(result[0].text)
+        assert payload["kill_skipped"] == "Sweep kill is disabled in safe mode"
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_wait_no_note_when_kill_false(
+        self, safe_registrar, mock_tools, mock_mcp_server
+    ):
+        """No kill_skipped note when the caller did not request a kill."""
+        mock_tools.wait_for_sweep.return_value = {"sweep": {"variable_name": "s1"}}
+
+        safe_registrar.register_all()
+        wait_tool = mock_mcp_server._tools["measureit_wait_for_sweep"]
+        result = await wait_tool(timeout=30.0, variable_name="s1", kill=False)
+
+        mock_tools.wait_for_sweep.assert_called_once_with(
+            "s1", timeout=30.0, kill=False, progress_callback=ANY
+        )
+        payload = json.loads(result[0].text)
+        assert "kill_skipped" not in payload

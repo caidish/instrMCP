@@ -158,7 +158,7 @@ All tools use underscore naming (e.g., `qcodes_instrument_info`, `notebook_read_
 **QCodes:** `qcodes_instrument_info`, `qcodes_get_parameter_values`
 **Notebook:** `notebook_list_variables`, `notebook_read_variable`, `notebook_read_active_cell`, `notebook_read_active_cell_output`, `notebook_read_content`, `notebook_server_status`, `notebook_move_cursor`
 **Unsafe Notebook:** `notebook_execute_active_cell`, `notebook_add_cell`, `notebook_delete_cell`, `notebook_apply_patch`
-**MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_kill_sweep`
+**MeasureIt (opt-in):** `measureit_get_status`, `measureit_wait_for_sweep`, `measureit_kill_sweep` (kill_sweep is unsafe/dangerous mode only; in safe mode wait_for_sweep never kills)
 **Database (opt-in):** `database_list_experiments`, `database_get_dataset_info`, `database_get_database_stats`
 **Dynamic Tools (opt-in via `dynamictool`, requires dangerous mode):** `dynamic_register_tool`, `dynamic_update_tool`, `dynamic_revoke_tool`, `dynamic_list_tools`, `dynamic_inspect_tool`, `dynamic_registry_stats`
 
