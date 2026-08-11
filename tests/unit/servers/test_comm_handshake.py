@@ -117,11 +117,27 @@ def cleanup_status_comm():
     jupyter_mcp_extension._status_comm = None
 
 
+@pytest.fixture
+def fresh_event_loop():
+    """Install a fresh, non-running event loop for the test.
+
+    broadcast_server_status delivers synchronously only when a usable
+    (non-running) event loop is set; pytest-asyncio >= 1.4 no longer leaves
+    a loop set after earlier async tests, so without this fixture the
+    broadcast would be skipped depending on test order.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    asyncio.set_event_loop(None)
+    loop.close()
+
+
 class TestBroadcastServerStatusPython313:
     """Test broadcast_server_status with existing toolbar comms."""
 
     def test_broadcast_with_existing_toolbar_comm(
-        self, fake_ipython, cleanup_status_comm, caplog
+        self, fake_ipython, cleanup_status_comm, fresh_event_loop, caplog
     ):
         """Test broadcast_server_status sends through existing toolbar comms."""
         from instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension import (
