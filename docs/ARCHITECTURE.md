@@ -230,8 +230,8 @@ caller.
 ### MeasureIt Integration Tools (`measureit/*` - requires `%mcp_option measureit`)
 
 - `measureit/get_status(detailed)` - Check if any MeasureIt sweep is currently running
-- `measureit/wait_for_sweep(variable_name, timeout, all, kill, detailed)` - Wait for sweep(s) to finish. When `kill=true` (default), automatically kills sweep to release resources after completion.
-- `measureit/kill_sweep(variable_name, all)` - Kill sweep(s) to release resources. When `all=true`, kills all sweeps.
+- `measureit/wait_for_sweep(variable_name, timeout, all, kill, detailed)` - Wait for sweep(s) to finish. When `kill=true` (default), automatically kills sweep to release resources after completion. In safe mode `kill` is ignored: sweeps are never killed, and the response carries a `kill_skipped` note when a kill was requested.
+- `measureit/kill_sweep(variable_name, all)` - Kill sweep(s) to release resources. When `all=true`, kills all sweeps. Only registered in unsafe/dangerous mode — safe mode must not expose sweep-terminating tools.
 
 ### Database Integration Tools (`database/*` - requires `%mcp_option database`)
 

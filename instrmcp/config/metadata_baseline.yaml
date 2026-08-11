@@ -89,6 +89,8 @@ tools:
     description: |
       Kill running MeasureIt sweep(s) to release resources.
 
+      Only available in unsafe or dangerous mode (not registered in safe mode).
+
       Args:
           variable_name: Name of the sweep variable in the notebook namespace
               (e.g., "sweep1d", "my_sweep"). Required when all=false.
@@ -108,6 +110,7 @@ tools:
               wait only for the sweep specified by variable_name.
           kill: If true (default), kill the sweep after waiting to release hardware
               resources. If false, skip killing (useful for polling without cleanup).
+              Ignored in safe mode: sweeps are never killed.
           detailed: If false (default), return only sweep state; if true, return full sweep information.
 
   notebook_add_cell:

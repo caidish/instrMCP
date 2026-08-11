@@ -18,16 +18,20 @@ logger = logging.getLogger(__name__)
 class MeasureItToolRegistrar:
     """Registers MeasureIt integration tools with the MCP server."""
 
-    def __init__(self, mcp_server, tools):
+    def __init__(self, mcp_server, tools, safe_mode: bool = True):
         """
         Initialize the MeasureIt tool registrar.
 
         Args:
             mcp_server: FastMCP server instance
             tools: QCodesReadOnlyTools instance
+            safe_mode: Whether server is in safe mode (read-only). In safe
+                mode, measureit_kill_sweep is not registered and
+                measureit_wait_for_sweep never kills sweeps.
         """
         self.mcp = mcp_server
         self.tools = tools
+        self.safe_mode = safe_mode
 
     # ===== Concise mode helpers =====
 
@@ -135,10 +139,15 @@ class MeasureItToolRegistrar:
     # ===== End concise mode helpers =====
 
     def register_all(self):
-        """Register all MeasureIt tools."""
+        """Register all MeasureIt tools.
+
+        Safe mode must not expose sweep-terminating capability, so
+        kill_sweep is only registered in unsafe/dangerous mode.
+        """
         self._register_get_status()
         self._register_wait_for_sweep()
-        self._register_kill_sweep()
+        if not self.safe_mode:
+            self._register_kill_sweep()
 
     def _register_get_status(self):
         """Register the measureit/get_status tool."""
@@ -179,7 +188,9 @@ class MeasureItToolRegistrar:
         @self.mcp.tool(
             name="measureit_wait_for_sweep",
             annotations={
-                "readOnlyHint": False,  # Kills sweeps to release hardware resources
+                # Kills sweeps to release hardware resources, except in safe
+                # mode where kill is always disabled (read-only)
+                "readOnlyHint": self.safe_mode,
                 "idempotentHint": False,
                 "openWorldHint": False,
             },
@@ -193,6 +204,12 @@ class MeasureItToolRegistrar:
             ctx: Context = None,
         ) -> List[TextContent]:
             # Description loaded from metadata_baseline.yaml
+
+            # Safe mode is read-only: never kill sweeps regardless of the
+            # kill argument
+            kill_skipped = self.safe_mode and kill
+            if self.safe_mode:
+                kill = False
 
             # Build progress callback to keep MCP client alive during long waits.
             # MCP progress notifications reset the client's request timeout timer,
@@ -235,6 +252,9 @@ class MeasureItToolRegistrar:
                     # Apply concise mode filtering
                     if not detailed:
                         result = self._to_concise_sweep(result)
+
+                if kill_skipped:
+                    result["kill_skipped"] = "Sweep kill is disabled in safe mode"
 
                 return [
                     TextContent(
