@@ -20,6 +20,7 @@ import { Signal } from '@lumino/signaling';
 import { Change, diffLines } from 'diff';
 import { MCPToolbarExtension, MCPStatusUpdate } from './toolbar';
 import { isQdevbotAnalysisKernel } from './kernel-policy';
+import { differsOnlyByExecutionState } from './notebook-save-policy';
 
 const statusUpdateSignal = new Signal<object, MCPStatusUpdate>({});
 
@@ -84,7 +85,48 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!panelKernel || panelKernel.id !== kernel.id) {
         throw new Error('Active notebook does not belong to the requesting kernel');
       }
-      await panel.context.save();
+      await panel.context.ready;
+      const activeCellIndex = panel.content.activeCellIndex;
+      const path = panel.context.path;
+      const liveContent = panel.context.model.toJSON();
+      const clientHash = panel.context.contentsModel?.hash;
+      const disk = await app.serviceManager.contents.get(path, {
+        content: true,
+        hash: true
+      });
+
+      if (!clientHash || !disk.hash) {
+        await panel.context.save();
+        return;
+      }
+
+      if (
+        clientHash !== disk.hash &&
+        !differsOnlyByExecutionState(disk.content, liveContent)
+      ) {
+        throw new Error(
+          'Notebook source or metadata changed on disk; refusing to overwrite it with the active frontend'
+        );
+      }
+
+      const currentDisk = await app.serviceManager.contents.get(path, {
+        content: false,
+        hash: true
+      });
+      if (currentDisk.hash !== disk.hash) {
+        throw new Error('Notebook changed on disk while preparing to save; retry the operation');
+      }
+
+      await app.serviceManager.contents.save(path, {
+        type: 'notebook',
+        format: 'json',
+        content: liveContent
+      });
+      await panel.context.revert();
+      panel.content.activeCellIndex = Math.min(
+        activeCellIndex,
+        Math.max(0, (panel.content.model?.cells.length ?? 1) - 1)
+      );
     };
 
     // Handle cell update requests from kernel
