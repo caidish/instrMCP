@@ -187,7 +187,9 @@ class JupyterMCPServer:
 
         # Optional: MeasureIt tools
         if MEASUREIT_AVAILABLE and "measureit" in self.enabled_options:
-            measureit_registrar = MeasureItToolRegistrar(self.mcp, self.tools)
+            measureit_registrar = MeasureItToolRegistrar(
+                self.mcp, self.tools, safe_mode=self.safe_mode
+            )
             measureit_registrar.register_all()
 
         # Optional: Database tools

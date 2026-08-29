@@ -89,3 +89,14 @@ for markdown exceeds the old hardcoded 2.0s wait.
 - [x] Reproducing tests `tests/unit/servers/test_add_cell_timeout.py` (markdown
   slow-success at bridge + backend layers, and the late-response race), verified
   red on pre-fix / green on fix. Env var documented in `README.md`.
+
+## Safe mode: no sweep-terminating MeasureIt tools
+
+Safe mode exposed `measureit_kill_sweep` (and `measureit_wait_for_sweep`'s
+`kill=True` default), letting a read-only client stop a running measurement.
+
+- [x] `MeasureItToolRegistrar` now takes `safe_mode` (default true, wired from
+  `mcp_server.py`): `measureit_kill_sweep` is only registered in unsafe/dangerous
+  mode, and `measureit_wait_for_sweep` forces `kill=False` in safe mode (response
+  carries a `kill_skipped` note when a kill was requested). Metadata baseline +
+  playwright snapshot, ARCHITECTURE.md, CLAUDE.md, and unit/e2e tests updated.

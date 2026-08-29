@@ -135,10 +135,14 @@ UNSAFE_MODE_TOOLS = SAFE_MODE_TOOLS + [
     "notebook_apply_patch",
 ]
 
-# Optional MeasureIt tools
-MEASUREIT_TOOLS = [
+# Optional MeasureIt tools available in safe mode (monitoring only)
+MEASUREIT_SAFE_TOOLS = [
     "measureit_get_status",
     "measureit_wait_for_sweep",
+]
+
+# All MeasureIt tools (kill_sweep requires unsafe or dangerous mode)
+MEASUREIT_TOOLS = MEASUREIT_SAFE_TOOLS + [
     "measureit_kill_sweep",
 ]
 
