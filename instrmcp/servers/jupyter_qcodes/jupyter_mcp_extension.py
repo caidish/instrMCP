@@ -455,7 +455,11 @@ def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
     return changed
 
 
-def _do_start_server(announce: bool = True) -> None:
+def _do_start_server(
+    announce: bool = True,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+) -> None:
     """Start the MCP server and broadcast status.
 
     This is a synchronous function that uses the thread-isolated server.
@@ -463,7 +467,23 @@ def _do_start_server(announce: bool = True) -> None:
     """
     global _server
 
+    requested_host = _server_host if host is None else host
+    requested_port = _server_port if port is None else port
+    if not isinstance(requested_host, str) or not requested_host:
+        raise ValueError("MCP server host must be a non-empty string")
+    if (
+        isinstance(requested_port, bool)
+        or not isinstance(requested_port, int)
+        or requested_port < 0
+        or requested_port > 65535
+    ):
+        raise ValueError("MCP server port must be an integer from 0 to 65535")
+
     if _server and _server.is_running():
+        if _server.host != requested_host or (
+            requested_port != 0 and _server.port != requested_port
+        ):
+            raise RuntimeError("MCP server is already running on a different endpoint")
         if announce:
             print("✅ MCP server already running")
         return
@@ -482,6 +502,8 @@ def _do_start_server(announce: bool = True) -> None:
 
         _server = JupyterMCPServer(
             ipython,
+            host=requested_host,
+            port=requested_port,
             safe_mode=_desired_mode,
             dangerous_mode=_dangerous_mode,
             enabled_options=_enabled_options,
