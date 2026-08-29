@@ -28,7 +28,7 @@
     "build": "jlpm build:lib && jlpm build:labextension && jlpm postbuild",
     "build:labextension": "jupyter labextension build .",
     "build:lib": "tsc --sourceMap",
-    "test:policy": "node --test test/*.test.mjs",
+    "test:policy": "jlpm build:lib && node --test test/*.test.mjs",
     "postbuild": "rm -f mcp_active_cell_bridge/labextension/static/*.js && cp static/static/*.js static/static/*.json mcp_active_cell_bridge/labextension/static/ && cp static/package.json mcp_active_cell_bridge/labextension/package.json",
     "clean": "jlpm clean:lib",
     "clean:lib": "rimraf lib tsconfig.tsbuildinfo",

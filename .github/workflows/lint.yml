@@ -26,6 +26,19 @@ jobs:
       run: |
         uv pip install --system -e .[dev]
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install JupyterLab extension dependencies
+      working-directory: instrmcp/extensions/jupyterlab
+      run: jlpm install
+
+    - name: Run JupyterLab policy tests
+      working-directory: instrmcp/extensions/jupyterlab
+      run: jlpm test:policy
+
     - name: Run Black (formatting check)
       run: |
         black --check instrmcp/ tests/

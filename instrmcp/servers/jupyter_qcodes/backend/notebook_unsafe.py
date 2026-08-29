@@ -349,6 +349,7 @@ class NotebookUnsafeBackend(BaseBackend):
                         **error_result,
                         "success": False,
                         "saved": False,
+                        "status": "persistence_error",
                         "error": save_result.get("error")
                         or save_result.get("message")
                         or "Notebook execution completed but could not be saved",
@@ -439,6 +440,7 @@ class NotebookUnsafeBackend(BaseBackend):
                     **combined_result,
                     "success": False,
                     "saved": False,
+                    "status": "persistence_error",
                     "error": save_result.get("error")
                     or save_result.get("message")
                     or "Notebook execution completed but could not be saved",

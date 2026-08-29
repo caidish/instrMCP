@@ -7,7 +7,11 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 
 import asyncio
 from datetime import datetime, timezone
+from importlib import metadata as importlib_metadata
+import json
 import os
+from pathlib import Path
+import subprocess
 import threading
 import time
 from typing import Any, Dict, Optional
@@ -63,6 +67,72 @@ def _get_user_namespace() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _get_package_revision() -> Optional[str]:
+    """Return the installed VCS revision when packaging metadata provides it."""
+    revision = getattr(instrmcp, "__revision__", None) or getattr(
+        instrmcp, "__commit__", None
+    )
+    if revision:
+        return str(revision)
+
+    revision = os.environ.get("INSTRMCP_REVISION")
+    if revision:
+        return revision
+
+    try:
+        direct_url_text = importlib_metadata.distribution("instrmcp").read_text(
+            "direct_url.json"
+        )
+        if direct_url_text:
+            direct_url = json.loads(direct_url_text)
+            commit_id = direct_url.get("vcs_info", {}).get("commit_id")
+            if isinstance(commit_id, str) and commit_id:
+                return commit_id
+    except Exception:
+        logger.debug("Could not resolve InstrMCP VCS revision", exc_info=True)
+
+    # Editable installs created from a local checkout have a file:// direct URL
+    # without vcs_info. Resolve that checkout only when its tracked and
+    # untracked package files are clean; otherwise claiming HEAD would attest to
+    # code that is not actually running.
+    try:
+        package_file = Path(instrmcp.__file__).resolve()
+        repository = next(
+            parent for parent in package_file.parents if (parent / ".git").exists()
+        )
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "status",
+                "--porcelain",
+                "--untracked-files=normal",
+                "--",
+                "instrmcp",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if status.stdout.strip():
+            return None
+        resolved = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        if resolved:
+            return resolved
+    except Exception:
+        logger.debug("Could not resolve InstrMCP checkout revision", exc_info=True)
+
+    return None
+
+
 def _publish_frontend_attestation_locked() -> bool:
     """Publish toolbar connection state while ``_toolbar_comms_lock`` is held."""
     global _toolbar_user_ns
@@ -72,11 +142,7 @@ def _publish_frontend_attestation_locked() -> bool:
     if _toolbar_user_ns is None:
         return False
 
-    revision = getattr(instrmcp, "__revision__", None) or getattr(
-        instrmcp, "__commit__", None
-    )
-    if revision is not None:
-        revision = str(revision)
+    revision = _get_package_revision()
 
     attestation = {
         "schemaVersion": 1,

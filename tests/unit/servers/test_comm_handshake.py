@@ -10,6 +10,7 @@ Tests the frontend/backend comm protocol, including:
 import pytest
 import time
 import asyncio
+import json
 from unittest.mock import MagicMock, patch, call
 from typing import Dict, Any, List
 
@@ -152,7 +153,9 @@ class TestToolbarFrontendAttestation:
 
         with patch(
             "IPython.core.getipython.get_ipython", return_value=fake_ipython
-        ), patch.object(extension, "_utc_now", return_value=connected_at):
+        ), patch.object(extension, "_utc_now", return_value=connected_at), patch.object(
+            extension, "_get_package_revision", return_value=None
+        ):
             comm = DummyComm(extension.TOOLBAR_CONTROL_TARGET)
             extension._handle_toolbar_control(comm, {})
 
@@ -170,6 +173,57 @@ class TestToolbarFrontendAttestation:
                 "revision": None,
             },
         }
+
+    def test_revision_comes_from_direct_url_metadata(
+        self, toolbar_attestation_state, monkeypatch
+    ):
+        extension = toolbar_attestation_state
+        monkeypatch.delenv("INSTRMCP_REVISION", raising=False)
+        distribution = MagicMock()
+        distribution.read_text.return_value = json.dumps(
+            {"vcs_info": {"commit_id": "abc123", "vcs": "git"}}
+        )
+
+        with patch.object(
+            extension.importlib_metadata,
+            "distribution",
+            return_value=distribution,
+        ):
+            assert extension._get_package_revision() == "abc123"
+
+    def test_revision_comes_from_clean_editable_checkout(
+        self, toolbar_attestation_state, monkeypatch, tmp_path
+    ):
+        extension = toolbar_attestation_state
+        monkeypatch.delenv("INSTRMCP_REVISION", raising=False)
+        repository = tmp_path / "checkout"
+        package = repository / "instrmcp"
+        package.mkdir(parents=True)
+        (repository / ".git").mkdir()
+        package_file = package / "__init__.py"
+        package_file.touch()
+        monkeypatch.setattr(extension.instrmcp, "__file__", str(package_file))
+        distribution = MagicMock()
+        distribution.read_text.return_value = json.dumps(
+            {"url": repository.as_uri(), "dir_info": {"editable": True}}
+        )
+        clean = MagicMock(stdout="")
+        revision = MagicMock(stdout="def456\n")
+
+        with patch.object(
+            extension.importlib_metadata,
+            "distribution",
+            return_value=distribution,
+        ), patch.object(
+            extension.subprocess,
+            "run",
+            side_effect=[clean, revision],
+        ) as run:
+            assert extension._get_package_revision() == "def456"
+
+        assert run.call_count == 2
+        assert run.call_args_list[0].args[0][-1] == "instrmcp"
+        assert run.call_args_list[1].args[0][-2:] == ["--verify", "HEAD"]
 
     def test_multiple_comms_stay_connected_until_last_close(
         self, fake_ipython, toolbar_attestation_state
@@ -230,9 +284,7 @@ class TestToolbarFrontendAttestation:
         fake_ipython.user_ns = FailingNamespace()
         comm = DummyComm(extension.TOOLBAR_CONTROL_TARGET)
 
-        with patch(
-            "IPython.core.getipython.get_ipython", return_value=fake_ipython
-        ):
+        with patch("IPython.core.getipython.get_ipython", return_value=fake_ipython):
             extension._handle_toolbar_control(comm, {})
             fake_ipython.user_ns.fail_writes = True
             comm.close()
@@ -394,7 +446,8 @@ class TestActiveCellBridge:
 
             # Simulate frontend opening a comm with kernel_id in data
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-123"}
+                "mcp:active_cell",
+                data={"kernel_id": "test-kernel-123", "notebook_path": "/test.ipynb"},
             )
 
             # Verify comm was added to kernel comm map
@@ -421,7 +474,8 @@ class TestActiveCellBridge:
 
             # Open and then close a comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-456"}
+                "mcp:active_cell",
+                data={"kernel_id": "test-kernel-456", "notebook_path": "/test.ipynb"},
             )
             assert "test-kernel-456" in _KERNEL_COMM_MAP
 
@@ -449,7 +503,11 @@ class TestActiveCellBridge:
 
             # Open a comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-snapshot"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-snapshot",
+                    "notebook_path": "/path/to/notebook.ipynb",
+                },
             )
 
             # Simulate frontend sending a snapshot
@@ -504,7 +562,11 @@ class TestActiveCellBridge:
 
             # Open a comm for this kernel
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-request"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-request",
+                    "notebook_path": "/test.ipynb",
+                },
             )
 
             # Request snapshot
@@ -512,7 +574,147 @@ class TestActiveCellBridge:
 
             # Verify comm received the request
             assert len(comm._sent_messages) == 1
-            assert comm._sent_messages[0] == {"type": "request_current"}
+            assert comm._sent_messages[0] == {
+                "type": "request_current",
+                "notebook_path": "/test.ipynb",
+            }
+
+    def test_kernel_request_echoes_pinned_notebook_path(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """Every operation carries the path established by the comm handshake."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            _send_to_kernel,
+            register_comm_target,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-operation",
+        ):
+            register_comm_target()
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-operation",
+                    "notebook_path": "/control.ipynb",
+                },
+            )
+
+            result = _send_to_kernel({"type": "execute_cell"})
+
+        assert result["success"] is True
+        assert result["notebook_path"] == "/control.ipynb"
+        assert comm._sent_messages[-1]["notebook_path"] == "/control.ipynb"
+
+    def test_mismatched_snapshot_is_ignored(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """A focused foreign notebook cannot replace the pinned snapshot."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            register_comm_target,
+        )
+        import instrmcp.servers.jupyter_qcodes.active_cell_bridge as bridge
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ), patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+            return_value="test-kernel-mismatch",
+        ):
+            register_comm_target()
+            comm = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-mismatch",
+                    "notebook_path": "/control.ipynb",
+                },
+            )
+            comm.simulate_message(
+                {
+                    "content": {
+                        "data": {
+                            "type": "snapshot",
+                            "path": "/analysis.ipynb",
+                            "id": "foreign-cell",
+                            "text": "secret",
+                        }
+                    }
+                }
+            )
+
+        with bridge._STATE_LOCK:
+            assert bridge._LAST_SNAPSHOT is None
+
+    def test_cached_snapshot_is_scoped_to_current_kernel_and_path(
+        self, fake_ipython, cleanup_active_cell_globals
+    ):
+        """A fresh snapshot from another bridge route is never returned."""
+        from instrmcp.servers.jupyter_qcodes.active_cell_bridge import (
+            get_active_cell,
+            register_comm_target,
+        )
+
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.active_cell_bridge.get_ipython",
+            return_value=fake_ipython,
+        ):
+            register_comm_target()
+            first = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell",
+                data={"kernel_id": "kernel-1", "notebook_path": "/one.ipynb"},
+            )
+            second = fake_ipython.kernel.comm_manager.open_comm(
+                "mcp:active_cell",
+                data={"kernel_id": "kernel-2", "notebook_path": "/two.ipynb"},
+            )
+            first.simulate_message(
+                {
+                    "content": {
+                        "data": {
+                            "type": "snapshot",
+                            "path": "/one.ipynb",
+                            "id": "cell-one",
+                            "text": "one",
+                        }
+                    }
+                }
+            )
+            second.simulate_message(
+                {
+                    "content": {
+                        "data": {
+                            "type": "snapshot",
+                            "path": "/two.ipynb",
+                            "id": "cell-two",
+                            "text": "two",
+                        }
+                    }
+                }
+            )
+
+            with patch(
+                "instrmcp.servers.jupyter_qcodes.active_cell_bridge._get_kernel_id",
+                return_value="kernel-1",
+            ):
+                assert get_active_cell(timeout_s=0) is None
+                first.simulate_message(
+                    {
+                        "content": {
+                            "data": {
+                                "type": "snapshot",
+                                "path": "/one.ipynb",
+                                "id": "cell-one",
+                                "text": "one",
+                            }
+                        }
+                    }
+                )
+                assert get_active_cell(timeout_s=0)["text"] == "one"
 
     def test_cell_outputs_cache_updates(
         self, fake_ipython, cleanup_active_cell_globals
@@ -534,7 +736,11 @@ class TestActiveCellBridge:
 
             # Open a comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-outputs"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-outputs",
+                    "notebook_path": "/test.ipynb",
+                },
             )
 
             # Simulate frontend sending cell outputs
@@ -589,13 +795,16 @@ class TestActiveCellBridge:
 
             # Open comms for 3 different kernels
             comm1 = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "kernel-1"}
+                "mcp:active_cell",
+                data={"kernel_id": "kernel-1", "notebook_path": "/one.ipynb"},
             )
             comm2 = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "kernel-2"}
+                "mcp:active_cell",
+                data={"kernel_id": "kernel-2", "notebook_path": "/two.ipynb"},
             )
             comm3 = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "kernel-3"}
+                "mcp:active_cell",
+                data={"kernel_id": "kernel-3", "notebook_path": "/three.ipynb"},
             )
 
             assert len(_KERNEL_COMM_MAP) == 3
@@ -628,7 +837,8 @@ class TestActiveCellBridge:
             register_comm_target()
 
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-pong"}
+                "mcp:active_cell",
+                data={"kernel_id": "test-kernel-pong", "notebook_path": "/test.ipynb"},
             )
 
             # Send pong message (should just log)
@@ -660,7 +870,11 @@ class TestActiveCellBridge:
             register_comm_target()
 
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-unknown"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-unknown",
+                    "notebook_path": "/test.ipynb",
+                },
             )
 
             # Send unknown message type
@@ -703,7 +917,11 @@ class TestCommHandshakeIntegration:
 
             # Step 2: Frontend opens comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-workflow"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-workflow",
+                    "notebook_path": "/test.ipynb",
+                },
             )
             assert "test-kernel-workflow" in _KERNEL_COMM_MAP
 
@@ -763,7 +981,11 @@ class TestCommHandshakeIntegration:
 
             # Now connect a comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-no-comm"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-no-comm",
+                    "notebook_path": "/test.ipynb",
+                },
             )
 
             # Send snapshot
@@ -805,7 +1027,8 @@ class TestCommHandshakeIntegration:
 
             # Open comm and send snapshot
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-fresh"}
+                "mcp:active_cell",
+                data={"kernel_id": "test-kernel-fresh", "notebook_path": "/test.ipynb"},
             )
             snapshot_msg = {
                 "content": {
@@ -855,7 +1078,11 @@ class TestCommHandshakeIntegration:
 
             # Open comm, send snapshot, then close comm
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-fallback"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-fallback",
+                    "notebook_path": "/test.ipynb",
+                },
             )
             snapshot_msg = {
                 "content": {
@@ -908,7 +1135,11 @@ class TestCommHandshakeIntegration:
 
             # Open comm and send initial snapshot
             comm = fake_ipython.kernel.comm_manager.open_comm(
-                "mcp:active_cell", data={"kernel_id": "test-kernel-timeout"}
+                "mcp:active_cell",
+                data={
+                    "kernel_id": "test-kernel-timeout",
+                    "notebook_path": "/test.ipynb",
+                },
             )
             snapshot_msg = {
                 "content": {

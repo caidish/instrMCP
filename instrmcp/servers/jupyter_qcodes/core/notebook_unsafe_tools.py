@@ -109,9 +109,15 @@ class UnsafeToolRegistrar:
         - Bug #5: Handle all three error patterns (direct fields, nested dict, string)
         """
         concise = {
+            "success": result.get("success", False),
             "status": result.get("status"),
             "executed": result.get("executed", False),
         }
+
+        if "saved" in result:
+            concise["saved"] = result.get("saved", False)
+        if result.get("notebook_path"):
+            concise["notebook_path"] = result["notebook_path"]
 
         # Bug #5 Fix: Include error info if present - handle all three patterns
         # Also handle edge case where has_error is not set but error exists (e.g., bridge failure)
@@ -420,6 +426,32 @@ class UnsafeToolRegistrar:
 
                     exec_result = execute_active_cell()
                     duration = (time.perf_counter() - start) * 1000
+                    if not exec_result.get("success"):
+                        error = exec_result.get("error") or exec_result.get(
+                            "message", "Cell execution could not be triggered"
+                        )
+                        log_tool_call(
+                            "notebook_execute_active_cell",
+                            {"detailed": detailed, "no_wait": True},
+                            duration,
+                            "error",
+                            str(error),
+                        )
+                        return [
+                            TextContent(
+                                type="text",
+                                text=json.dumps(
+                                    {
+                                        "success": False,
+                                        "status": "error",
+                                        "executed": False,
+                                        "error": error,
+                                    },
+                                    indent=2,
+                                    default=str,
+                                ),
+                            )
+                        ]
                     log_tool_call(
                         "notebook_execute_active_cell",
                         {"detailed": detailed, "no_wait": True},
@@ -428,6 +460,7 @@ class UnsafeToolRegistrar:
                     )
 
                     result = {
+                        "success": True,
                         "status": "no_wait",
                         "executed": "unknown",
                         "message": "Cell execution triggered. Not waiting for output - cell might still be running.",
@@ -440,11 +473,19 @@ class UnsafeToolRegistrar:
 
                 result = await self.tools.execute_editing_cell(timeout=timeout)
                 duration = (time.perf_counter() - start) * 1000
+                succeeded = result.get("success", False)
                 log_tool_call(
                     "notebook_execute_active_cell",
                     {"detailed": detailed},
                     duration,
-                    "success",
+                    "success" if succeeded else "error",
+                    (
+                        None
+                        if succeeded
+                        else str(
+                            result.get("error") or result.get("message") or "failed"
+                        )
+                    ),
                 )
 
                 # Apply concise mode filtering

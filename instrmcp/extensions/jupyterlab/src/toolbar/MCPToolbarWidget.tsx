@@ -125,14 +125,27 @@ export class MCPToolbarWidget extends ReactWidget {
   private _handleControlMessage(msg: any): void {
     const data = msg?.content?.data || {};
     const msgType = data.type;
+    let details: any = null;
+    let status: string | null = null;
 
     if (msgType === 'status') {
-      this._applyDetails(data);
+      details = data;
+      status = data.server_running ? 'server_ready' : 'server_not_started';
     } else if (msgType === 'result' && data.details) {
-      this._applyDetails(data.details);
+      details = data.details;
+      status = details.server_running ? 'server_ready' : 'server_stopped';
     } else if (msgType === 'status_broadcast' && data.details) {
       // Handle broadcasts sent through the control comm (instead of separate status comm)
-      this._applyDetails(data.details);
+      details = data.details;
+      status = data.status;
+    }
+
+    if (details) {
+      this._applyDetails(details);
+    }
+    const kernel = this._panel.sessionContext.session?.kernel;
+    if (kernel && status && this._kernelAllowed(kernel)) {
+      this._shared.onStatusUpdate?.({ kernel, status, details });
     }
   }
 
