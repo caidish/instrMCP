@@ -95,7 +95,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         hash: true
       });
 
-      if (!clientHash || !disk.hash) {
+      if (!clientHash || !disk.hash || clientHash === disk.hash) {
         await panel.context.save();
         return;
       }
