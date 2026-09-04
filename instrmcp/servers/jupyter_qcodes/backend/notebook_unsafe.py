@@ -545,7 +545,11 @@ class NotebookUnsafeBackend(BaseBackend):
         kc.load_connection_file()
         kc.start_channels()
         try:
-            kc.wait_for_ready(timeout=10.0)
+            # A freshly started control kernel can take longer than ten seconds
+            # to finish its first shell-channel handshake on a busy machine.
+            # Honor the caller's execution timeout for readiness as well, while
+            # retaining a sensible floor for short commands.
+            kc.wait_for_ready(timeout=max(30.0, timeout or 0.0))
             try:
                 reply = kc.execute_interactive(
                     code,

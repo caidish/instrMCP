@@ -113,3 +113,18 @@ async def test_execute_code_fire_and_forget_returns_no_wait(monkeypatch):
     result = await asyncio.wait_for(tools.execute_code("x = 1", timeout=0), timeout=2.0)
     assert result["executed"] is True
     assert result["status"] == "no_wait"
+
+
+def test_kernel_client_allows_cold_start_to_use_execution_timeout(monkeypatch):
+    tools = QCodesReadOnlyTools(MagicMock(user_ns={}, execution_count=0))
+    client = MagicMock()
+    client.execute_interactive.return_value = {
+        "content": {"status": "ok", "execution_count": 1}
+    }
+    monkeypatch.setattr("ipykernel.get_connection_file", lambda: "kernel.json")
+    monkeypatch.setattr("jupyter_client.BlockingKernelClient", lambda **_kwargs: client)
+
+    result = tools._notebook_unsafe._exec_via_kernel_client("x = 1", 45.0)
+
+    client.wait_for_ready.assert_called_once_with(timeout=45.0)
+    assert result["status"] == "completed"
