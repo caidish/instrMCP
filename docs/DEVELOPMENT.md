@@ -269,6 +269,26 @@ Commit the bump, update `CHANGELOG.md`, merge to `main`, then publish a GitHub
 Release whose tag is `vX.Y.Z`. The workflow builds, runs `twine check`, and
 uploads.
 
+### Release guards
+
+A PyPI upload cannot be undone or replaced — a version number is burned the
+moment it lands. Two guards run in the `build` job before anything is uploaded:
+
+1. **Version consistency** — `python tools/version.py --check` fails the build
+   if the 7 version locations disagree. Runs before `python -m build`, so a
+   drifted tree never produces an artifact.
+2. **Tag matches artifact** — the built wheel and sdist must both carry the
+   version named by the release tag (`v2.4.4` → `2.4.4`; a bare `2.4.4` also
+   works). This catches publishing a release without bumping, or bumping
+   without re-cutting the tag.
+
+Guard 2 only runs on `release` events, since `workflow_dispatch` has no tag.
+Run guard 1 locally before cutting anything; guard 2 needs a built `dist/`.
+
+If guard 2 fails nothing was uploaded, and the fix is in the error message:
+set the version to match, commit, merge, then delete the release **and its tag**
+before re-cutting it — re-publishing a release does not move an existing tag.
+
 ## Contributing
 
 ### Guidelines
