@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-publish:
+  build:
+    name: Build distributions
     runs-on: ubuntu-latest
 
     steps:
@@ -33,10 +34,37 @@ jobs:
       run: |
         twine check dist/*
 
+    - name: Upload distributions
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    # Only a published GitHub Release uploads; workflow_dispatch build-tests only.
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/instrmcp
+
+    # Trusted Publishing (OIDC): GitHub mints a short-lived identity token that
+    # PyPI exchanges for an upload token. No PYPI_API_TOKEN secret is involved.
+    # Requires a matching trusted publisher on PyPI:
+    #   owner=caidish  repo=instrMCP  workflow=release.yml  environment=pypi
+    # See https://docs.pypi.org/trusted-publishers/
+    permissions:
+      id-token: write
+
+    steps:
+    - name: Download distributions
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
     - name: Publish to PyPI
-      if: github.event_name == 'release'
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        twine upload dist/*
+      uses: pypa/gh-action-pypi-publish@release/v1

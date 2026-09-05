@@ -231,6 +231,44 @@ The package includes a JupyterLab extension for active cell bridging:
 - Environment variable: `instrMCP_PATH` can be set for custom paths
 - View configuration: `instrmcp config`
 
+## Releasing
+
+Releases are published to PyPI by `.github/workflows/release.yml`, which fires
+when a GitHub Release is **published**. `workflow_dispatch` runs the build and
+`twine check` but deliberately does not upload.
+
+The workflow authenticates with PyPI via [Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
+(OIDC). GitHub mints a short-lived identity token that PyPI exchanges for an
+upload token, so there is no long-lived `PYPI_API_TOKEN` secret in the repo.
+
+### One-time setup
+
+On PyPI, under *Your projects → instrmcp → Publishing*, add a GitHub trusted
+publisher with exactly these values:
+
+| Field | Value |
+|---|---|
+| Owner | `caidish` |
+| Repository | `instrMCP` |
+| Workflow name | `release.yml` |
+| Environment | `pypi` |
+
+All four must match the workflow or the upload is rejected. The `pypi`
+environment is created automatically by GitHub the first time the workflow
+references it; adding required reviewers to it in *Settings → Environments*
+gates every publish behind a manual approval.
+
+### Cutting a release
+
+```bash
+python tools/version.py --bump patch   # or --bump minor / --set X.Y.Z
+python tools/version.py --check        # verify all 7 locations agree
+```
+
+Commit the bump, update `CHANGELOG.md`, merge to `main`, then publish a GitHub
+Release whose tag is `vX.Y.Z`. The workflow builds, runs `twine check`, and
+uploads.
+
 ## Contributing
 
 ### Guidelines
