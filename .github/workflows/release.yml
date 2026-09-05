@@ -26,6 +26,13 @@ jobs:
       run: |
         uv pip install --system build twine
 
+    # Guard 1: all 7 version locations agree (pyproject, __init__ files,
+    # package.json, docs/source/conf.py). Runs before the build so a drifted
+    # tree never produces an artifact.
+    - name: Verify version consistency
+      run: |
+        python tools/version.py --check
+
     - name: Build package
       run: |
         python -m build
@@ -33,6 +40,55 @@ jobs:
     - name: Check package
       run: |
         twine check dist/*
+
+    # Guard 2: the artifacts about to be uploaded carry the version the release
+    # tag names. Catches cutting a release without bumping (or bumping without
+    # re-cutting the tag) — a PyPI upload cannot be undone or replaced.
+    - name: Verify release tag matches built version
+      if: github.event_name == 'release'
+      env:
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+      run: |
+        python - <<'PY'
+        import os
+        import pathlib
+        import sys
+
+        tag = os.environ["RELEASE_TAG"]
+        expected = tag[1:] if tag.startswith("v") else tag
+
+        dist = pathlib.Path("dist")
+        wheels = sorted(dist.glob("*.whl"))
+        sdists = sorted(dist.glob("*.tar.gz"))
+
+        if len(wheels) != 1 or len(sdists) != 1:
+            sys.exit(
+                f"::error::expected exactly one wheel and one sdist in dist/, found "
+                f"wheels={[w.name for w in wheels]} sdists={[s.name for s in sdists]}"
+            )
+
+        # PEP 427: {distribution}-{version}(-{build tag})?-{python}-{abi}-{platform}.whl
+        wheel_version = wheels[0].name.split("-")[1]
+        # sdist: {distribution}-{version}.tar.gz
+        sdist_version = sdists[0].name[: -len(".tar.gz")].rsplit("-", 1)[1]
+
+        if wheel_version != sdist_version:
+            sys.exit(
+                f"::error::built artifacts disagree: wheel is {wheel_version}, "
+                f"sdist is {sdist_version}"
+            )
+
+        if wheel_version != expected:
+            sys.exit(
+                f"::error::release tag '{tag}' implies version {expected}, but the "
+                f"built package is {wheel_version}. Nothing was uploaded. Fix with: "
+                f"python tools/version.py --set {expected} && python tools/version.py "
+                f"--check, then commit, merge, delete the '{tag}' release and tag, "
+                f"and re-cut it."
+            )
+
+        print(f"OK: release tag {tag} matches built version {wheel_version}")
+        PY
 
     - name: Upload distributions
       uses: actions/upload-artifact@v4
