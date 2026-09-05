@@ -5,6 +5,35 @@ All notable changes to instrMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] - 2026-09-05
+
+### Fixed - cap fastmcp/mcp major versions
+
+`fastmcp>=2.14.3` and `mcp>=1.0.0` carried no upper bound. fastmcp 4.0.3 and
+mcp 2.1.1 are now on PyPI, so a fresh `pip install instrmcp` resolved to them
+and failed at import time:
+
+```
+File "instrmcp/utils/__init__.py", line 6, in <module>
+    from .stdio_proxy import (
+File "instrmcp/utils/stdio_proxy.py", line 25, in <module>
+    from fastmcp.server.proxy import ProxyClient
+ModuleNotFoundError: No module named 'fastmcp.server.proxy'
+```
+
+Because `instrmcp/utils/__init__.py` re-exports `stdio_proxy`, this took out the
+entire `instrmcp.utils` package — the CLI and all three launchers (Claude
+Desktop, Codex, Gemini).
+
+Dependencies are now `fastmcp>=2.14.3,<4` and `mcp>=1.0.0,<2`, which resolve to
+fastmcp 3.4.7 + mcp 1.29.1. Every fastmcp API instrMCP uses still works there
+(`fastmcp.server.proxy` emits a deprecation warning but functions).
+
+fastmcp 4 removed four APIs instrMCP depends on — `FastMCP.as_proxy()`,
+`fastmcp.server.proxy.ProxyClient`, `FastMCP.remove_tool()` and
+`FastMCP.add_tool_transformation()` — and mcp 2.x renamed `mcp.server.fastmcp`
+to `mcp.server.mcpserver`. Migrating to fastmcp 4 / mcp 2 is tracked separately.
+
 ## [2.3.6] - 2026-05-09
 
 ### Fixed - qcodes >=0.55 compatibility
