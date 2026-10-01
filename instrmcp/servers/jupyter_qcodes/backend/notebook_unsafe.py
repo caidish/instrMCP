@@ -22,6 +22,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _execution_guard_seconds(timeout: float) -> float:
+    """Outer safety net for :meth:`NotebookUnsafeBackend.execute_code`.
+
+    The guard must outlive the kernel-readiness wait, which is
+    ``max(30 s, timeout)`` (see ``_exec_via_kernel_client``), plus the
+    execution budget itself, plus the original 10 s margin for teardown and
+    result assembly. Sizing it as ``timeout + 10`` would fire before the code
+    had even been sent whenever readiness takes longer than 10 s.
+    """
+    return max(30.0, timeout) + timeout + 10.0
+
+
 class NotebookUnsafeBackend(BaseBackend):
     """Backend for unsafe notebook operations (modification and execution)."""
 
@@ -493,7 +505,7 @@ class NotebookUnsafeBackend(BaseBackend):
             # safety net for a hung wait_for_ready (execute itself self-times-out).
             return await asyncio.wait_for(
                 loop.run_in_executor(None, self._exec_via_kernel_client, code, timeout),
-                timeout + 10.0,
+                _execution_guard_seconds(timeout),
             )
         except (asyncio.TimeoutError, TimeoutError):
             return {

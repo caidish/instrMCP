@@ -128,3 +128,40 @@ def test_kernel_client_allows_cold_start_to_use_execution_timeout(monkeypatch):
 
     client.wait_for_ready.assert_called_once_with(timeout=45.0)
     assert result["status"] == "completed"
+
+
+def test_execution_guard_covers_readiness_and_execution():
+    from instrmcp.servers.jupyter_qcodes.backend.notebook_unsafe import (
+        _execution_guard_seconds,
+    )
+
+    # The kernel-readiness wait is max(30 s, timeout) and execution may then take
+    # another full timeout, so the outer guard has to outlive both.
+    assert _execution_guard_seconds(5.0) == 45.0
+    assert _execution_guard_seconds(45.0) == 100.0
+    for timeout in (1.0, 5.0, 30.0, 45.0, 120.0):
+        assert _execution_guard_seconds(timeout) > max(30.0, timeout) + timeout
+
+
+@pytest.mark.asyncio
+async def test_execute_code_guard_does_not_fire_during_readiness(monkeypatch):
+    """execute_code must pass the guard derived above to asyncio.wait_for."""
+    tools = QCodesReadOnlyTools(MagicMock(user_ns={}, execution_count=0))
+    backend = tools._notebook_unsafe
+    monkeypatch.setattr(
+        backend, "_exec_via_kernel_client", lambda code, timeout: {"sent": True}
+    )
+    captured = {}
+
+    async def fake_wait_for(awaitable, timeout):
+        captured["guard"] = timeout
+        if asyncio.iscoroutine(awaitable):
+            awaitable.close()
+        return {"sent": True}
+
+    monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+
+    result = await backend.execute_code("1 + 1", timeout=5.0)
+
+    assert captured["guard"] == 45.0
+    assert result == {"sent": True}
