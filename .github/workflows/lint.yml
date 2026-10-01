@@ -33,7 +33,9 @@ jobs:
 
     - name: Install JupyterLab extension dependencies
       working-directory: instrmcp/extensions/jupyterlab
-      run: jlpm install
+      # yarn.lock is gitignored repo-wide, and jlpm (Yarn 3) refuses to create
+      # a lockfile when CI=true. Allow it here so the install can proceed.
+      run: jlpm install --no-immutable
 
     - name: Run JupyterLab policy tests
       working-directory: instrmcp/extensions/jupyterlab
