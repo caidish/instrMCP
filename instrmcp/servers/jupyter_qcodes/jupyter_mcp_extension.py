@@ -465,7 +465,7 @@ def _do_start_server(
     This is a synchronous function that uses the thread-isolated server.
     It works from any context, including after %gui qt.
     """
-    global _server
+    global _server, _server_host, _server_port
 
     requested_host = _server_host if host is None else host
     requested_port = _server_port if port is None else port
@@ -509,6 +509,7 @@ def _do_start_server(
             enabled_options=_enabled_options,
         )
         _server.start_sync()
+        _server_host, _server_port = _server.host, _server.port
 
         mode_info = _get_mode_display()
         if announce:
@@ -590,7 +591,10 @@ def _do_restart_server(announce: bool = True) -> bool:
     Returns:
         True if restart succeeded, False if stop timed out (cannot restart).
     """
-    global _server
+    global _server, _server_host, _server_port
+
+    host = _server.host if _server else _server_host
+    port = _server.port if _server else _server_port
 
     if announce:
         print("🔄 Restarting MCP server...")
@@ -622,12 +626,15 @@ def _do_restart_server(announce: bool = True) -> bool:
         # Create and start new server
         _server = JupyterMCPServer(
             ipython,
+            host=host,
+            port=port,
             safe_mode=_desired_mode,
             dangerous_mode=_dangerous_mode,
             enabled_options=_enabled_options,
         )
 
         _server.start_sync()
+        _server_host, _server_port = _server.host, _server.port
 
         mode_info = _get_mode_display()
         if announce:
