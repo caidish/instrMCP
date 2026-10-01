@@ -26,8 +26,9 @@ package from the same build.
   `{"type": "save_notebook"}` request; add-cell and cell execution save before
   they report success, and a failed save reports
   `status: "persistence_error"` and rolls the inserted cell back.
-- **Analysis-kernel isolation.** Kernels named `qdevbot-analysis` get no
-  extension, comm targets or active-cell tracking.
+- **Analysis-kernel isolation.** The JupyterLab extension attaches nothing to
+  kernels named `qdevbot-analysis`: no extension, no comm targets, no
+  active-cell tracking. The kernel side has no kernel-name check of its own.
 - **Cold-kernel readiness.** The bridge-independent execution path now waits
   `max(30 s, execution timeout)` for a freshly started kernel instead of 10 s.
 - **JupyterLab policy tests in CI** (`jlpm test:policy`).
@@ -55,7 +56,12 @@ package from the same build.
   `NotebookUnsafeBackend._exec_via_kernel_client`,
   `ConsentManager.request_consent`).
 - The unattended save uses JupyterLab's private `context._updateContentsModel`
-  and `_contentProviderId`. Built and verified against JupyterLab 4.6.4.
+  and `_contentProviderId`. Built against JupyterLab 4.6.4; the prebuilt bundle
+  was served and loaded by a real JupyterLab 4.6.4 server, while the save path
+  itself was exercised through unit tests and the client's own acceptance runs.
+- `_do_start_server(host=...)` accepts any interface, and the server's HTTP
+  endpoint carries no authentication. Bind a non-loopback host only on a
+  network you trust.
 
 ## [2.4.4] - 2026-09-05
 
