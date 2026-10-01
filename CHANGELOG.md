@@ -5,6 +5,64 @@ All notable changes to instrMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-01
+
+Upstreams the desktop-client fork features requested in
+[#46](https://github.com/caidish/instrMCP/issues/46). Several behaviours change:
+reload JupyterLab after upgrading, and keep the frontend bundle and the kernel
+package from the same build.
+
+### Added
+
+- **OS-assigned server port.** `_do_start_server(host=..., port=0)` lets the OS
+  pick a free port; the server records the bound port and
+  `_get_current_config()["port"]` reports it. Useful when 8123 is already taken.
+- **Frontend connection attestation.** The kernel publishes
+  `qdevbot_instrmcp_frontend` in its user namespace with `schemaVersion`,
+  `connected`, `target`, `connectedAt`, `connectionCount`, `nonce` and
+  `package` (name/version/revision), republished when a toolbar comm opens,
+  closes or dies.
+- **Notebook persistence.** New `save_active_notebook(timeout_s=None)` and a
+  `{"type": "save_notebook"}` request; add-cell and cell execution save before
+  they report success, and a failed save reports
+  `status: "persistence_error"` and rolls the inserted cell back.
+- **Analysis-kernel isolation.** The JupyterLab extension attaches nothing to
+  kernels named `qdevbot-analysis`: no extension, no comm targets, no
+  active-cell tracking. The kernel side has no kernel-name check of its own.
+- **Cold-kernel readiness.** The bridge-independent execution path now waits
+  `max(30 s, execution timeout)` for a freshly started kernel instead of 10 s.
+- **JupyterLab policy tests in CI** (`jlpm test:policy`).
+
+### Changed
+
+- `notebook_add_cell` and `notebook_apply_patch` pass cell source through
+  unchanged; literal `\n` and `\t` are no longer converted.
+- Execution output and execution counts written to disk no longer raise a
+  save-conflict dialog: the unattended save writes when only `outputs` or
+  `execution_count` differ, and fails closed when hashes are missing or the
+  source changed on disk.
+- `_do_restart_server` and a plain `_do_start_server` reuse the endpoint of the
+  server they replace, so `%mcp_restart`, `%mcp_start` and the toolbar no longer
+  fall back to 127.0.0.1:8123 after a `port=0` start. A port that cannot be
+  re-bound raises instead of silently moving.
+
+### Notes
+
+- The private names a desktop client wraps today are unchanged
+  (`_do_set_mode`, `_do_set_option`, `_do_start_server`, `_get_current_config`,
+  `JupyterMCPServer`, `active_cell_bridge.execute_active_cell`,
+  `active_cell_bridge._LAST_SNAPSHOT`, `active_cell_bridge.save_active_notebook`,
+  `NotebookToolRegistrar._to_detailed_editing_cell`,
+  `NotebookUnsafeBackend._exec_via_kernel_client`,
+  `ConsentManager.request_consent`).
+- The unattended save uses JupyterLab's private `context._updateContentsModel`
+  and `_contentProviderId`. Built against JupyterLab 4.6.4; the prebuilt bundle
+  was served and loaded by a real JupyterLab 4.6.4 server, while the save path
+  itself was exercised through unit tests and the client's own acceptance runs.
+- `_do_start_server(host=...)` accepts any interface, and the server's HTTP
+  endpoint carries no authentication. Bind a non-loopback host only on a
+  network you trust.
+
 ## [2.4.4] - 2026-09-05
 
 ### Fixed - cap fastmcp/mcp major versions

@@ -338,10 +338,13 @@ def _get_mode_display() -> Dict[str, str]:
 def _get_current_config() -> dict:
     """Return the current MCP server configuration and state."""
     mode_info = _get_mode_display()
-    host = _server.host if _server else _server_host
-    port = _server.port if _server else _server_port
+    # A running server is authoritative (a caller may have built it directly);
+    # otherwise report the last endpoint that bound successfully.
+    running = bool(_server and _server.is_running())
+    host = _server.host if running else _server_host
+    port = _server.port if running else _server_port
 
-    server_running = bool(_server and _server.is_running())
+    server_running = running
 
     return {
         "mode": mode_info["mode"],
@@ -455,15 +458,35 @@ def _do_set_option(option: str, enabled: bool, announce: bool = False) -> bool:
     return changed
 
 
-def _do_start_server(announce: bool = True) -> None:
+def _do_start_server(
+    announce: bool = True,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+) -> None:
     """Start the MCP server and broadcast status.
 
     This is a synchronous function that uses the thread-isolated server.
     It works from any context, including after %gui qt.
     """
-    global _server
+    global _server, _server_host, _server_port
+
+    requested_host = _server_host if host is None else host
+    requested_port = _server_port if port is None else port
+    if not isinstance(requested_host, str) or not requested_host:
+        raise ValueError("MCP server host must be a non-empty string")
+    if (
+        isinstance(requested_port, bool)
+        or not isinstance(requested_port, int)
+        or requested_port < 0
+        or requested_port > 65535
+    ):
+        raise ValueError("MCP server port must be an integer from 0 to 65535")
 
     if _server and _server.is_running():
+        if _server.host != requested_host or (
+            requested_port != 0 and _server.port != requested_port
+        ):
+            raise RuntimeError("MCP server is already running on a different endpoint")
         if announce:
             print("✅ MCP server already running")
         return
@@ -482,11 +505,14 @@ def _do_start_server(announce: bool = True) -> None:
 
         _server = JupyterMCPServer(
             ipython,
+            host=requested_host,
+            port=requested_port,
             safe_mode=_desired_mode,
             dangerous_mode=_dangerous_mode,
             enabled_options=_enabled_options,
         )
         _server.start_sync()
+        _server_host, _server_port = _server.host, _server.port
 
         mode_info = _get_mode_display()
         if announce:
@@ -568,7 +594,16 @@ def _do_restart_server(announce: bool = True) -> bool:
     Returns:
         True if restart succeeded, False if stop timed out (cannot restart).
     """
-    global _server
+    global _server, _server_host, _server_port
+
+    # Reuse the endpoint of the server this restart replaces. A running server
+    # is authoritative (a caller may have built and started it directly);
+    # otherwise use the last endpoint that bound successfully, so a failed
+    # start is not retried forever.
+    if _server is not None and _server.is_running():
+        host, port = _server.host, _server.port
+    else:
+        host, port = _server_host, _server_port
 
     if announce:
         print("🔄 Restarting MCP server...")
@@ -600,12 +635,15 @@ def _do_restart_server(announce: bool = True) -> bool:
         # Create and start new server
         _server = JupyterMCPServer(
             ipython,
+            host=host,
+            port=port,
             safe_mode=_desired_mode,
             dangerous_mode=_dangerous_mode,
             enabled_options=_enabled_options,
         )
 
         _server.start_sync()
+        _server_host, _server_port = _server.host, _server.port
 
         mode_info = _get_mode_display()
         if announce:

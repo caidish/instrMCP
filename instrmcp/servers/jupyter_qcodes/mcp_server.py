@@ -472,6 +472,13 @@ class JupyterMCPServer:
                 if self._uvicorn_server.should_exit:
                     return  # Aborted before ready
                 await asyncio.sleep(0.05)
+            try:
+                self._record_bound_port()
+            except Exception as exc:
+                self._thread_error = exc
+                self._uvicorn_server.should_exit = True
+                self._ready_event.set()
+                return
             self._server_started = True
             self._ready_event.set()
             logger.debug(f"Uvicorn startup complete on {self.host}:{self.port}")
@@ -489,6 +496,20 @@ class JupyterMCPServer:
                 await ready_task
             except asyncio.CancelledError:
                 pass
+
+    def _record_bound_port(self) -> None:
+        """Record the listener port when the OS selected it from port 0."""
+        if self.port != 0:
+            return
+        listeners = getattr(self._uvicorn_server, "servers", ()) or ()
+        ports = {
+            socket.getsockname()[1]
+            for listener in listeners
+            for socket in (getattr(listener, "sockets", ()) or ())
+        }
+        if len(ports) != 1:
+            raise RuntimeError("Could not determine the OS-assigned MCP server port")
+        self.port = ports.pop()
 
     def start_sync(self):
         """Synchronous start - works from any context (including after %gui qt).
