@@ -6,12 +6,19 @@ Manual loading: %load_ext instrmcp.servers.jupyter_qcodes.jupyter_mcp_extension
 """
 
 import asyncio
+from datetime import datetime, timezone
+from importlib import metadata as importlib_metadata
+import json
+import os
+from pathlib import Path
+import subprocess
 import threading
 import time
 from typing import Any, Dict, Optional
 
 from IPython.core.magic import Magics, line_magic, magics_class
 
+import instrmcp
 from .mcp_server import JupyterMCPServer
 from .active_cell_bridge import register_comm_target
 from instrmcp.utils.logging_config import setup_logging, get_logger
@@ -35,6 +42,152 @@ _enabled_options: set = set()  # Set of enabled option names
 # Toolbar control comms tracking (for safe sends)
 _toolbar_comms: set = set()  # Active toolbar control comms
 _toolbar_comms_lock = threading.Lock()  # Lock for thread-safe access to _toolbar_comms
+_toolbar_connected_at: Optional[str] = None
+_toolbar_user_ns: Optional[Dict[str, Any]] = None
+
+FRONTEND_ATTESTATION_VARIABLE = "qdevbot_instrmcp_frontend"
+TOOLBAR_CONTROL_TARGET = "mcp:toolbar_control"
+
+
+def _utc_now() -> str:
+    """Return an RFC 3339 UTC timestamp for frontend attestation."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _get_user_namespace() -> Optional[Dict[str, Any]]:
+    """Return the current IPython user namespace when one is available."""
+    try:
+        from IPython.core.getipython import get_ipython
+
+        ipython = get_ipython()
+        user_ns = getattr(ipython, "user_ns", None) if ipython is not None else None
+        return user_ns if isinstance(user_ns, dict) else None
+    except Exception:
+        logger.debug("Could not resolve IPython namespace for frontend attestation")
+        return None
+
+
+def _get_package_revision() -> Optional[str]:
+    """Return the installed VCS revision when packaging metadata provides it."""
+    revision = getattr(instrmcp, "__revision__", None) or getattr(
+        instrmcp, "__commit__", None
+    )
+    if revision:
+        return str(revision)
+
+    revision = os.environ.get("INSTRMCP_REVISION")
+    if revision:
+        return revision
+
+    try:
+        direct_url_text = importlib_metadata.distribution("instrmcp").read_text(
+            "direct_url.json"
+        )
+        if direct_url_text:
+            direct_url = json.loads(direct_url_text)
+            commit_id = direct_url.get("vcs_info", {}).get("commit_id")
+            if isinstance(commit_id, str) and commit_id:
+                return commit_id
+    except Exception:
+        logger.debug("Could not resolve InstrMCP VCS revision", exc_info=True)
+
+    # Editable installs created from a local checkout have a file:// direct URL
+    # without vcs_info. Resolve that checkout only when its tracked and
+    # untracked package files are clean; otherwise claiming HEAD would attest to
+    # code that is not actually running.
+    try:
+        package_file = Path(instrmcp.__file__).resolve()
+        repository = next(
+            parent for parent in package_file.parents if (parent / ".git").exists()
+        )
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "status",
+                "--porcelain",
+                "--untracked-files=normal",
+                "--",
+                "instrmcp",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if status.stdout.strip():
+            return None
+        resolved = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        if resolved:
+            return resolved
+    except Exception:
+        logger.debug("Could not resolve InstrMCP checkout revision", exc_info=True)
+
+    return None
+
+
+def _publish_frontend_attestation_locked() -> bool:
+    """Publish toolbar connection state while ``_toolbar_comms_lock`` is held."""
+    global _toolbar_user_ns
+
+    if _toolbar_user_ns is None:
+        _toolbar_user_ns = _get_user_namespace()
+    if _toolbar_user_ns is None:
+        return False
+
+    revision = _get_package_revision()
+
+    attestation = {
+        "schemaVersion": 1,
+        "connected": bool(_toolbar_comms),
+        "target": TOOLBAR_CONTROL_TARGET,
+        "connectedAt": _toolbar_connected_at,
+        "connectionCount": len(_toolbar_comms),
+        "nonce": os.environ.get("QDEVBOT_FRONTEND_ATTESTATION_NONCE"),
+        "package": {
+            "name": "instrmcp",
+            "version": instrmcp.__version__,
+            "revision": revision,
+        },
+    }
+    try:
+        existing = _toolbar_user_ns.get(FRONTEND_ATTESTATION_VARIABLE)
+        if isinstance(existing, dict):
+            # Mutate the published object before assignment so a close remains
+            # fail-closed even if the namespace rejects the replacement write.
+            existing.clear()
+            existing.update(attestation)
+            attestation = existing
+        _toolbar_user_ns[FRONTEND_ATTESTATION_VARIABLE] = attestation
+        return True
+    except Exception:
+        logger.debug("Could not publish frontend attestation", exc_info=True)
+        return False
+
+
+def _track_toolbar_comm(comm) -> None:
+    """Track a newly opened toolbar comm and publish connected state."""
+    global _toolbar_connected_at
+
+    with _toolbar_comms_lock:
+        if not _toolbar_comms:
+            _toolbar_connected_at = _utc_now()
+        _toolbar_comms.add(comm)
+        _publish_frontend_attestation_locked()
+
+
+def _discard_toolbar_comm(comm) -> None:
+    """Stop tracking a toolbar comm and publish the remaining connection state."""
+    with _toolbar_comms_lock:
+        _toolbar_comms.discard(comm)
+        _publish_frontend_attestation_locked()
 
 
 def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
@@ -62,15 +215,13 @@ def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
     # Check if comm is closed or disposed
     if closed or disposed:
         logger.debug(f"_safe_comm_send({caller}): SKIP - closed/disposed")
-        with _toolbar_comms_lock:
-            _toolbar_comms.discard(comm)
+        _discard_toolbar_comm(comm)
         return False
 
     # Check if kernel is still present (not torn down)
     if kernel is None:
         logger.debug(f"_safe_comm_send({caller}): SKIP - kernel is None")
-        with _toolbar_comms_lock:
-            _toolbar_comms.discard(comm)
+        _discard_toolbar_comm(comm)
         return False
 
     try:
@@ -81,8 +232,7 @@ def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
     except Exception as e:
         logger.debug(f"_safe_comm_send({caller}): FAILED - {e}")
         # Remove from tracked comms on any failure
-        with _toolbar_comms_lock:
-            _toolbar_comms.discard(comm)
+        _discard_toolbar_comm(comm)
         return False
 
 
@@ -482,11 +632,8 @@ def _handle_toolbar_control(comm, open_msg):
     """Comm handler for toolbar control messages."""
     comm_id = id(comm)
     logger.debug(f"_handle_toolbar_control: NEW comm opened, id={comm_id}")
-    with _toolbar_comms_lock:
-        logger.debug(f"_toolbar_comms before add: {len(_toolbar_comms)} comms")
-        # Track this comm for safe sending
-        _toolbar_comms.add(comm)
-        logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
+    _track_toolbar_comm(comm)
+    logger.debug(f"_toolbar_comms after add: {len(_toolbar_comms)} comms")
 
     def _send_sync_result(comm_ref, success: bool, error: str = None):
         """Send result after synchronous operation completes."""
@@ -502,8 +649,7 @@ def _handle_toolbar_control(comm, open_msg):
         # Check if kernel is still present (not torn down)
         if getattr(comm_ref, "kernel", None) is None:
             logger.debug("_send_sync_result: SKIP - kernel is None")
-            with _toolbar_comms_lock:
-                _toolbar_comms.discard(comm_ref)
+            _discard_toolbar_comm(comm_ref)
             return
 
         payload = {
@@ -651,11 +797,14 @@ def _handle_toolbar_control(comm, open_msg):
 
     def on_close(msg):
         logger.debug(f"on_close: comm {id(comm)} closed by frontend")
-        with _toolbar_comms_lock:
-            _toolbar_comms.discard(comm)
+        _discard_toolbar_comm(comm)
 
-    comm.on_msg(on_msg)
-    comm.on_close(on_close)
+    try:
+        comm.on_msg(on_msg)
+        comm.on_close(on_close)
+    except Exception:
+        _discard_toolbar_comm(comm)
+        raise
 
 
 @magics_class
@@ -920,7 +1069,7 @@ def load_ipython_extension(ipython):
         register_comm_target()
         try:
             ipython.kernel.comm_manager.register_target(
-                "mcp:toolbar_control", _handle_toolbar_control
+                TOOLBAR_CONTROL_TARGET, _handle_toolbar_control
             )
             logger.debug("Registered comm target 'mcp:toolbar_control'")
         except Exception as e:

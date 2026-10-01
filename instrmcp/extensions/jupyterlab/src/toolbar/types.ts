@@ -29,4 +29,5 @@ export interface ToolbarSharedState {
   getServerReady: (kernel?: Kernel.IKernelConnection | null) => boolean;
   getComm?: (kernel?: Kernel.IKernelConnection | null) => any;
   statusUpdateSignal: ISignal<object, MCPStatusUpdate>;
+  onStatusUpdate?: (update: MCPStatusUpdate) => void;
 }

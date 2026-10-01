@@ -122,6 +122,7 @@ def _on_comm_open(comm, open_msg):
     # Get kernel_id from open message (sent by frontend) or detect at runtime
     data = open_msg.get("content", {}).get("data", {})
     kernel_id = data.get("kernel_id") or _get_kernel_id()
+    notebook_path = data.get("notebook_path")
 
     if not kernel_id:
         logger.warning(
@@ -147,8 +148,11 @@ def _on_comm_open(comm, open_msg):
         f"(total kernels: {len(_KERNEL_COMM_MAP)})"
     )
 
-    # Store kernel_id on the comm for use in close handler
+    # Store the routing identity on the comm. Every request sent back through
+    # this channel includes the same notebook path, allowing the frontend to
+    # reject focus changes or cross-notebook operations.
     comm._mcp_kernel_id = kernel_id
+    comm._mcp_notebook_path = notebook_path
 
     def _on_msg(msg):
         """Handle incoming messages from frontend."""
@@ -156,9 +160,19 @@ def _on_comm_open(comm, open_msg):
         msg_type = data.get("type")
 
         if msg_type == "snapshot":
+            expected_path = getattr(comm, "_mcp_notebook_path", None)
+            snapshot_path = data.get("path")
+            if not expected_path or snapshot_path != expected_path:
+                logger.warning(
+                    "Ignoring snapshot for unpinned or mismatched notebook path "
+                    f"(expected={expected_path!r}, received={snapshot_path!r})"
+                )
+                return
+
             # Store the cell snapshot
             snapshot = {
-                "notebook_path": data.get("path"),
+                "kernel_id": getattr(comm, "_mcp_kernel_id", None),
+                "notebook_path": snapshot_path,
                 "cell_id": data.get("id"),
                 "cell_index": data.get("index"),
                 "cell_type": data.get("cell_type", "code"),
@@ -217,6 +231,7 @@ def _on_comm_open(comm, open_msg):
             "update_response",
             "execute_response",
             "add_cell_response",
+            "save_notebook_response",
             "delete_cell_response",
             "apply_patch_response",
             "move_cursor_response",
@@ -300,8 +315,13 @@ def request_frontend_snapshot():
         logger.debug(f"Cannot request snapshot: no comm for kernel {kernel_id}")
         return
 
+    notebook_path = getattr(comm, "_mcp_notebook_path", None)
+    if not isinstance(notebook_path, str) or not notebook_path:
+        logger.debug("Cannot request snapshot: comm is not pinned to a notebook path")
+        return
+
     try:
-        comm.send({"type": "request_current"})
+        comm.send({"type": "request_current", "notebook_path": notebook_path})
         logger.debug(f"Sent request_current to comm {comm.comm_id}")
     except Exception as e:
         logger.debug(f"Failed to send request to comm {comm.comm_id}: {e}")
@@ -341,9 +361,22 @@ def _send_to_kernel(payload: Dict[str, Any]) -> Dict[str, Any]:
             "hint": "Ensure the JupyterLab extension is loaded and connected",
         }
 
+    notebook_path = getattr(comm, "_mcp_notebook_path", None)
+    if not isinstance(notebook_path, str) or not notebook_path:
+        return {
+            "success": False,
+            "error": "Frontend bridge is not pinned to a notebook path",
+            "kernel_id": kernel_id,
+            "hint": "Reload JupyterLab so the current InstrMCP extension reconnects",
+        }
+
+    # Copy the caller's payload so routing metadata does not leak into retries.
+    payload = dict(payload)
+
     # Add request_id if not present
     if "request_id" not in payload:
         payload["request_id"] = str(uuid.uuid4())
+    payload["notebook_path"] = notebook_path
 
     try:
         comm.send(payload)
@@ -352,6 +385,7 @@ def _send_to_kernel(payload: Dict[str, Any]) -> Dict[str, Any]:
             "message": f"{payload.get('type', 'unknown')} request sent",
             "request_id": payload["request_id"],
             "kernel_id": kernel_id,
+            "notebook_path": notebook_path,
         }
     except Exception as e:
         logger.error(f"Failed to send {payload.get('type')}: {e}")
@@ -511,6 +545,19 @@ def _wrap_snapshot_with_metadata(
     return result
 
 
+def _snapshot_matches_route(
+    snapshot: Optional[Dict[str, Any]],
+    kernel_id: Optional[str],
+    notebook_path: Optional[str] = None,
+) -> bool:
+    """Return whether a cached snapshot belongs to the requested bridge route."""
+    if snapshot is None or not kernel_id or snapshot.get("kernel_id") != kernel_id:
+        return False
+    if notebook_path is None:
+        return True
+    return bool(notebook_path) and snapshot.get("notebook_path") == notebook_path
+
+
 def get_active_cell(
     fresh_ms: Optional[int] = None, timeout_s: float = 0.3
 ) -> Optional[Dict[str, Any]]:
@@ -531,9 +578,12 @@ def get_active_cell(
         - stale_reason (str, optional): Reason for staleness if stale=True
     """
     now = time.time()
+    kernel_id = _get_kernel_id()
 
     with _STATE_LOCK:
-        if _LAST_SNAPSHOT is None:
+        comm = _KERNEL_COMM_MAP.get(kernel_id) if kernel_id else None
+        notebook_path = getattr(comm, "_mcp_notebook_path", None) if comm else None
+        if not _snapshot_matches_route(_LAST_SNAPSHOT, kernel_id, notebook_path):
             # No snapshot yet, try requesting from frontend
             pass
         else:
@@ -546,11 +596,10 @@ def get_active_cell(
                 )
 
     # Need fresh data - request from current kernel's frontend
-    comm = _get_current_comm()
     if not comm:
         logger.debug("No active comm available for fresh data request")
         with _STATE_LOCK:
-            if _LAST_SNAPSHOT is None:
+            if not _snapshot_matches_route(_LAST_SNAPSHOT, kernel_id):
                 return None
             age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
             return _wrap_snapshot_with_metadata(
@@ -570,7 +619,7 @@ def get_active_cell(
         time.sleep(0.05)  # 50ms polling
 
         with _STATE_LOCK:
-            if _LAST_SNAPSHOT is not None:
+            if _snapshot_matches_route(_LAST_SNAPSHOT, kernel_id, notebook_path):
                 age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
                 if fresh_ms is None or (age_ms is not None and age_ms <= fresh_ms):
                     return _wrap_snapshot_with_metadata(
@@ -579,7 +628,7 @@ def get_active_cell(
 
     # Timeout - return what we have (marked as stale)
     with _STATE_LOCK:
-        if _LAST_SNAPSHOT is None:
+        if not _snapshot_matches_route(_LAST_SNAPSHOT, kernel_id, notebook_path):
             return None
         age_ms = (time.time() - _LAST_TS) * 1000 if _LAST_TS else None
         return _wrap_snapshot_with_metadata(
@@ -658,6 +707,15 @@ def execute_active_cell(timeout_s: float = 5.0) -> Dict[str, Any]:
         result["warning"] = "UNSAFE: Code execution was requested in active cell"
 
     return result
+
+
+def save_active_notebook(timeout_s: Optional[float] = None) -> Dict[str, Any]:
+    """Persist the active notebook through its owning JupyterLab frontend.
+
+    This waits for ``NotebookPanel.context.save()`` so callers can treat a
+    successful response as a durability boundary for cell content and output.
+    """
+    return _send_and_wait({"type": "save_notebook"}, timeout_s=timeout_s)
 
 
 def add_new_cell(

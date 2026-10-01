@@ -265,7 +265,11 @@ def test_markdown_add_cell_slow_success_is_not_false_timeout(
     ):
         active_cell_bridge.register_comm_target()
         comm = fake_ipython.kernel.comm_manager.open_comm(
-            "mcp:active_cell", data={"kernel_id": "test-kernel-md"}
+            "mcp:active_cell",
+            data={
+                "kernel_id": "test-kernel-md",
+                "notebook_path": "/test.ipynb",
+            },
         )
         _arm_fake_frontend(comm, monkeypatch)
 
@@ -320,7 +324,11 @@ async def test_backend_markdown_add_cell_is_not_false_timeout(
     ):
         active_cell_bridge.register_comm_target()
         comm = fake_ipython.kernel.comm_manager.open_comm(
-            "mcp:active_cell", data={"kernel_id": "test-kernel-md-backend"}
+            "mcp:active_cell",
+            data={
+                "kernel_id": "test-kernel-md-backend",
+                "notebook_path": "/test.ipynb",
+            },
         )
         _arm_fake_frontend(comm, monkeypatch)
 
@@ -364,7 +372,11 @@ def test_add_cell_late_response_race_is_honored_not_false_timeout(
     ):
         active_cell_bridge.register_comm_target()
         comm = fake_ipython.kernel.comm_manager.open_comm(
-            "mcp:active_cell", data={"kernel_id": "test-kernel-race"}
+            "mcp:active_cell",
+            data={
+                "kernel_id": "test-kernel-race",
+                "notebook_path": "/test.ipynb",
+            },
         )
         LateRaceEvent.comm = comm
         monkeypatch.setattr(

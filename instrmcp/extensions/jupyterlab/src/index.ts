@@ -19,6 +19,8 @@ import { Signal } from '@lumino/signaling';
 
 import { Change, diffLines } from 'diff';
 import { MCPToolbarExtension, MCPStatusUpdate } from './toolbar';
+import { isQdevbotAnalysisKernel } from './kernel-policy';
+import { saveNotebookNonInteractively } from './notebook-save-policy';
 
 const statusUpdateSignal = new Signal<object, MCPStatusUpdate>({});
 
@@ -52,6 +54,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Track MCP server readiness per kernel
     const mcpServerReady = new WeakMap<Kernel.IKernelConnection, boolean>();
 
+    // Pin each active-cell comm to the notebook that opened it. Kernel-only
+    // routing is insufficient because the user can focus another notebook
+    // between a backend request and the frontend handler running.
+    const notebookPaths = new WeakMap<Kernel.IKernelConnection, string>();
+
     // Track IPython extension load per kernel
     const extensionLoaded = new WeakMap<Kernel.IKernelConnection, boolean>();
     const extensionLoading = new WeakMap<Kernel.IKernelConnection, Promise<void>>();
@@ -75,14 +82,107 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return comm && !comm.isDisposed && openedComms.get(kernel) === true;
     };
 
+    const panelBelongsToKernel = (
+      panel: NotebookPanel,
+      kernel: Kernel.IKernelConnection
+    ): boolean => panel.sessionContext.session?.kernel?.id === kernel.id;
+
+    const pinNotebookPanel = (
+      kernel: Kernel.IKernelConnection,
+      panel: NotebookPanel
+    ): boolean => {
+      if (!panelBelongsToKernel(panel, kernel)) {
+        return false;
+      }
+      const existingPath = notebookPaths.get(kernel);
+      const existingComm = comms.get(kernel);
+      if (
+        existingPath &&
+        existingPath !== panel.context.path &&
+        isCommReady(kernel, existingComm)
+      ) {
+        return false;
+      }
+      notebookPaths.set(kernel, panel.context.path);
+      return true;
+    };
+
+    const findNotebookPanel = (
+      kernel: Kernel.IKernelConnection,
+      requestedPath?: string | null
+    ): NotebookPanel | null => {
+      const pinnedPath = notebookPaths.get(kernel);
+      if (
+        requestedPath !== undefined &&
+        requestedPath !== null &&
+        pinnedPath &&
+        requestedPath !== pinnedPath
+      ) {
+        return null;
+      }
+      const expectedPath = requestedPath ?? pinnedPath;
+      const matches: NotebookPanel[] = [];
+
+      notebooks.forEach((panel: NotebookPanel) => {
+        if (
+          panelBelongsToKernel(panel, kernel) &&
+          (expectedPath === undefined || panel.context.path === expectedPath)
+        ) {
+          matches.push(panel);
+        }
+      });
+
+      if (matches.length !== 1) {
+        return null;
+      }
+
+      const panel = matches[0];
+      if (expectedPath !== undefined && panel.context.path !== expectedPath) {
+        return null;
+      }
+      return pinNotebookPanel(kernel, panel) ? panel : null;
+    };
+
+    const requestNotebookPanel = (
+      kernel: Kernel.IKernelConnection,
+      data?: any
+    ): NotebookPanel | null => {
+      const requestedPath = data?.notebook_path;
+      if (typeof requestedPath !== 'string' || !requestedPath) {
+        return null;
+      }
+      return findNotebookPanel(kernel, requestedPath);
+    };
+
+    const saveNotebook = async (
+      kernel: Kernel.IKernelConnection,
+      panel: NotebookPanel
+    ): Promise<void> => {
+      const panelKernel = panel.sessionContext.session?.kernel;
+      if (!panelKernel || panelKernel.id !== kernel.id) {
+        throw new Error('Notebook does not belong to the requesting kernel');
+      }
+      const pinnedPath = notebookPaths.get(kernel);
+      if (!pinnedPath || pinnedPath !== panel.context.path) {
+        throw new Error('Notebook does not match the path pinned to this bridge');
+      }
+      await panel.context.ready;
+      const context = panel.context as any;
+      await saveNotebookNonInteractively(
+        context,
+        app.serviceManager.contents,
+        context._contentProviderId
+      );
+    };
+
     // Handle cell update requests from kernel
     const handleCellUpdate = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
       const newContent = data.content;
       
       try {
-        const panel = notebooks.currentWidget;
-        const cell = notebooks.activeCell;
+        const panel = requestNotebookPanel(kernel, data);
+        const cell = panel?.content.activeCell;
         
         if (!panel || !cell) {
           // Send error response
@@ -130,8 +230,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const requestId = data.request_id;
 
       try {
-        const panel = notebooks.currentWidget;
-        const cell = notebooks.activeCell;
+        const panel = requestNotebookPanel(kernel, data);
+        const cell = panel?.content.activeCell;
 
         if (!panel || !cell) {
           // Send error response
@@ -185,9 +285,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const cellType = data.cell_type || 'code';
       const position = data.position || 'below';
       const content = data.content || '';
+      let mutatedPanel: NotebookPanel | null = null;
+      let insertedCellId: string | null = null;
+      let originalCellIds = new Set<string>();
+      let originalActiveCellIndex = 0;
+      let persisted = false;
 
       try {
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
 
         if (!panel) {
           // Send error response
@@ -224,6 +329,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
+        mutatedPanel = panel;
+        originalActiveCellIndex = panel.content.activeCellIndex;
+        const existingCells = panel.content.model?.cells;
+        if (existingCells) {
+          for (let index = 0; index < existingCells.length; index++) {
+            originalCellIds.add(existingCells.get(index).id);
+          }
+        }
+
         // Create new cell
         if (position === 'above') {
           await NotebookActions.insertAbove(panel.content);
@@ -239,20 +353,34 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Get the newly created cell
-        let newCell = notebooks.activeCell;
-        if (newCell) {
-          // Set cell type if needed
-          if (newCell.model.type !== cellType) {
-            await NotebookActions.changeCellType(panel.content, cellType as any);
-            // Re-fetch activeCell: changeCellType removes old cell and creates new one
-            newCell = notebooks.activeCell;
-          }
-
-          // Set content if provided
-          if (content && newCell) {
-            newCell.model.sharedModel.setSource(content);
-          }
+        let newCell = panel.content.activeCell;
+        if (!newCell) {
+          throw new Error('Inserted cell could not be resolved');
         }
+        insertedCellId = newCell.model.id;
+
+        // Set cell type if needed
+        if (newCell.model.type !== cellType) {
+          await NotebookActions.changeCellType(panel.content, cellType as any);
+          // Re-fetch activeCell: changeCellType removes old cell and creates new one
+          newCell = panel.content.activeCell;
+          if (!newCell) {
+            throw new Error('Converted cell could not be resolved');
+          }
+          insertedCellId = newCell.model.id;
+        }
+
+        // Set content if provided
+        if (content) {
+          newCell.model.sharedModel.setSource(content);
+        }
+
+        // A successful bridge mutation must be durable before the backend can
+        // report success. Desktop notebook summaries read the same .ipynb from
+        // disk, so relying on JupyterLab's periodic autosave creates a window
+        // where the visible notebook and product state disagree.
+        await saveNotebook(kernel, panel);
+        persisted = true;
 
         // Send success response
         comm.send({
@@ -274,6 +402,40 @@ const plugin: JupyterFrontEndPlugin<void> = {
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to add cell:', error);
 
+        if (!persisted && mutatedPanel) {
+          try {
+            const cells = mutatedPanel.content.model?.cells;
+            let rollbackIndex = -1;
+            if (cells) {
+              for (let index = 0; index < cells.length; index++) {
+                const cellId = cells.get(index).id;
+                if (
+                  cellId === insertedCellId ||
+                  (!originalCellIds.has(cellId) && rollbackIndex === -1)
+                ) {
+                  rollbackIndex = index;
+                  if (cellId === insertedCellId) {
+                    break;
+                  }
+                }
+              }
+            }
+            if (rollbackIndex >= 0) {
+              mutatedPanel.content.model?.sharedModel.deleteCell(rollbackIndex);
+              const remaining = mutatedPanel.content.model?.cells.length ?? 0;
+              mutatedPanel.content.activeCellIndex = Math.max(
+                0,
+                Math.min(originalActiveCellIndex, Math.max(0, remaining - 1))
+              );
+            }
+          } catch (rollbackError) {
+            console.error(
+              'MCP Active Cell Bridge: Failed to roll back inserted cell:',
+              rollbackError
+            );
+          }
+        }
+
         // Send error response
         comm.send({
           type: 'add_cell_response',
@@ -284,13 +446,49 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
+    const handleSaveNotebook = async (
+      kernel: Kernel.IKernelConnection,
+      comm: any,
+      data: any
+    ) => {
+      const requestId = data.request_id;
+      try {
+        const panel = requestNotebookPanel(kernel, data);
+        if (!panel) {
+          comm.send({
+            type: 'save_notebook_response',
+            request_id: requestId,
+            success: false,
+            message: 'No active notebook available'
+          });
+          return;
+        }
+        await saveNotebook(kernel, panel);
+        comm.send({
+          type: 'save_notebook_response',
+          request_id: requestId,
+          success: true,
+          notebook_path: panel.context.path,
+          message: 'Notebook saved successfully'
+        });
+      } catch (error) {
+        console.error('MCP Active Cell Bridge: Failed to save notebook:', error);
+        comm.send({
+          type: 'save_notebook_response',
+          request_id: requestId,
+          success: false,
+          message: `Failed to save notebook: ${error}`
+        });
+      }
+    };
+
     // Handle delete cell requests from kernel
     const handleDeleteCell = async (kernel: Kernel.IKernelConnection, comm: any, data: any) => {
       const requestId = data.request_id;
 
       try {
-        const panel = notebooks.currentWidget;
-        const cell = notebooks.activeCell;
+        const panel = requestNotebookPanel(kernel, data);
+        const cell = panel?.content.activeCell;
 
         if (!panel || !cell) {
           // Send error response
@@ -365,8 +563,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const newText = data.new_text || '';
 
       try {
-        const panel = notebooks.currentWidget;
-        const cell = notebooks.activeCell;
+        const panel = requestNotebookPanel(kernel, data);
+        const cell = panel?.content.activeCell;
 
         if (!panel || !cell) {
           // Send error response
@@ -455,7 +653,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const target = data.target; // "above", "below", "bottom", or "index:N"
 
       try {
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
         const notebook = panel?.content;
 
         if (!panel || !notebook) {
@@ -559,7 +757,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const requestId = data.request_id;
 
       try {
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
         const notebook = panel?.content;
 
         if (!panel || !notebook) {
@@ -634,7 +832,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
         const cells = panel?.content?.model?.cells;
 
         if (!cells) {
@@ -698,7 +896,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
         const cells = panel?.content?.model?.cells;
 
         if (!cells) {
@@ -777,7 +975,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const cellNumbers = data.cell_numbers || [];  // Array of execution counts
 
       try {
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
 
         if (!panel) {
           comm.send({
@@ -925,8 +1123,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const requestId = data.request_id;
 
       try {
-        const panel = notebooks.currentWidget;
-        const activeCell = notebooks.activeCell;
+        const panel = requestNotebookPanel(kernel, data);
+        const activeCell = panel?.content.activeCell;
 
         if (!panel || !activeCell) {
           comm.send({
@@ -1057,7 +1255,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const cellNumbers = data.cell_numbers || [];
 
       try {
-        const panel = notebooks.currentWidget;
+        const panel = requestNotebookPanel(kernel, data);
 
         if (!panel) {
           comm.send({
@@ -1446,6 +1644,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       if (extensionLoaded.get(kernel)) {
         return;
@@ -1612,6 +1813,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       // Register target to receive server status updates
       kernel.registerCommTarget('mcp:server_status', (comm: any, msg: any) => {
@@ -1676,6 +1880,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         return;
       }
+      if (isQdevbotAnalysisKernel(kernel)) {
+        return;
+      }
 
       // Register target to receive comms opened by backend
       kernel.registerCommTarget('mcp:capcall', (comm: any, msg: any) => {
@@ -1721,14 +1928,30 @@ const plugin: JupyterFrontEndPlugin<void> = {
     };
 
     // Ensure comm connection exists for a kernel
-    const ensureComm = async (kernel?: Kernel.IKernelConnection | null) => {
+    const ensureComm = async (
+      kernel?: Kernel.IKernelConnection | null,
+      panel?: NotebookPanel | null
+    ) => {
       if (!kernel || !kernel.status || kernel.status === 'dead') {
         console.warn('MCP Active Cell Bridge: Kernel not available or dead');
+        return null;
+      }
+      if (isQdevbotAnalysisKernel(kernel)) {
         return null;
       }
 
       if (kernel.status !== 'idle' && kernel.status !== 'busy') {
         console.warn(`MCP Active Cell Bridge: Kernel not ready (status: ${kernel.status})`);
+        return null;
+      }
+
+      const ownedPanel = panel ?? findNotebookPanel(kernel);
+      if (!ownedPanel || !pinNotebookPanel(kernel, ownedPanel)) {
+        console.warn('MCP Active Cell Bridge: No uniquely owned notebook for kernel');
+        return null;
+      }
+      const notebookPath = notebookPaths.get(kernel);
+      if (!notebookPath) {
         return null;
       }
 
@@ -1780,13 +2003,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
               const msgType = data.type;
 
               if (msgType === 'request_current') {
-                enqueue(() => sendSnapshot(kernel));
+                if (
+                  typeof data.notebook_path === 'string' &&
+                  data.notebook_path
+                ) {
+                  enqueue(() => sendSnapshot(kernel, data.notebook_path));
+                } else {
+                  console.warn(
+                    'MCP Active Cell Bridge: rejected unpinned snapshot request'
+                  );
+                }
               } else if (msgType === 'update_cell') {
                 enqueue(() => handleCellUpdate(kernel, comm, data));
               } else if (msgType === 'execute_cell') {
                 enqueue(() => handleCellExecution(kernel, comm, data));
               } else if (msgType === 'add_cell') {
                 enqueue(() => handleAddCell(kernel, comm, data));
+              } else if (msgType === 'save_notebook') {
+                enqueue(() => handleSaveNotebook(kernel, comm, data));
               } else if (msgType === 'delete_cell') {
                 enqueue(() => handleDeleteCell(kernel, comm, data));
               } else if (msgType === 'delete_cells_by_number') {
@@ -1819,9 +2053,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
             };
 
             // Open comm and wait for it to be ready
-            // FIX: Send kernel_id to backend for proper comm-to-kernel association
-            // This prevents operations from being broadcast to all notebooks
-            await comm.open({ kernel_id: kernel.id }).done;
+            // Bind both sides of the bridge to a specific kernel and notebook.
+            // Every backend request echoes this notebook_path and every handler
+            // validates it before reading or mutating the document.
+            await comm.open({
+              kernel_id: kernel.id,
+              notebook_path: notebookPath
+            }).done;
 
             // Mark comm as successfully opened
             openedComms.set(kernel, true);
@@ -1852,22 +2090,23 @@ const plugin: JupyterFrontEndPlugin<void> = {
     };
 
     // Send cell snapshot to kernel
-    const sendSnapshot = async (kernel?: Kernel.IKernelConnection | null) => {
-      const panel = notebooks.currentWidget;
-      const cell = notebooks.activeCell;
-      
-      if (!panel || !cell) {
+    const sendSnapshot = async (
+      kernel?: Kernel.IKernelConnection | null,
+      requestedPath?: string | null
+    ) => {
+      if (!kernel) {
         return;
       }
-      
-      const targetKernel = kernel ?? panel.sessionContext.session?.kernel;
-      if (!targetKernel) {
+
+      const panel = findNotebookPanel(kernel, requestedPath);
+      const cell = panel?.content.activeCell;
+      if (!panel || !cell) {
         return;
       }
 
       // Ensure comm is ready
-      const comm = await ensureComm(targetKernel);
-      if (!comm || !isCommReady(targetKernel, comm)) {
+      const comm = await ensureComm(kernel, panel);
+      if (!comm || !isCommReady(kernel, comm)) {
         console.warn('MCP Active Cell Bridge: Comm not ready for sending');
         return;
       }
@@ -1929,10 +2168,29 @@ const plugin: JupyterFrontEndPlugin<void> = {
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to send snapshot:', error);
         // Try to recreate comm on failure
-        comms.delete(targetKernel);
-        openedComms.delete(targetKernel);
-        commInitializing.delete(targetKernel);
+        comms.delete(kernel);
+        openedComms.delete(kernel);
+        commInitializing.delete(kernel);
       }
+    };
+
+    // A frontend can attach after the kernel-side MCP server has already sent
+    // its one-shot `server_ready` status comm. In that order the toolbar can
+    // still query and display "Running", but the active-cell comm used by MCP
+    // notebook tools was never opened until the user changed cells. Connect
+    // eagerly after loading the IPython extension; if the server is not ready
+    // yet, the normal status notification path will retry later.
+    const connectFrontendBridge = (
+      kernel: Kernel.IKernelConnection,
+      panel: NotebookPanel
+    ) => {
+      if (!pinNotebookPanel(kernel, panel)) {
+        return;
+      }
+      void ensureExtensionLoaded(kernel)
+        .then(() => ensureComm(kernel, panel))
+        .then((comm: any) => comm ? sendSnapshot(kernel, panel.context.path) : undefined)
+        .catch(() => {});
     };
 
     // Content-change listener bookkeeping for the CURRENTLY active cell.
@@ -1959,7 +2217,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track active cell changes
     notebooks.activeCellChanged.connect(async (sender: any, args: any) => {
-      const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
+      const panel = notebooks.currentWidget;
+      const kernel = panel?.sessionContext.session?.kernel ?? null;
+
+      if (isQdevbotAnalysisKernel(kernel)) {
+        stopTrackingActiveCell();
+        return;
+      }
 
       // // Check if server is ready
       // if (kernel && !mcpServerReady.get(kernel)) {
@@ -1973,20 +2237,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
       //   return;
       // }
 
-      await ensureComm(kernel);
+      await ensureComm(kernel, panel);
 
       // Send snapshot immediately when cell changes
-      await sendSnapshot(kernel);
+      await sendSnapshot(kernel, panel?.context.path);
 
       // Stop listening to the previous active cell before tracking the new one
       // (prevents the listener leak / snapshot storm described above).
       stopTrackingActiveCell();
 
       // Set up debounced content change tracking for the new cell
-      const cell = notebooks.activeCell;
+      const cell = panel?.content.activeCell;
       if (cell) {
         // Create debounced function with 2000ms delay as requested
-        const debouncedSendSnapshot = debounce(() => sendSnapshot(kernel), 2000);
+        const notebookPath = panel?.context.path;
+        const debouncedSendSnapshot = debounce(
+          () => sendSnapshot(kernel, notebookPath),
+          2000
+        );
 
         // Listen to content changes (single active listener at a time)
         const slot = () => {
@@ -2002,7 +2270,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Track notebook changes
     notebooks.currentChanged.connect(async (sender: any, args: any) => {
-      const kernel = notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
+      const panel = notebooks.currentWidget;
+      const kernel = panel?.sessionContext.session?.kernel ?? null;
+
+      if (isQdevbotAnalysisKernel(kernel)) {
+        stopTrackingActiveCell();
+        console.log('MCP Active Cell Bridge: QDevBot analysis kernel is isolated');
+        return;
+      }
 
       // // Check if server is ready
       // if (kernel && !mcpServerReady.get(kernel)) {
@@ -2016,8 +2291,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       //   return;
       // }
 
-      await ensureComm(kernel);
-      await sendSnapshot(kernel);
+      await ensureComm(kernel, panel);
+      await sendSnapshot(kernel, panel?.context.path);
       console.log('MCP Active Cell Bridge: Notebook changed, sent snapshot');
     });
 
@@ -2025,21 +2300,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks.widgetAdded.connect((sender: any, panel: any) => {
       panel.sessionContext.ready.then(() => {
         const kernel = panel.sessionContext.session?.kernel ?? null;
-        if (kernel) {
-          ensureExtensionLoaded(kernel);
+        if (kernel && !isQdevbotAnalysisKernel(kernel)) {
           registerServerStatusCommTarget(kernel);  // Register server status comm target
           registerConsentCommTarget(kernel);  // Register consent comm target
-          // Don't try to ensure comm yet - wait for server ready signal
+          connectFrontendBridge(kernel, panel);
         }
         console.log('MCP Active Cell Bridge: Kernel ready, waiting for server status');
       });
 
       panel.sessionContext.kernelChanged.connect((_: any, args: any) => {
         const kernel = args.newValue ?? null;
-        if (kernel) {
-          ensureExtensionLoaded(kernel);
+        if (kernel && !isQdevbotAnalysisKernel(kernel)) {
           registerServerStatusCommTarget(kernel);
           registerConsentCommTarget(kernel);
+          connectFrontendBridge(kernel, panel);
         }
       });
     });
@@ -2047,21 +2321,40 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Initialize comm targets for existing notebooks
     notebooks.forEach((panel: NotebookPanel) => {
       const kernel = panel.sessionContext.session?.kernel ?? null;
-      if (kernel) {
-        ensureExtensionLoaded(kernel);
+      if (kernel && !isQdevbotAnalysisKernel(kernel)) {
         registerServerStatusCommTarget(kernel);  // Register server status comm target
         registerConsentCommTarget(kernel);
-        // Don't try to ensure comm yet - wait for server ready signal
+        connectFrontendBridge(kernel, panel);
       }
     });
+
+    const handleToolbarStatusUpdate = (update: MCPStatusUpdate) => {
+      const ready =
+        update.status === 'server_ready' ||
+        update.details?.server_running === true;
+      mcpServerReady.set(update.kernel, ready);
+      statusUpdateSignal.emit(update);
+
+      if (ready) {
+        const panel = findNotebookPanel(update.kernel);
+        if (panel) {
+          void ensureComm(update.kernel, panel)
+            .then((comm: any) =>
+              comm ? sendSnapshot(update.kernel, panel.context.path) : undefined
+            )
+            .catch(() => {});
+        }
+      }
+    };
 
     const toolbarExtension = new MCPToolbarExtension({
       getServerReady: (kernel?: Kernel.IKernelConnection | null) =>
         (kernel ? mcpServerReady.get(kernel) : undefined) ?? false,
       getComm: (kernel?: Kernel.IKernelConnection | null) =>
         kernel ? comms.get(kernel) : null,
-      statusUpdateSignal
-    });
+      statusUpdateSignal,
+      onStatusUpdate: handleToolbarStatusUpdate
+    }, kernel => !isQdevbotAnalysisKernel(kernel));
     app.docRegistry.addWidgetExtension('Notebook', toolbarExtension);
 
     // Bridge self-healing (instrMCP#29): periodically re-establish the
@@ -2072,17 +2365,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
     const COMM_KEEPALIVE_MS = 15000;
     window.setInterval(() => {
       try {
-        const kernel =
-          notebooks.currentWidget?.sessionContext.session?.kernel ?? null;
-        if (!kernel || kernel.status === 'dead') return;
-        if (!mcpServerReady.get(kernel)) return;
-        const existing = comms.get(kernel);
-        if (!existing || !isCommReady(kernel, existing)) {
-          console.log(
-            'MCP Active Cell Bridge: keepalive re-establishing dropped comm'
-          );
-          ensureComm(kernel).catch(() => {});
-        }
+        notebooks.forEach((panel: NotebookPanel) => {
+          const kernel = panel.sessionContext.session?.kernel ?? null;
+          if (!kernel || kernel.status === 'dead') return;
+          if (isQdevbotAnalysisKernel(kernel)) return;
+          if (!mcpServerReady.get(kernel)) return;
+          const pinnedPath = notebookPaths.get(kernel);
+          if (pinnedPath && pinnedPath !== panel.context.path) return;
+          const existing = comms.get(kernel);
+          if (!existing || !isCommReady(kernel, existing)) {
+            console.log(
+              'MCP Active Cell Bridge: keepalive re-establishing dropped comm'
+            );
+            ensureComm(kernel, panel).catch(() => {});
+          }
+        });
       } catch (e) {
         // never let the keepalive throw
       }

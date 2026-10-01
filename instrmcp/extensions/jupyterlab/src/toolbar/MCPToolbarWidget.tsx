@@ -21,11 +21,19 @@ export class MCPToolbarWidget extends ReactWidget {
   private _state: MCPState = { ...DEFAULT_STATE };
   private _controlComm: Kernel.IComm | null = null;
   private _kernelRestarting: boolean = false;
+  private _kernelAllowed: (
+    kernel?: Kernel.IKernelConnection | null
+  ) => boolean;
 
-  constructor(panel: NotebookPanel, sharedState: ToolbarSharedState) {
+  constructor(
+    panel: NotebookPanel,
+    sharedState: ToolbarSharedState,
+    kernelAllowed: (kernel?: Kernel.IKernelConnection | null) => boolean = () => true
+  ) {
     super();
     this._panel = panel;
     this._shared = sharedState;
+    this._kernelAllowed = kernelAllowed;
     this.addClass('mcp-toolbar-widget');
 
     this._shared.statusUpdateSignal.connect(this._onStatusUpdate, this);
@@ -33,7 +41,7 @@ export class MCPToolbarWidget extends ReactWidget {
 
     // Listen to kernel status changes to detect restarts
     const kernel = this._panel.sessionContext.session?.kernel;
-    if (kernel) {
+    if (kernel && this._kernelAllowed(kernel)) {
       kernel.statusChanged.connect(this._onKernelStatusChanged, this);
     }
 
@@ -67,6 +75,12 @@ export class MCPToolbarWidget extends ReactWidget {
 
   private async _initialize(): Promise<void> {
     await this._panel.sessionContext.ready;
+    const kernel = this._panel.sessionContext.session?.kernel;
+    if (!this._kernelAllowed(kernel)) {
+      this.setHidden(true);
+      return;
+    }
+    this.setHidden(false);
     await this._openControlComm();
   }
 
@@ -78,6 +92,11 @@ export class MCPToolbarWidget extends ReactWidget {
     if (!kernel || kernel.status === 'dead' || kernel.status === 'restarting') {
       return;
     }
+    if (!this._kernelAllowed(kernel)) {
+      this.setHidden(true);
+      return;
+    }
+    this.setHidden(false);
 
     try {
       const comm = kernel.createComm('mcp:toolbar_control');
@@ -106,20 +125,33 @@ export class MCPToolbarWidget extends ReactWidget {
   private _handleControlMessage(msg: any): void {
     const data = msg?.content?.data || {};
     const msgType = data.type;
+    let details: any = null;
+    let status: string | null = null;
 
     if (msgType === 'status') {
-      this._applyDetails(data);
+      details = data;
+      status = data.server_running ? 'server_ready' : 'server_not_started';
     } else if (msgType === 'result' && data.details) {
-      this._applyDetails(data.details);
+      details = data.details;
+      status = details.server_running ? 'server_ready' : 'server_stopped';
     } else if (msgType === 'status_broadcast' && data.details) {
       // Handle broadcasts sent through the control comm (instead of separate status comm)
-      this._applyDetails(data.details);
+      details = data.details;
+      status = data.status;
+    }
+
+    if (details) {
+      this._applyDetails(details);
+    }
+    const kernel = this._panel.sessionContext.session?.kernel;
+    if (kernel && status && this._kernelAllowed(kernel)) {
+      this._shared.onStatusUpdate?.({ kernel, status, details });
     }
   }
 
   private _onStatusUpdate = (sender: object, update: MCPStatusUpdate): void => {
     const kernel = this._panel.sessionContext.session?.kernel;
-    if (!kernel || update.kernel !== kernel) {
+    if (!kernel || !this._kernelAllowed(kernel) || update.kernel !== kernel) {
       return;
     }
 
@@ -241,6 +273,9 @@ export class MCPToolbarWidget extends ReactWidget {
     if (!kernel || kernel.status === 'dead' || kernel.status === 'restarting') {
       return;
     }
+    if (!this._kernelAllowed(kernel)) {
+      return;
+    }
 
     // Don't send if kernel is in restart transition
     if (this._kernelRestarting) {
@@ -286,18 +321,25 @@ export class MCPToolbarWidget extends ReactWidget {
     }
   }
 
-  private _onKernelChanged = (): void => {
+  private _onKernelChanged = (
+    _sender: unknown,
+    args: { oldValue?: Kernel.IKernelConnection | null; newValue?: Kernel.IKernelConnection | null }
+  ): void => {
     console.log('MCP Toolbar: Kernel changed');
+    args.oldValue?.statusChanged.disconnect(this._onKernelStatusChanged, this);
     this._kernelRestarting = false;
     this._closeControlComm();
     this._state = { ...DEFAULT_STATE };
     this.update();
 
     // Reconnect status listener to new kernel
-    const kernel = this._panel.sessionContext.session?.kernel;
-    if (kernel) {
+    const kernel = args.newValue ?? this._panel.sessionContext.session?.kernel;
+    if (kernel && this._kernelAllowed(kernel)) {
+      this.setHidden(false);
       kernel.statusChanged.connect(this._onKernelStatusChanged, this);
       void this._openControlComm();
+    } else {
+      this.setHidden(true);
     }
   };
 
@@ -305,6 +347,9 @@ export class MCPToolbarWidget extends ReactWidget {
     sender: Kernel.IKernelConnection,
     status: Kernel.Status
   ): void => {
+    if (!this._kernelAllowed(sender)) {
+      return;
+    }
     console.log(`MCP Toolbar: Kernel status changed to ${status}`);
 
     if (status === 'restarting' || status === 'dead' || status === 'terminating') {

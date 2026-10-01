@@ -1039,3 +1039,101 @@ class TestUnsafeToolRegistrarUpdateCell:
         assert response_data["blocked"] is True
         assert "block_reason" in response_data
         mock_tools.add_new_cell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_add_new_cell_preserves_python_escape_sequences(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Structured tool arguments must reach Jupyter without a second unescape."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        mock_tools.add_new_cell.return_value = {"success": True}
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+        content = 'print("line 1\\nline 2")\nprint("\\tindented")'
+
+        add_cell_func = mock_mcp_server._tools["notebook_add_cell"]
+        result = await add_cell_func(cell_type="code", position="end", content=content)
+
+        assert json.loads(result[0].text)["success"] is True
+        mock_tools.add_new_cell.assert_awaited_once_with("code", "end", content)
+
+    @pytest.mark.asyncio
+    async def test_apply_patch_preserves_python_escape_sequences(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Patch matching and replacement must preserve literal escapes exactly."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        old_text = "line 1\\nline 2"
+        new_text = "line A\\nline B"
+        mock_tools.get_editing_cell.return_value = {
+            "cell_content": f'title = "{old_text}"',
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_tools.apply_patch.return_value = {"success": True}
+        mock_consent_manager.request_consent.return_value = {
+            "approved": True,
+            "reason": "bypass_mode",
+        }
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        apply_patch_func = mock_mcp_server._tools["notebook_apply_patch"]
+        result = await apply_patch_func(old_text=old_text, new_text=new_text)
+
+        assert json.loads(result[0].text)["success"] is True
+        mock_tools.apply_patch.assert_awaited_once_with(old_text, new_text)
+
+    @pytest.mark.asyncio
+    async def test_execute_concise_preserves_persistence_failure(
+        self, mock_mcp_server, mock_tools, mock_consent_manager
+    ):
+        """Concise mode must not turn a failed save into apparent success."""
+        from instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools import (
+            UnsafeToolRegistrar,
+        )
+
+        mock_tools.get_editing_cell.return_value = {
+            "cell_content": "x = 1",
+            "cell_type": "code",
+            "index": 0,
+        }
+        mock_tools.execute_editing_cell.return_value = {
+            "success": False,
+            "saved": False,
+            "status": "persistence_error",
+            "executed": True,
+            "error": "Notebook changed on disk",
+        }
+        mock_consent_manager.request_consent.return_value = {
+            "approved": True,
+            "reason": "bypass_mode",
+        }
+        registrar = UnsafeToolRegistrar(
+            mock_mcp_server, mock_tools, mock_consent_manager
+        )
+        registrar.register_all()
+
+        execute_cell = mock_mcp_server._tools["notebook_execute_active_cell"]
+        with patch(
+            "instrmcp.servers.jupyter_qcodes.core.notebook_unsafe_tools.log_tool_call"
+        ) as log_tool_call:
+            result = await execute_cell(timeout=1.0, detailed=False)
+
+        response = json.loads(result[0].text)
+        assert response["success"] is False
+        assert response["saved"] is False
+        assert response["status"] == "persistence_error"
+        assert response["executed"] is True
+        assert response["error_message"] == "Notebook changed on disk"
+        assert log_tool_call.call_args.args[3] == "error"
