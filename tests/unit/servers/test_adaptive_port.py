@@ -75,8 +75,7 @@ def test_server_records_the_port_chosen_by_the_operating_system():
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "0.0.0.0"])
-@pytest.mark.parametrize("running", [True, False])
-def test_restart_preserves_bound_endpoint(host, running):
+def test_restart_reuses_running_server_endpoint(host):
     previous = extension._server, extension._server_host, extension._server_port
     extension._server = None
     extension._server_host, extension._server_port = "127.0.0.1", 8123
@@ -89,10 +88,6 @@ def test_restart_preserves_bound_endpoint(host, running):
             extension, "broadcast_server_status"
         ):
             extension._do_start_server(announce=False, host=host, port=0)
-            if not running:
-                extension._server.stop_sync()
-                # The existing server's endpoint takes precedence over stored values.
-                extension._server_host, extension._server_port = "127.0.0.1", 8123
 
             assert extension._do_restart_server(announce=False) is True
 
@@ -104,6 +99,35 @@ def test_restart_preserves_bound_endpoint(host, running):
             assert extension._server.port == 43123
             assert extension._get_current_config()["port"] == 43123
             assert (extension._server_host, extension._server_port) == (host, 43123)
+    finally:
+        extension._server, extension._server_host, extension._server_port = previous
+
+
+def test_restart_after_stop_uses_last_bound_endpoint():
+    """A stopped server object must not dictate the endpoint it is restarted on."""
+    previous = extension._server, extension._server_host, extension._server_port
+    extension._server = None
+    extension._server_host, extension._server_port = "127.0.0.1", 8123
+    try:
+        with patch(
+            "IPython.core.getipython.get_ipython", return_value=MagicMock()
+        ), patch.object(
+            extension, "JupyterMCPServer", side_effect=FakeServer
+        ) as factory, patch.object(
+            extension, "broadcast_server_status"
+        ):
+            extension._do_start_server(announce=False, port=0)
+            assert extension._do_stop_server(announce=False) is True
+            # Pretend the last successfully bound endpoint was 9123; the stopped
+            # object still reports 43123 and must not win.
+            extension._server_host, extension._server_port = "127.0.0.1", 9123
+
+            assert extension._do_restart_server(announce=False) is True
+
+            assert factory.call_count == 2
+            assert factory.call_args.kwargs["host"] == "127.0.0.1"
+            assert factory.call_args.kwargs["port"] == 9123
+            assert extension._get_current_config()["port"] == 9123
     finally:
         extension._server, extension._server_host, extension._server_port = previous
 
@@ -158,6 +182,48 @@ def test_start_running_server_is_noop_unless_endpoint_differs():
 
             assert factory.call_count == 1
             assert extension._server is original
+    finally:
+        extension._server, extension._server_host, extension._server_port = previous
+
+
+def test_failed_start_does_not_poison_restart_or_config():
+    """A dead server object left by a failed start is not authoritative."""
+    previous = extension._server, extension._server_host, extension._server_port
+    extension._server = None
+    extension._server_host, extension._server_port = "127.0.0.1", 43123
+    try:
+        with patch(
+            "IPython.core.getipython.get_ipython", return_value=MagicMock()
+        ), patch.object(
+            extension, "JupyterMCPServer", side_effect=FakeServer
+        ) as factory, patch.object(
+            extension, "broadcast_server_status"
+        ):
+            extension._do_start_server(announce=False, port=0)
+            assert extension._do_stop_server(announce=False) is True
+
+            # A start on an endpoint that cannot be bound fails and leaves a
+            # dead server object behind.
+            def failing_factory(*args, **kwargs):
+                server = FakeServer(*args, **kwargs)
+                server.start_error = OSError("port already in use")
+                return server
+
+            with patch.object(
+                extension, "JupyterMCPServer", side_effect=failing_factory
+            ):
+                with pytest.raises(OSError):
+                    extension._do_start_server(announce=False, port=9999)
+
+            config = extension._get_current_config()
+            assert config["server_running"] is False
+            assert (config["host"], config["port"]) == ("127.0.0.1", 43123)
+
+            # Restart goes back to the endpoint that last bound successfully.
+            assert extension._do_restart_server(announce=False) is True
+            assert factory.call_args.kwargs["host"] == "127.0.0.1"
+            assert factory.call_args.kwargs["port"] == 43123
+            assert extension._server.is_running()
     finally:
         extension._server, extension._server_host, extension._server_port = previous
 

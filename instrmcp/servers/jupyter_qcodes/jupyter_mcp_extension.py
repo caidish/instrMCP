@@ -338,10 +338,13 @@ def _get_mode_display() -> Dict[str, str]:
 def _get_current_config() -> dict:
     """Return the current MCP server configuration and state."""
     mode_info = _get_mode_display()
-    host = _server.host if _server else _server_host
-    port = _server.port if _server else _server_port
+    # A running server is authoritative (a caller may have built it directly);
+    # otherwise report the last endpoint that bound successfully.
+    running = bool(_server and _server.is_running())
+    host = _server.host if running else _server_host
+    port = _server.port if running else _server_port
 
-    server_running = bool(_server and _server.is_running())
+    server_running = running
 
     return {
         "mode": mode_info["mode"],
@@ -593,8 +596,14 @@ def _do_restart_server(announce: bool = True) -> bool:
     """
     global _server, _server_host, _server_port
 
-    host = _server.host if _server else _server_host
-    port = _server.port if _server else _server_port
+    # Reuse the endpoint of the server this restart replaces. A running server
+    # is authoritative (a caller may have built and started it directly);
+    # otherwise use the last endpoint that bound successfully, so a failed
+    # start is not retried forever.
+    if _server is not None and _server.is_running():
+        host, port = _server.host, _server.port
+    else:
+        host, port = _server_host, _server_port
 
     if announce:
         print("🔄 Restarting MCP server...")
