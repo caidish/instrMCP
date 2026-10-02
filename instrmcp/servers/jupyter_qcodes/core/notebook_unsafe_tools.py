@@ -182,15 +182,24 @@ class UnsafeToolRegistrar:
         return concise
 
     def _to_concise_success_only(self, result: dict) -> dict:
-        """Convert to concise format with just success.
+        """Convert to concise format with just success, plus any failure reason.
 
         Used by: add_cell, delete_cell, delete_cells, apply_patch.
-        Preserves error field if present (Bug #12 fix).
+        Preserves error field if present (Bug #12 fix). A frontend-handled
+        refusal reports its reason in ``message`` (and sometimes ``status``),
+        so a failed call carries that reason into the concise result too;
+        successful results stay as ``{"success": True}``.
         """
-        concise = {"success": result.get("success", False)}
+        success = result.get("success", False)
+        concise = {"success": success}
         # Always preserve error messages regardless of detailed mode
         if "error" in result:
             concise["error"] = result["error"]
+        if not success:
+            if "error" not in concise and result.get("message"):
+                concise["error"] = result["message"]
+            if result.get("status"):
+                concise["status"] = result["status"]
         return concise
 
     # ===== End concise mode helpers =====
