@@ -20,10 +20,10 @@ def mock_ipython():
 
 @pytest.fixture
 def mock_mcp():
-    """Create a mock FastMCP instance with remove_tool support."""
+    """Create a mock FastMCP instance with local provider removal support."""
     mock = Mock()
     mock.tool = Mock(return_value=lambda f: f)  # Decorator that returns the function
-    mock.remove_tool = Mock()  # Mock the remove_tool method
+    mock.providers = [Mock()]
     return mock
 
 
@@ -49,10 +49,10 @@ def registrar(mock_mcp, mock_ipython, temp_registry):
 
 
 class TestFastMCPRemoveTool:
-    """Test that FastMCP's remove_tool is called correctly."""
+    """Test that the local FastMCP provider removes tools correctly."""
 
     def test_remove_tool_called_on_revoke(self, registrar, mock_mcp):
-        """Test that mcp.remove_tool() is called when revoking a tool."""
+        """Test that the local provider removes a tool when revoking it."""
         # Register a tool
         spec = create_tool_spec(
             name="test_tool",
@@ -65,18 +65,18 @@ class TestFastMCPRemoveTool:
         registrar.registry.register(spec)
 
         # Reset mock to clear registration calls
-        mock_mcp.remove_tool.reset_mock()
+        mock_mcp.providers[0].remove_tool.reset_mock()
 
         # Revoke the tool
         registrar._unregister_tool_from_fastmcp("test_tool")
 
         # Verify remove_tool was called
-        mock_mcp.remove_tool.assert_called_once_with("test_tool")
+        mock_mcp.providers[0].remove_tool.assert_called_once_with("test_tool")
 
     def test_remove_tool_handles_exception(
         self, registrar, mock_mcp, caplog, enable_instrmcp_log_capture
     ):
-        """Test that exceptions from remove_tool are handled gracefully."""
+        """Test that provider removal exceptions are handled gracefully."""
         # Register a tool
         spec = create_tool_spec(
             name="test_tool",
@@ -89,7 +89,7 @@ class TestFastMCPRemoveTool:
         registrar.registry.register(spec)
 
         # Make remove_tool raise an exception
-        mock_mcp.remove_tool.side_effect = Exception("FastMCP error")
+        mock_mcp.providers[0].remove_tool.side_effect = Exception("FastMCP error")
 
         with caplog.at_level(logging.WARNING):
             # Revoke should not crash
@@ -112,7 +112,7 @@ class TestFastMCPRemoveTool:
         registrar.registry.register(old_spec)
 
         # Reset mock to clear registration calls
-        mock_mcp.remove_tool.reset_mock()
+        mock_mcp.providers[0].remove_tool.reset_mock()
 
         # Update the tool
         new_spec = create_tool_spec(
@@ -129,7 +129,7 @@ class TestFastMCPRemoveTool:
         registrar.registry.update(new_spec)
 
         # Verify remove_tool was called once during update
-        mock_mcp.remove_tool.assert_called_once_with("test_tool")
+        mock_mcp.providers[0].remove_tool.assert_called_once_with("test_tool")
 
 
 class TestRegistrationOrder:

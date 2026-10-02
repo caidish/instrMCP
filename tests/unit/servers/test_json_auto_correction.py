@@ -22,7 +22,7 @@ def mock_mcp():
     """Create a mock FastMCP instance."""
     mock = Mock()
     mock.tool = Mock(return_value=lambda f: f)
-    mock.remove_tool = Mock()
+    mock.providers = [Mock()]
     return mock
 
 

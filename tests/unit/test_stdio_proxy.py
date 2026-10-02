@@ -4,7 +4,7 @@ Unit tests for stdio_proxy.py module.
 Tests check_http_mcp_server function for the STDIO↔HTTP MCP proxy functionality.
 
 Note: Tests for create_stdio_proxy_server are done manually via integration testing.
-The function uses FastMCP.as_proxy() which requires a live backend connection.
+The function uses FastMCP's proxy factory, which requires a live backend connection.
 """
 
 import pytest

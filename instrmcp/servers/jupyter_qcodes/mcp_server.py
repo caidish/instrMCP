@@ -39,11 +39,13 @@ from instrmcp.utils.metadata_config import (
 # Tool transformation imports
 try:
     from fastmcp.tools.tool_transform import ToolTransformConfig, ArgTransformConfig
+    from fastmcp.server.transforms import ToolTransform
 
     TOOL_TRANSFORM_AVAILABLE = True
 except ImportError:
     ToolTransformConfig = None  # type: ignore[misc, assignment]
     ArgTransformConfig = None  # type: ignore[misc, assignment]
+    ToolTransform = None  # type: ignore[misc, assignment]
     TOOL_TRANSFORM_AVAILABLE = False
 
 # MeasureIt integration (optional)
@@ -234,7 +236,7 @@ class JupyterMCPServer:
         """Apply tool and resource metadata overrides from config.
 
         Uses self.metadata_config (baseline + user overrides) to apply:
-        - Tool overrides via FastMCP's add_tool_transformation()
+        - Tool overrides via FastMCP's transformation API
         - Resource overrides via direct FunctionResource attribute modification
 
         Note: Resource descriptions are already set during registration via
@@ -273,10 +275,6 @@ class JupyterMCPServer:
                 )
             return
 
-        # Get registered tools for validation
-        # Note: mcp.get_tools() is async, but we're in sync context during __init__
-        # We'll validate tool names lazily - invalid names will be caught by FastMCP
-
         for tool_name, overrides in config.tools.items():
             try:
                 # Build argument transformations
@@ -295,7 +293,7 @@ class JupyterMCPServer:
                 )
 
                 # Apply transformation
-                self.mcp.add_tool_transformation(tool_name, transform)
+                self.mcp.add_transform(ToolTransform({tool_name: transform}))
                 logger.debug(f"Applied metadata override for tool: {tool_name}")
 
             except Exception as e:

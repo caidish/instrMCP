@@ -350,9 +350,9 @@ class DynamicToolRegistrar:
         if tool_name in self._dynamic_tools:
             del self._dynamic_tools[tool_name]
 
-        # Remove from FastMCP (available since v2.9.1)
+        # Remove from the local FastMCP provider
         try:
-            self.mcp.remove_tool(tool_name)
+            self.mcp.providers[0].remove_tool(tool_name)
             logger.debug(
                 f"Successfully removed tool '{tool_name}' from FastMCP and runtime"
             )
