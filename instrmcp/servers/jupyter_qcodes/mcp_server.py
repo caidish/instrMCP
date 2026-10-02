@@ -313,7 +313,7 @@ class JupyterMCPServer:
         FunctionResource attributes directly after registration.
         """
         # Get registered resources
-        # FastMCP.get_resources() is async, so we need to run it
+        # FastMCP.list_resources() is async, so we need to run it
         # In Jupyter there's usually already a running event loop
         try:
             try:
@@ -322,11 +322,15 @@ class JupyterMCPServer:
                 import concurrent.futures
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.mcp.get_resources())
-                    registered = future.result(timeout=5.0)
+                    future = executor.submit(asyncio.run, self.mcp.list_resources())
+                    resources = future.result(timeout=5.0)
             except RuntimeError:
                 # No running loop - safe to use asyncio.run()
-                registered = asyncio.run(self.mcp.get_resources())
+                resources = asyncio.run(self.mcp.list_resources())
+            # fastmcp 4 returns a sequence of Resource objects; index by URI
+            registered = {
+                str(getattr(resource, "uri", None)): resource for resource in resources
+            }
             logger.debug(
                 f"Got {len(registered)} registered resources: {list(registered.keys())}"
             )

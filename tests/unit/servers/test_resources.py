@@ -364,20 +364,20 @@ class TestResourceDiscoveryTools:
         mcp.resource = resource_decorator
         mcp.tool = tool_decorator
 
-        # Mock get_resources() to return FunctionResource-like objects from _resources
-        async def mock_get_resources():
-            # Return dict mapping uri to mock resource objects
-            result = {}
+        # Mock list_resources() to return FunctionResource-like objects from _resources
+        async def mock_list_resources():
+            # fastmcp 4 returns a sequence of Resource objects
+            result = []
             for uri, func in mcp._resources.items():
                 mock_res = MagicMock()
                 mock_res.uri = uri
                 # Extract name from uri (e.g., "resource://foo" -> "foo")
                 mock_res.name = uri.replace("resource://", "")
                 mock_res.description = f"Description for {mock_res.name}"
-                result[uri] = mock_res
+                result.append(mock_res)
             return result
 
-        mcp.get_resources = mock_get_resources
+        mcp.list_resources = mock_list_resources
         return mcp
 
     @pytest.fixture
@@ -844,6 +844,6 @@ class TestTemplateResourceRealReadPath:
         assert contents[0].text == get_sweep2d_template()
         # Read-path MIME metadata must survive the fix. (This is delivered
         # through the standard resources/read result, so it is portable across
-        # fastmcp versions -- unlike the FastMCP.get_resources() helper, which
+        # fastmcp versions -- unlike the FastMCP.list_resources() helper, which
         # is version-dependent and only used behind a try/except in production.)
         assert contents[0].mimeType == "application/json"

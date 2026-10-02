@@ -187,16 +187,17 @@ async def get_proxy_metadata(mcp_url: str = DEFAULT_MCP_URL) -> dict:
 
     # Get tools and resources from the proxy
     # These methods query the backend and cache the results
-    tools_dict = await proxy.get_tools()
-    resources_dict = await proxy.get_resources()
+    tools = await proxy.list_tools()
+    resources = await proxy.list_resources()
 
     # Build snapshot in the same format as HTTP metadata
     tool_map = {}
-    for name, tool in tools_dict.items():
-        tool_map[name] = _tool_to_dict(tool)
+    for tool in tools:
+        tool_map[tool.name] = _tool_to_dict(tool)
 
     resource_map = {}
-    for uri, resource in resources_dict.items():
+    for resource in resources:
+        uri = getattr(resource, "uri", None) or getattr(resource, "name", None)
         resource_map[str(uri)] = _resource_to_dict(resource)
 
     return {"tools": tool_map, "resources": resource_map}

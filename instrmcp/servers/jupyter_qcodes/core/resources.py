@@ -103,14 +103,16 @@ class ResourceRegistrar:
             _ = detailed
             # Dynamically query registered resources to reflect metadata overrides
             try:
-                registered = await self.mcp.get_resources()
+                resources = await self.mcp.list_resources()
             except Exception as e:
                 logger.error(f"Failed to get registered resources: {e}")
-                registered = {}
+                resources = []
 
             # Build list of available resources from registered resources
+            # (fastmcp 4's list_resources returns a sequence of Resource objects)
             resources_list = []
-            for uri, resource in registered.items():
+            for resource in resources:
+                uri = getattr(resource, "uri", None)
                 entry = {
                     "uri": str(uri),
                     "name": getattr(resource, "name", None) or str(uri),
