@@ -519,7 +519,7 @@ The standalone script is also available: `python tools/token_count.py`
 1. Server loads baseline config from package (`instrmcp/config/metadata_baseline.yaml`)
 2. Server loads user overrides from `~/.instrmcp/metadata.yaml` (if exists)
 3. Configs are merged (user overrides take precedence for individual fields)
-4. Tool metadata applied via FastMCP's `add_tool_transformation()` API
+4. Tool metadata applied via FastMCP's `add_transform(ToolTransform(...))` API
 5. Resource metadata applied via direct `FunctionResource` attribute modification
 6. Changes take effect immediately for that server session
 

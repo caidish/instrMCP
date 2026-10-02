@@ -101,17 +101,8 @@ Safe mode exposed `measureit_kill_sweep` (and `measureit_wait_for_sweep`'s
   carries a `kill_skipped` note when a kill was requested). Metadata baseline +
   playwright snapshot, ARCHITECTURE.md, CLAUDE.md, and unit/e2e tests updated.
 
-## Cap fastmcp/mcp major versions (v2.4.4)
+## Migrate to fastmcp 4 / mcp 2 (issue #41/#48)
 
-`fastmcp>=2.14.3` / `mcp>=1.0.0` had no upper bound, so a fresh install resolved
-fastmcp 4.0.3 + mcp 2.1.1 and died at import: `from fastmcp.server.proxy import
-ProxyClient` no longer exists, and `instrmcp/utils/__init__.py` re-exports it, so
-the whole `instrmcp.utils` package (CLI + all three launchers) failed to import.
-
-- [x] Capped to `fastmcp>=2.14.3,<4` and `mcp>=1.0.0,<2` in `pyproject.toml`
-  (resolves to fastmcp 3.4.7 + mcp 1.29.1, verified working), with a comment
-  explaining why the bounds are there.
-- [ ] Migrate to fastmcp 4 / mcp 2 — see the tracking issue. Four call sites:
-  `utils/stdio_proxy.py` (`ProxyClient` import + `FastMCP.as_proxy`),
-  `servers/jupyter_qcodes/mcp_server.py` (`add_tool_transformation`),
-  `servers/jupyter_qcodes/options/dynamic_tool/registrar.py` (`remove_tool`).
+- [x] Pin `fastmcp>=4.0.10,<5` and `mcp>=2.2.0,<3` in `pyproject.toml`.
+- [x] Update the proxy, local-provider tool removal, and transformation call sites
+  for fastmcp 4. The tested environment uses fastmcp 4.0.10 and mcp 2.2.0.
