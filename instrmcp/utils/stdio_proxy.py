@@ -6,7 +6,7 @@ tools/* JSON-RPC calls to an HTTP MCP server (e.g., http://127.0.0.1:8123/mcp).
 
 Used by both Claude Desktop and Codex launchers to avoid code duplication.
 
-This module uses FastMCP's built-in proxy pattern (FastMCP.as_proxy) to automatically
+This module uses FastMCP's built-in proxy pattern (create_proxy) to automatically
 mirror tools, resources, and prompts from the backend server. This ensures that:
 1. Tool descriptions are automatically forwarded to MCP clients
 2. New tools added to the backend are automatically available
@@ -22,7 +22,8 @@ from pathlib import Path
 
 import httpx
 from fastmcp import FastMCP
-from fastmcp.server.proxy import ProxyClient
+from fastmcp.server.providers.proxy import ProxyClient
+from fastmcp.server.server import create_proxy
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ async def check_http_mcp_server(host: str = "127.0.0.1", port: int = 8123) -> bo
 
 
 # ============================================================================
-# Main proxy server creation using FastMCP.as_proxy()
+# Main proxy server creation using FastMCP's proxy factory
 # ============================================================================
 
 
@@ -153,7 +154,7 @@ def create_stdio_proxy_server(
     # Create the proxy using FastMCP's built-in proxy pattern
     # ProxyClient handles Streamable HTTP transport automatically
     # Note: Connection is lazy - errors will surface on first tool call
-    proxy = FastMCP.as_proxy(
+    proxy = create_proxy(
         ProxyClient(mcp_endpoint),
         name=server_name,
     )

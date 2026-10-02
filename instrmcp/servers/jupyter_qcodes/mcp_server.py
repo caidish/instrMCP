@@ -39,11 +39,13 @@ from instrmcp.utils.metadata_config import (
 # Tool transformation imports
 try:
     from fastmcp.tools.tool_transform import ToolTransformConfig, ArgTransformConfig
+    from fastmcp.server.transforms import ToolTransform
 
     TOOL_TRANSFORM_AVAILABLE = True
 except ImportError:
     ToolTransformConfig = None  # type: ignore[misc, assignment]
     ArgTransformConfig = None  # type: ignore[misc, assignment]
+    ToolTransform = None  # type: ignore[misc, assignment]
     TOOL_TRANSFORM_AVAILABLE = False
 
 # MeasureIt integration (optional)
@@ -234,7 +236,7 @@ class JupyterMCPServer:
         """Apply tool and resource metadata overrides from config.
 
         Uses self.metadata_config (baseline + user overrides) to apply:
-        - Tool overrides via FastMCP's add_tool_transformation()
+        - Tool overrides via FastMCP's transformation API
         - Resource overrides via direct FunctionResource attribute modification
 
         Note: Resource descriptions are already set during registration via
@@ -273,10 +275,6 @@ class JupyterMCPServer:
                 )
             return
 
-        # Get registered tools for validation
-        # Note: mcp.get_tools() is async, but we're in sync context during __init__
-        # We'll validate tool names lazily - invalid names will be caught by FastMCP
-
         for tool_name, overrides in config.tools.items():
             try:
                 # Build argument transformations
@@ -295,7 +293,7 @@ class JupyterMCPServer:
                 )
 
                 # Apply transformation
-                self.mcp.add_tool_transformation(tool_name, transform)
+                self.mcp.add_transform(ToolTransform({tool_name: transform}))
                 logger.debug(f"Applied metadata override for tool: {tool_name}")
 
             except Exception as e:
@@ -315,7 +313,7 @@ class JupyterMCPServer:
         FunctionResource attributes directly after registration.
         """
         # Get registered resources
-        # FastMCP.get_resources() is async, so we need to run it
+        # FastMCP.list_resources() is async, so we need to run it
         # In Jupyter there's usually already a running event loop
         try:
             try:
@@ -324,11 +322,15 @@ class JupyterMCPServer:
                 import concurrent.futures
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.mcp.get_resources())
-                    registered = future.result(timeout=5.0)
+                    future = executor.submit(asyncio.run, self.mcp.list_resources())
+                    resources = future.result(timeout=5.0)
             except RuntimeError:
                 # No running loop - safe to use asyncio.run()
-                registered = asyncio.run(self.mcp.get_resources())
+                resources = asyncio.run(self.mcp.list_resources())
+            # fastmcp 4 returns a sequence of Resource objects; index by URI
+            registered = {
+                str(getattr(resource, "uri", None)): resource for resource in resources
+            }
             logger.debug(
                 f"Got {len(registered)} registered resources: {list(registered.keys())}"
             )

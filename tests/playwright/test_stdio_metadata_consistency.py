@@ -1,7 +1,7 @@
 """
 Test that stdio_proxy metadata aligns with direct HTTP MCP server metadata.
 
-This test verifies that FastMCP's as_proxy() correctly mirrors all tool and
+This test verifies that FastMCP's create_proxy() correctly mirrors all tool and
 resource metadata from the HTTP backend. This is critical because Claude
 Desktop/Code uses the stdio proxy interface.
 
@@ -20,8 +20,8 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.server.proxy import ProxyClient
+from fastmcp.server.providers.proxy import ProxyClient
+from fastmcp.server.server import create_proxy
 
 try:
     from tests.playwright.helpers import (
@@ -180,23 +180,24 @@ async def get_proxy_metadata(mcp_url: str = DEFAULT_MCP_URL) -> dict:
     mcp_endpoint = f"{mcp_url.rstrip('/')}/mcp"
 
     # Create the proxy
-    proxy = FastMCP.as_proxy(
+    proxy = create_proxy(
         ProxyClient(mcp_endpoint),
         name="MetadataTest Proxy",
     )
 
     # Get tools and resources from the proxy
     # These methods query the backend and cache the results
-    tools_dict = await proxy.get_tools()
-    resources_dict = await proxy.get_resources()
+    tools = await proxy.list_tools()
+    resources = await proxy.list_resources()
 
     # Build snapshot in the same format as HTTP metadata
     tool_map = {}
-    for name, tool in tools_dict.items():
-        tool_map[name] = _tool_to_dict(tool)
+    for tool in tools:
+        tool_map[tool.name] = _tool_to_dict(tool)
 
     resource_map = {}
-    for uri, resource in resources_dict.items():
+    for resource in resources:
+        uri = getattr(resource, "uri", None) or getattr(resource, "name", None)
         resource_map[str(uri)] = _resource_to_dict(resource)
 
     return {"tools": tool_map, "resources": resource_map}

@@ -82,6 +82,34 @@ const plugin: JupyterFrontEndPlugin<void> = {
       return comm && !comm.isDisposed && openedComms.get(kernel) === true;
     };
 
+    // Reply on the kernel's current active-cell comm. A handler can be enqueued
+    // on a comm that gets replaced while it runs (the kernel closes the previous
+    // comm when a new one opens for the same kernel), and sending on a disposed
+    // comm throws - which used to swallow the reply and make the caller wait out
+    // its full timeout. Fall back to the handler's own comm for the unexpected
+    // case where the map entry is gone but the comm is still alive.
+    const sendReply = (
+      kernel: Kernel.IKernelConnection,
+      comm: any,
+      payload: any
+    ): boolean => {
+      for (const candidate of [comms.get(kernel), comm]) {
+        if (candidate && !candidate.isDisposed) {
+          try {
+            candidate.send(payload);
+            return true;
+          } catch (error) {
+            console.error('MCP Active Cell Bridge: Failed to send reply:', error);
+          }
+        }
+      }
+      console.error(
+        'MCP Active Cell Bridge: No live comm for reply:',
+        payload?.type
+      );
+      return false;
+    };
+
     const panelBelongsToKernel = (
       panel: NotebookPanel,
       kernel: Kernel.IKernelConnection
@@ -296,7 +324,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         if (!panel) {
           // Send error response
-          comm.send({
+          sendReply(kernel, comm, {
             type: 'add_cell_response',
             request_id: requestId,
             success: false,
@@ -308,7 +336,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Validate cell type
         const validTypes = ['code', 'markdown', 'raw'];
         if (!validTypes.includes(cellType)) {
-          comm.send({
+          sendReply(kernel, comm, {
             type: 'add_cell_response',
             request_id: requestId,
             success: false,
@@ -320,7 +348,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Validate position
         const validPositions = ['above', 'below', 'end'];
         if (!validPositions.includes(position)) {
-          comm.send({
+          sendReply(kernel, comm, {
             type: 'add_cell_response',
             request_id: requestId,
             success: false,
@@ -383,7 +411,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         persisted = true;
 
         // Send success response
-        comm.send({
+        sendReply(kernel, comm, {
           type: 'add_cell_response',
           request_id: requestId,
           success: true,
@@ -437,7 +465,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Send error response
-        comm.send({
+        sendReply(kernel, comm, {
           type: 'add_cell_response',
           request_id: requestId,
           success: false,
@@ -2099,8 +2127,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
 
       const panel = findNotebookPanel(kernel, requestedPath);
-      const cell = panel?.content.activeCell;
+      const cell = panel?.content.activeCell as any;
       if (!panel || !cell) {
+        return;
+      }
+
+      // NotebookActions.changeCellType() replaces the active cell widget. The
+      // old widget can still be observed for a moment with its model already
+      // null; that is a stale cell, not a dead comm. Bail out quietly and leave
+      // the comm registered - dropping it here used to cascade into a comm
+      // replacement that swallowed the in-flight add-cell reply.
+      if (cell.isDisposed || !cell.model) {
+        console.log(
+          'MCP Active Cell Bridge: Skipping snapshot for a replaced cell'
+        );
         return;
       }
 
@@ -2111,6 +2151,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         return;
       }
 
+      let payload: any;
       try {
         // Get cell editor and content
         const editor = (cell as any).editor;
@@ -2147,7 +2188,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           truncated = true;
         }
 
-        const payload = {
+        payload = {
           type: 'snapshot',
           path: panel.context.path,
           index: panel.content.activeCellIndex,
@@ -2161,10 +2202,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
           ts_ms: Date.now(),
           client_id: (app as any).info?.workspace ?? 'unknown'
         };
+      } catch (error) {
+        // Payload assembly can fail for a cell that is being replaced; that is
+        // not a comm failure, so keep the comm registered and skip this frame.
+        console.warn(
+          'MCP Active Cell Bridge: Snapshot skipped for a stale cell:',
+          error
+        );
+        return;
+      }
 
+      try {
         comm.send(payload);
-        console.log(`MCP Active Cell Bridge: Sent snapshot (${truncatedText.length} chars)`);
-        
+        console.log(
+          `MCP Active Cell Bridge: Sent snapshot (${payload.text.length} chars)`
+        );
       } catch (error) {
         console.error('MCP Active Cell Bridge: Failed to send snapshot:', error);
         // Try to recreate comm on failure
@@ -2247,8 +2299,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       stopTrackingActiveCell();
 
       // Set up debounced content change tracking for the new cell
-      const cell = panel?.content.activeCell;
-      if (cell) {
+      const cell = panel?.content.activeCell as any;
+      if (cell && cell.model && !cell.isDisposed) {
         // Create debounced function with 2000ms delay as requested
         const notebookPath = panel?.context.path;
         const debouncedSendSnapshot = debounce(

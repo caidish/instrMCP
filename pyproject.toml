@@ -39,15 +39,9 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    # Upper bounds are deliberate: fastmcp 4.x removed FastMCP.as_proxy(),
-    # fastmcp.server.proxy.ProxyClient, FastMCP.remove_tool() and
-    # FastMCP.add_tool_transformation(), and mcp 2.x renamed
-    # mcp.server.fastmcp -> mcp.server.mcpserver. Without these caps a fresh
-    # install resolves fastmcp 4.x + mcp 2.x and `import instrmcp.utils` fails.
-    # Tracking issue: migrate to fastmcp 4 / mcp 2.
-    # >=2.14.3 fixes the HTTP transport timeout bug (5s default).
-    "fastmcp>=2.14.3,<4",
-    "mcp>=1.0.0,<2",
+    # pinned to the tested fastmcp 4 / mcp 2 line; see issue #41/#48.
+    "fastmcp>=4.0.10,<5",
+    "mcp>=2.2.0,<3",
     "pyyaml>=6.0",
     "httpx>=0.25.0",
     "qcodes>=0.45.0",
