@@ -44,6 +44,12 @@ _toolbar_comms: set = set()  # Active toolbar control comms
 _toolbar_comms_lock = threading.Lock()  # Lock for thread-safe access to _toolbar_comms
 _toolbar_connected_at: Optional[str] = None
 _toolbar_user_ns: Optional[Dict[str, Any]] = None
+_toolbar_sweeper: Optional[threading.Thread] = None
+
+# Page liveness for toolbar comms: the frontend heartbeats and the kernel
+# expires comms whose page went away (reload, closed or killed tab).
+TOOLBAR_HEARTBEAT_INTERVAL_S = 5.0
+TOOLBAR_LIVENESS_TIMEOUT_S = 20.0
 
 FRONTEND_ATTESTATION_VARIABLE = "qdevbot_instrmcp_frontend"
 TOOLBAR_CONTROL_TARGET = "mcp:toolbar_control"
@@ -180,6 +186,8 @@ def _track_toolbar_comm(comm) -> None:
         if not _toolbar_comms:
             _toolbar_connected_at = _utc_now()
         _toolbar_comms.add(comm)
+        _touch_toolbar_comm(comm)
+        _ensure_toolbar_sweeper()
         _publish_frontend_attestation_locked()
 
 
@@ -188,6 +196,77 @@ def _discard_toolbar_comm(comm) -> None:
     with _toolbar_comms_lock:
         _toolbar_comms.discard(comm)
         _publish_frontend_attestation_locked()
+
+
+def _touch_toolbar_comm(comm) -> None:
+    """Record that a toolbar comm was heard from (open, heartbeat or any message)."""
+    try:
+        comm._mcp_last_seen = time.time()
+    except Exception:
+        logger.debug("Could not stamp toolbar comm liveness", exc_info=True)
+
+
+def _expire_stale_toolbar_comms(now: Optional[float] = None) -> bool:
+    """Drop toolbar comms that stopped heartbeating.
+
+    A page that reloads or a tab that is killed leaves the kernel-side comm
+    object alive and a send to it does not fail, so the attestation would keep
+    reporting ``connected: True`` for a page that no longer exists. The frontend
+    sends a heartbeat every few seconds; a comm that has been silent for longer
+    than the liveness timeout is treated as gone.
+    """
+    now = time.time() if now is None else now
+    with _toolbar_comms_lock:
+        stale = [
+            comm
+            for comm in list(_toolbar_comms)
+            if now - getattr(comm, "_mcp_last_seen", 0.0) > TOOLBAR_LIVENESS_TIMEOUT_S
+        ]
+    for comm in stale:
+        logger.info(
+            "Toolbar comm %s went silent for more than %.0fs; dropping it",
+            id(comm),
+            TOOLBAR_LIVENESS_TIMEOUT_S,
+        )
+        _discard_toolbar_comm(comm)
+        try:
+            comm.close()
+        except Exception:
+            logger.debug("Could not close stale toolbar comm", exc_info=True)
+    return bool(stale)
+
+
+def _ensure_toolbar_sweeper() -> None:
+    """Start the liveness sweeper thread if it is not already running.
+
+    Caller must hold ``_toolbar_comms_lock``.
+    """
+    global _toolbar_sweeper
+
+    if _toolbar_sweeper is not None and _toolbar_sweeper.is_alive():
+        return
+    _toolbar_sweeper = threading.Thread(
+        target=_toolbar_sweeper_loop,
+        name="instrmcp-toolbar-liveness",
+        daemon=True,
+    )
+    _toolbar_sweeper.start()
+
+
+def _toolbar_sweeper_loop() -> None:
+    """Periodically expire toolbar comms whose page went away."""
+    global _toolbar_sweeper
+
+    try:
+        while True:
+            time.sleep(TOOLBAR_HEARTBEAT_INTERVAL_S)
+            with _toolbar_comms_lock:
+                if not _toolbar_comms:
+                    return
+            _expire_stale_toolbar_comms()
+    finally:
+        with _toolbar_comms_lock:
+            _toolbar_sweeper = None
 
 
 def _safe_comm_send(comm, payload: dict, caller: str = "unknown") -> bool:
@@ -705,6 +784,25 @@ def _handle_toolbar_control(comm, open_msg):
         data = msg.get("content", {}).get("data", {}) if msg else {}
         msg_type = data.get("type")
         logger.debug(f"on_msg received: {msg_type}")
+
+        # Any message from the page is proof of life for the liveness sweeper.
+        _touch_toolbar_comm(comm)
+
+        if msg_type == "heartbeat":
+            # Liveness only - no reply needed.
+            return
+
+        if msg_type == "toolbar_closing":
+            # The page is going away (reload/close). Drop it immediately so the
+            # attestation does not keep reporting a dead page while the kernel
+            # waits for the liveness timeout.
+            logger.debug(f"on_msg: page closing, dropping comm {id(comm)}")
+            _discard_toolbar_comm(comm)
+            try:
+                comm.close()
+            except Exception:
+                logger.debug("Could not close closing toolbar comm", exc_info=True)
+            return
 
         if msg_type == "get_status":
             _safe_comm_send(

@@ -15,12 +15,18 @@ const DEFAULT_STATE: MCPState = {
   dangerous: false
 };
 
+// Page-liveness heartbeat. The kernel expires a toolbar comm that has been
+// silent for longer than its liveness timeout, so a reload or a killed tab
+// stops counting as `connected` even when no close message gets through.
+const CONTROL_HEARTBEAT_MS = 5000;
+
 export class MCPToolbarWidget extends ReactWidget {
   private _panel: NotebookPanel;
   private _shared: ToolbarSharedState;
   private _state: MCPState = { ...DEFAULT_STATE };
   private _controlComm: Kernel.IComm | null = null;
   private _kernelRestarting: boolean = false;
+  private _heartbeatTimer: number | null = null;
   private _kernelAllowed: (
     kernel?: Kernel.IKernelConnection | null
   ) => boolean;
@@ -38,6 +44,11 @@ export class MCPToolbarWidget extends ReactWidget {
 
     this._shared.statusUpdateSignal.connect(this._onStatusUpdate, this);
     this._panel.sessionContext.kernelChanged.connect(this._onKernelChanged, this);
+    // The page (not the notebook widget) is what the kernel tracks for the
+    // connection attestation: on reload or tab close we tell the kernel that
+    // this page is leaving, so `connected`/`connectionCount` drop immediately
+    // instead of waiting for the liveness timeout.
+    window.addEventListener('pagehide', this._onPageHide);
 
     // Listen to kernel status changes to detect restarts
     const kernel = this._panel.sessionContext.session?.kernel;
@@ -49,6 +60,7 @@ export class MCPToolbarWidget extends ReactWidget {
   }
 
   dispose(): void {
+    window.removeEventListener('pagehide', this._onPageHide);
     this._shared.statusUpdateSignal.disconnect(this._onStatusUpdate, this);
     this._panel.sessionContext.kernelChanged.disconnect(this._onKernelChanged, this);
     const kernel = this._panel.sessionContext.session?.kernel;
@@ -111,12 +123,41 @@ export class MCPToolbarWidget extends ReactWidget {
       };
       this._controlComm = comm;
       await comm.open();  // Wait for open to complete
+      this._startHeartbeat();
       this._requestStatus();
     } catch (error) {
       console.warn('MCP Toolbar: failed to open control comm', error);
       this._controlComm = null;
     }
   }
+
+  private _startHeartbeat(): void {
+    this._stopHeartbeat();
+    this._heartbeatTimer = window.setInterval(() => {
+      this._sendControlMessage({ type: 'heartbeat' });
+    }, CONTROL_HEARTBEAT_MS);
+  }
+
+  private _stopHeartbeat(): void {
+    if (this._heartbeatTimer !== null) {
+      window.clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
+    }
+  }
+
+  private _onPageHide = (): void => {
+    // Best effort: tell the kernel this page is leaving, then close the comm so
+    // the attestation drops to disconnected right away.
+    if (this._controlComm && !this._controlComm.isDisposed) {
+      try {
+        this._controlComm.send({ type: 'toolbar_closing' });
+        console.log('MCP Toolbar: announced page close to the kernel');
+      } catch (error) {
+        console.warn('MCP Toolbar: could not announce page close', error);
+      }
+    }
+    this._closeControlComm();
+  };
 
   private _requestStatus(): void {
     this._sendControlMessage({ type: 'get_status' });
@@ -311,6 +352,7 @@ export class MCPToolbarWidget extends ReactWidget {
     // Clear reference FIRST to prevent race conditions
     const comm = this._controlComm;
     this._controlComm = null;
+    this._stopHeartbeat();
 
     if (comm && !comm.isDisposed) {
       try {
