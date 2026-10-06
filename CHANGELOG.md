@@ -5,12 +5,27 @@ All notable changes to instrMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.5.0] - 2026-10-01
+## [2.5.0] - 2026-10-06
 
 Upstreams the desktop-client fork features requested in
-[#46](https://github.com/caidish/instrMCP/issues/46). Several behaviours change:
-reload JupyterLab after upgrading, and keep the frontend bundle and the kernel
-package from the same build.
+[#46](https://github.com/caidish/instrMCP/issues/46), fixes the three items the
+first release candidate failed in acceptance, and migrates to fastmcp 4 / mcp 2
+([#41](https://github.com/caidish/instrMCP/issues/41); release plan
+[#48](https://github.com/caidish/instrMCP/issues/48)). Several behaviours
+change: reload JupyterLab after upgrading, and keep the frontend bundle and the
+kernel package from the same build.
+
+### Changed - fastmcp 4 / mcp 2
+
+- Dependencies are now `fastmcp>=4.0.10,<5` and `mcp>=2.2.0,<3`, replacing the
+  `<4` / `<2` caps from 2.4.4.
+- The four call sites fastmcp 4 removed are migrated: the stdio proxy uses
+  `create_proxy` and the new `ProxyClient` import path, dynamic tools are
+  removed through the local provider, tool transformations use `ToolTransform`,
+  and resource paths use `list_resources()`.
+- Clients that initialize with MCP protocol `2024-11-05` keep working. After a
+  server restart, a request carrying the old session id is answered with HTTP
+  404, so streamable-HTTP clients re-initialize and retry.
 
 ### Added
 
@@ -21,7 +36,12 @@ package from the same build.
   `qdevbot_instrmcp_frontend` in its user namespace with `schemaVersion`,
   `connected`, `target`, `connectedAt`, `connectionCount`, `nonce` and
   `package` (name/version/revision), republished when a toolbar comm opens,
-  closes or dies.
+  closes, dies or expires.
+- **Page liveness.** The toolbar sends a heartbeat every 5 s and announces a
+  page close on `pagehide`; the kernel expires a toolbar comm that has been
+  silent for 20 s (`TOOLBAR_LIVENESS_TIMEOUT_S`). The attestation now reports
+  `connected: false` after a page reload, a closed tab or a crashed tab, and
+  `true` again when a page attaches.
 - **Notebook persistence.** New `save_active_notebook(timeout_s=None)` and a
   `{"type": "save_notebook"}` request; add-cell and cell execution save before
   they report success, and a failed save reports
@@ -45,6 +65,25 @@ package from the same build.
   server they replace, so `%mcp_restart`, `%mcp_start` and the toolbar no longer
   fall back to 127.0.0.1:8123 after a `port=0` start. A port that cannot be
   re-bound raises instead of silently moving.
+
+### Fixed
+
+- Adding a markdown cell no longer waits out the 10 s frontend timeout.
+  Converting the new cell's type replaced the active cell, the next snapshot
+  treated the replaced cell as a dead comm and dropped it, and the add reply
+  could then never be sent. A stale cell no longer drops the comm.
+- A refused `notebook_add_cell` now carries the reason in its concise result
+  (for example "Notebook source or metadata changed on disk; refusing to
+  overwrite it with the active frontend"), consistent with cell execution.
+
+### Known issues
+
+- A cell that blocks the kernel for more than about 20 s makes an open page
+  read as gone until the cell finishes, because heartbeats queue behind the
+  running request ([#51](https://github.com/caidish/instrMCP/issues/51)).
+- A consent request has no bounded wait and is not cancelled when its page
+  disconnects; nothing executes in that case, but the caller can wait
+  indefinitely ([#50](https://github.com/caidish/instrMCP/issues/50)).
 
 ### Notes
 
