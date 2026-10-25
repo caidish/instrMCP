@@ -338,7 +338,7 @@ def count_metadata_tokens(config, encoding_name="cl100k_base"):
 # ---------------------------------------------------------------------------
 
 
-def count_tokens_via_api(config, model="claude-sonnet-4-5-20250929"):
+def count_tokens_via_api(config, model="claude-sonnet-5-5"):
     """Count tokens using Anthropic's official count_tokens API.
 
     This gives exact token counts as seen by Claude. Free to use.
